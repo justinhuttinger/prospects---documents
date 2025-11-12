@@ -16,6 +16,24 @@ const STATE_CODES = {
   'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 };
 
+// Add this near the top with the other helper functions
+function formatPhoneNumber(phone) {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+  
+  // Remove leading 1 if present (US country code)
+  const phoneDigits = digits.startsWith('1') ? digits.substring(1) : digits;
+  
+  // Return 10-digit format
+  if (phoneDigits.length === 10) {
+    return phoneDigits; // ABC accepts plain 10 digits
+  }
+  
+  return phoneDigits;
+}
+
 // Helper function to get state code
 function getStateCode(state) {
   if (!state) return '';
@@ -125,7 +143,9 @@ app.post('/webhook/ghl-form', async (req, res) => {
     console.log(`Processing for club: ${clubName} (${clubNumber})`);
 
     // 2. Create prospect in ABC Financial
+// 2. Create prospect in ABC Financial
 const stateCode = getStateCode(formData.state);
+const formattedPhone = formatPhoneNumber(formData.phone); // <-- Add this
 
 const prospectPayload = {
   prospects: [
@@ -135,12 +155,12 @@ const prospectPayload = {
           firstName: formData.first_name,
           lastName: formData.last_name,
           email: formData.email,
-          primaryPhone: formData.phone,
-          mobilePhone: formData.phone,
-          addressLine1: formData.address1,
-          city: formData.city,
-          state: stateCode,  // <-- Changed this line
-          postalCode: formData.postal_code,
+          primaryPhone: formattedPhone,  // <-- Changed
+          mobilePhone: formattedPhone,   // <-- Changed
+          addressLine1: formData.address1 || '',  // <-- Add fallback
+          city: formData.city || '',               // <-- Add fallback
+          state: stateCode,
+          postalCode: formData.postal_code || '',  // <-- Add fallback
           birthDate: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : '',
           gender: formData.Gender || '',
           employer: "1",

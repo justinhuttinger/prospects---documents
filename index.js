@@ -2,6 +2,29 @@ const express = require('express');
 const axios = require('axios');
 const PDFDocument = require('pdfkit');
 
+// Add this near the top, after your constants
+const STATE_CODES = {
+  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+  'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+  'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+  'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+  'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+  'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+  'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+};
+
+// Helper function to get state code
+function getStateCode(state) {
+  if (!state) return '';
+  // If already 2 letters, return as-is
+  if (state.length === 2) return state.toUpperCase();
+  // Otherwise look up the code
+  return STATE_CODES[state] || state;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -102,33 +125,35 @@ app.post('/webhook/ghl-form', async (req, res) => {
     console.log(`Processing for club: ${clubName} (${clubNumber})`);
 
     // 2. Create prospect in ABC Financial
-    const prospectPayload = {
-      prospects: [
-        {
-          prospect: {
-            personal: {
-              firstName: formData.first_name,
-              lastName: formData.last_name,
-              email: formData.email,
-              primaryPhone: formData.phone,
-              mobilePhone: formData.phone,
-              addressLine1: formData.address1,
-              city: formData.city,
-              state: formData.state,
-              postalCode: formData.postal_code,
-              birthDate: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : '',
-              gender: formData.Gender || '',
-              employer: "1", // Required field
-              occupation: "2", // Required field
-              countryCode: formData.country || "US"
-            },
-            agreement: {
-              beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0]
-            }
-          }
+const stateCode = getStateCode(formData.state);
+
+const prospectPayload = {
+  prospects: [
+    {
+      prospect: {
+        personal: {
+          firstName: formData.first_name,
+          lastName: formData.last_name,
+          email: formData.email,
+          primaryPhone: formData.phone,
+          mobilePhone: formData.phone,
+          addressLine1: formData.address1,
+          city: formData.city,
+          state: stateCode,  // <-- Changed this line
+          postalCode: formData.postal_code,
+          birthDate: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : '',
+          gender: formData.Gender || '',
+          employer: "1",
+          occupation: "2",
+          countryCode: formData.country || "US"
+        },
+        agreement: {
+          beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0]
         }
-      ]
-    };
+      }
+    }
+  ]
+};
 
     console.log('Creating prospect in ABC Financial...');
     const prospectResponse = await axios.post(

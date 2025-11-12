@@ -4,15 +4,15 @@
   "description": "PDF generation service for West Coast Strength form submissions",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
   "keywords": ["pdf", "wcs", "forms"],
   "author": "WCS",
   "license": "ISC",
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer": "^23.11.1",
+    "puppeteer-core": "^23.11.1",
+    "@sparticuz/chromium": "^131.0.0",
     "axios": "^1.6.2"
   },
   "engines": {

@@ -41,6 +41,10 @@ app.get('/', (req, res) => {
 
 // Main webhook endpoint - receives GHL form submissions
 app.post('/ghl-trial-form', async (req, res) => {
+  app.post('/webhook/ghl-form', async (req, res) => {
+  console.log('=== GHL WEBHOOK RECEIVED ===');
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log('=== END WEBHOOK DATA ===');
   try {
     const webhookData = req.body;
     

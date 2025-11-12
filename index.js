@@ -14,7 +14,7 @@ const CLUBS = {
   'salem': {
     name: 'West Coast Strength Salem',
     location_id: 'uflpfHNpByAnaBLkQzu3',
-    club_id: 'SALEM_ABC_CLUB_ID'  // ABC Financial club ID
+    club_id: '30935'  // ABC Financial club ID
   },
   'keizer': {
     name: 'West Coast Strength Keizer',

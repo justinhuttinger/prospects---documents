@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
-    "postinstall": "node node_modules/puppeteer/install.mjs"
+    "dev": "nodemon index.js"
   },
   "keywords": ["pdf", "wcs", "forms"],
   "author": "WCS",
@@ -15,9 +14,6 @@
     "express": "^4.18.2",
     "puppeteer": "^23.11.1",
     "axios": "^1.6.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": ">=18.0.0"

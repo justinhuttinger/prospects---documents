@@ -184,14 +184,15 @@ const prospectPayload = {
 
     console.log('Prospect created:', prospectResponse.data);
 
-    // Extract prospect ID from response
-    const prospectId = prospectResponse.data?.prospects?.[0]?.prospect?.personal?.memberId;
-    
-    if (!prospectId) {
-      throw new Error('Failed to get prospect ID from ABC Financial response');
-    }
+// ABC Financial returns memberId directly in result
+const prospectId = prospectResponse.data?.result?.memberId;
 
-    console.log(`Prospect ID: ${prospectId}`);
+if (!prospectId) {
+  console.error('Full ABC Response:', JSON.stringify(prospectResponse.data, null, 2));
+  throw new Error('Failed to get prospect ID from ABC Financial response');
+}
+
+console.log(`Prospect ID: ${prospectId}`);
 
     // 3. Generate PDF
     console.log('Generating PDF...');

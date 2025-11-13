@@ -58,7 +58,8 @@ const CLUB_NUMBERS = {
   "West Coast Strength - Eugene": "30937",
   "West Coast Strength - Bend": "30938",
   "West Coast Strength - Tigard": "30939",
-  // Club 7 will be added when you get the club number
+  // Test club or club 7 - update the name as needed
+  "Test Club": "31599",
 };
 
 // Helper function to create ABC headers
@@ -173,8 +174,9 @@ app.post('/webhook/ghl-form', async (req, res) => {
 
     // 1. Get club number - priority order:
     //    a) Use 'club_number' or 'clubNumber' from webhook data if provided
-    //    b) Fall back to CLUB_NUMBERS mapping based on location name
-    let clubNumber = formData.club_number || formData.clubNumber;
+    //    b) Check inside customData object
+    //    c) Fall back to CLUB_NUMBERS mapping based on location name
+    let clubNumber = formData.club_number || formData.clubNumber || formData.customData?.club_number;
     const clubName = formData.location?.name;
 
     if (!clubNumber) {

@@ -53,9 +53,12 @@ const ABC_APP_KEY = process.env.ABC_APP_KEY;
 
 const CLUB_NUMBERS = {
   "West Coast Strength - Salem": "30935",
-  // Add other clubs here:
-  // "West Coast Strength - Portland": "12345",
-  // etc...
+  "West Coast Strength - Keizer": "30934",
+  "West Coast Strength - Lancaster": "30936",
+  "West Coast Strength - Eugene": "30937",
+  "West Coast Strength - Bend": "30938",
+  "West Coast Strength - Tigard": "30939",
+  // Club 7 will be added when you get the club number
 };
 
 // Helper function to create ABC headers
@@ -146,7 +149,8 @@ I HAVE READ THIS AGREEMENT, FULLY UNDERSTAND ITS TERMS, UNDERSTAND THAT I HAVE G
           align: 'left'
         });
         
-        doc.moveDown();
+        // Add extra space after signature image to prevent overlay
+        doc.moveDown(2);
         doc.fontSize(10);
         doc.text(`Signature Timestamp: ${formData['Legal Signature'].meta?.timestamp ? new Date(parseInt(formData['Legal Signature'].meta.timestamp) * 1000).toLocaleString() : 'N/A'}`);
       } catch (error) {
@@ -167,12 +171,19 @@ app.post('/webhook/ghl-form', async (req, res) => {
 
     const formData = req.body;
 
-    // 1. Get club number from location
+    // 1. Get club number - priority order:
+    //    a) Use 'club_number' or 'clubNumber' from webhook data if provided
+    //    b) Fall back to CLUB_NUMBERS mapping based on location name
+    let clubNumber = formData.club_number || formData.clubNumber;
     const clubName = formData.location?.name;
-    const clubNumber = CLUB_NUMBERS[clubName];
 
     if (!clubNumber) {
-      throw new Error(`Unknown club: ${clubName}. Please add to CLUB_NUMBERS mapping.`);
+      // Fall back to mapping by location name
+      clubNumber = CLUB_NUMBERS[clubName];
+    }
+
+    if (!clubNumber) {
+      throw new Error(`Unable to determine club number. Please either: 1) Include 'club_number' in webhook data, or 2) Add "${clubName}" to CLUB_NUMBERS mapping.`);
     }
 
     console.log(`Processing for club: ${clubName} (${clubNumber})`);

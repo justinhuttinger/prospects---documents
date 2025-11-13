@@ -199,14 +199,26 @@ console.log(`Prospect ID: ${prospectId}`);
     const pdfBuffer = await generatePDF(formData);
     const pdfBase64 = pdfBuffer.toString('base64');
 
-    // 4. Upload document to ABC Financial
-    const documentPayload = {
-      document: pdfBase64,
-      documentName: `Trial_Waiver_${formData.first_name}_${formData.last_name}_${Date.now()}.pdf`,
-      documentType: "Waiver",
-      imageType: "pdf",
-      memberId: prospectId
-    };
+   // Upload document to ABC Financial
+const documentUrl = `https://api.abcfinancial.com/rest/${clubNumber}/members/documents/${prospectId}`;
+
+const base64Pdf = pdfBuffer.toString('base64');
+
+const documentPayload = {
+  document: base64Pdf,
+  documentName: `Waiver_${firstName}_${lastName}.pdf`,
+  documentType: "waiver",
+  imageType: "pdf",
+  memberId: prospectId
+};
+
+const documentResponse = await axios.post(documentUrl, documentPayload, {
+  headers: {
+    'Authorization': `Basic ${abcAuthToken}`,
+    'Content-Type': 'application/json',
+    'app_id': process.env.ABC_APP_ID
+  }
+});
 
     console.log('Uploading document to ABC Financial...');
     const documentResponse = await axios.post(

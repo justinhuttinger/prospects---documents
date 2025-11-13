@@ -69,8 +69,8 @@ function getAbcHeaders() {
 
 // Helper function to generate PDF
 async function generatePDF(formData) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
+  return new Promise(async (resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
     const chunks = [];
 
     doc.on('data', chunk => chunks.push(chunk));
@@ -91,33 +91,68 @@ async function generatePDF(formData) {
     doc.text(`Name: ${formData.first_name} ${formData.last_name}`);
     doc.text(`Email: ${formData.email}`);
     doc.text(`Phone: ${formData.phone}`);
-    doc.text(`Address: ${formData.address1}`);
-    doc.text(`City: ${formData.city}, ${formData.state} ${formData.postal_code}`);
+    doc.text(`Address: ${formData.address1 || ''}`);
+    doc.text(`City: ${formData.city || ''}, ${formData.state || ''} ${formData.postal_code || ''}`);
     doc.text(`Date of Birth: ${formData.date_of_birth ? new Date(formData.date_of_birth).toLocaleDateString() : 'N/A'}`);
     doc.text(`Trial Start Date: ${formData['Trial Start Date'] || 'N/A'}`);
     doc.moveDown();
 
-    // Waiver Text
+    // Waiver Text - Full legal text
     doc.fontSize(14).text('Waiver Agreement', { underline: true });
-    doc.fontSize(10);
-    const waiverText = formData['SI have enrolled for a tour and /or membership offered by West Coast Strength, LLC.  West Coast Strength is a strength and conditioning facility with various programs and training options, including but not limited to personal training and strength training.   I recognize that the program may involve strenuous physical activity including, but not limited to, muscle strength and endurance training, cardiovascular conditioning and training, and other various fitness activities.  I hereby affirm that I am in good physical condition and do not suffer from any known disability or condition which would prevent or otherwise limit my full participation in this physical program. In addition, I am fully aware of the risks and hazards connected with the participation in the physical program including, but not limited to, physical injury or even death.  I hereby elect to voluntarily participate in this program knowing that the associated physical activity may be hazardous to me and/or my property.  I ASSUME FULL RESPONSIBILITY FOR ANY RISKS OR LOSS, PROPERTY DAMAGE, OR PERSONAL INJURY, INCLUDING DEATH, that may be sustained by me, or loss or damage to property owned by me, as a result of participation in this program. I hereby release, waive, discharge, and covenant not to sue West Coast Strength, LLC and/or any of its officers, servants, agents, consultants, volunteers, and/or employees from any and all liability, claims, demands, actions, and causes of action whatsoever arising out of or related to any loss, damage, or injury (including, but not limited to, death) that may be sustained by me, or to any property belonging to me, while participating in this program, or while on or upon the premises where the event is being conducted including, but not limited to, any claims arising under negligence. It is my expressed intent that this waiver and release shall bind any and all members of my family including, but not limited to, my spouse, if I am alive, and my heirs, assigns, and personal representatives, if I am deceased.  It is also my expressed intent that this waiver and release shall also be deemed a full release, waiver, discharge, and covenant not to sue insofar as my aforementioned family members, heirs, assigns, and personal representatives are concerned.  I hereby further agree that this waiver and release shall be constructed in accordance with the laws of the State of Oregon.I HAVE READ THIS AGREEMENT, FULLY UNDERSTAND ITS TERMS, UNDERSTAND THAT I HAVE GIVEN UP SUBSTANTIAL RIGHTS BY SIGNING IT, AND HAVE SIGNED IT FREELY AND VOLUNTARILY WITHOUT ANY INDUCEMENT, ASSURANCE OR GUARANTEE BEING MADE TO ME AND INTEND MY SIGNATURE TO BE A COMPLETE AND UNCONDITIONAL RELEASE OF ALL LIABILITY TO THE GREATEST EXTENT ALLOWED BY LAW.ignature 1qtm'];
+    doc.moveDown(0.5);
+    doc.fontSize(9);
     
-    if (waiverText) {
-      doc.text(waiverText, { align: 'justify' });
-    }
-    doc.moveDown();
+    const waiverText = `I have enrolled for a tour and/or membership offered by West Coast Strength, LLC. West Coast Strength is a strength and conditioning facility with various programs and training options, including but not limited to personal training and strength training.
 
-    // Signature
+I recognize that the program may involve strenuous physical activity including, but not limited to, muscle strength and endurance training, cardiovascular conditioning and training, and other various fitness activities. I hereby affirm that I am in good physical condition and do not suffer from any known disability or condition which would prevent or otherwise limit my full participation in this physical program.
+
+In addition, I am fully aware of the risks and hazards connected with the participation in the physical program including, but not limited to, physical injury or even death. I hereby elect to voluntarily participate in this program knowing that the associated physical activity may be hazardous to me and/or my property.
+
+I ASSUME FULL RESPONSIBILITY FOR ANY RISKS OR LOSS, PROPERTY DAMAGE, OR PERSONAL INJURY, INCLUDING DEATH, that may be sustained by me, or loss or damage to property owned by me, as a result of participation in this program.
+
+I hereby release, waive, discharge, and covenant not to sue West Coast Strength, LLC and/or any of its officers, servants, agents, consultants, volunteers, and/or employees from any and all liability, claims, demands, actions, and causes of action whatsoever arising out of or related to any loss, damage, or injury (including, but not limited to, death) that may be sustained by me, or to any property belonging to me, while participating in this program, or while on or upon the premises where the event is being conducted including, but not limited to, any claims arising under negligence.
+
+It is my expressed intent that this waiver and release shall bind any and all members of my family including, but not limited to, my spouse, if I am alive, and my heirs, assigns, and personal representatives, if I am deceased. It is also my expressed intent that this waiver and release shall also be deemed a full release, waiver, discharge, and covenant not to sue insofar as my aforementioned family members, heirs, assigns, and personal representatives are concerned.
+
+I hereby further agree that this waiver and release shall be constructed in accordance with the laws of the State of Oregon.
+
+I HAVE READ THIS AGREEMENT, FULLY UNDERSTAND ITS TERMS, UNDERSTAND THAT I HAVE GIVEN UP SUBSTANTIAL RIGHTS BY SIGNING IT, AND HAVE SIGNED IT FREELY AND VOLUNTARILY WITHOUT ANY INDUCEMENT, ASSURANCE OR GUARANTEE BEING MADE TO ME AND INTEND MY SIGNATURE TO BE A COMPLETE AND UNCONDITIONAL RELEASE OF ALL LIABILITY TO THE GREATEST EXTENT ALLOWED BY LAW.`;
+    
+    doc.text(waiverText, { align: 'justify', lineGap: 2 });
+    doc.moveDown(2);
+
+    // Signature section
     doc.fontSize(12);
     doc.text(`Signed Date: ${new Date().toLocaleDateString()}`);
     doc.text(`Location: ${formData.location?.name || 'N/A'}`);
+    doc.moveDown();
 
-    // If there's a signature image, add it
+    // Download and embed signature image if available
     if (formData['Legal Signature']?.url) {
-      doc.moveDown();
-      doc.text('Digital Signature:', { underline: true });
-      doc.text(`Signature ID: ${formData['Legal Signature'].documentId}`);
-      doc.text(`Timestamp: ${formData['Legal Signature'].meta?.timestamp || 'N/A'}`);
+      try {
+        doc.fontSize(12).text('Digital Signature:', { underline: true });
+        doc.moveDown(0.5);
+        
+        // Download the signature image
+        const signatureResponse = await axios.get(formData['Legal Signature'].url, {
+          responseType: 'arraybuffer'
+        });
+        
+        const signatureBuffer = Buffer.from(signatureResponse.data);
+        
+        // Add the signature image to PDF
+        doc.image(signatureBuffer, {
+          fit: [200, 100],
+          align: 'left'
+        });
+        
+        doc.moveDown();
+        doc.fontSize(10);
+        doc.text(`Signature Timestamp: ${formData['Legal Signature'].meta?.timestamp ? new Date(parseInt(formData['Legal Signature'].meta.timestamp) * 1000).toLocaleString() : 'N/A'}`);
+      } catch (error) {
+        console.error('Error downloading signature image:', error.message);
+        doc.fontSize(10).text('(Signature image could not be embedded)');
+      }
     }
 
     doc.end();

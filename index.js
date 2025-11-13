@@ -86,7 +86,7 @@ async function generatePDF(formData) {
 
     // PDF Header
     doc.fontSize(20).text('West Coast Strength', { align: 'center' });
-    doc.fontSize(16).text('Trial Membership Waiver', { align: 'center' });
+    doc.fontSize(16).text('Liability Waiver', { align: 'center' });
     doc.moveDown();
 
     // Personal Information

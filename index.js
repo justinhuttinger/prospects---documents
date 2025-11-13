@@ -206,7 +206,7 @@ console.log(`Prospect ID: ${prospectId}`);
       document: pdfBuffer.toString('base64'),
       documentName: `Waiver_${formData.first_name}_${formData.last_name}.pdf`,
       documentType: "pdf",
-      imageType: "pdf",
+      imageType: "contract",
       memberId: prospectId
     };
 

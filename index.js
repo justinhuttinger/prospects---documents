@@ -99,6 +99,28 @@ async function generatePDF(formData) {
     doc.text(`City: ${formData.city || ''}, ${formData.state || ''} ${formData.postal_code || ''}`);
     doc.text(`Date of Birth: ${formData.date_of_birth ? new Date(formData.date_of_birth).toLocaleDateString() : 'N/A'}`);
     doc.text(`Trial Start Date: ${formData['Trial Start Date'] || 'N/A'}`);
+    if (formData['Service Employee']) {
+      doc.text(`Service Employee: ${formData['Service Employee']}`);
+    }
+    doc.moveDown();
+
+    // Health Questionnaire
+    doc.fontSize(14).text('Health Questionnaire', { underline: true });
+    doc.fontSize(10);
+    doc.text(`Heart Condition: ${formData['Has a Doctor Ever Said You Have a Heart Condition & Recommended Only Medically Supervised Activity?'] || 'N/A'}`);
+    doc.text(`Chest Pain During Activity: ${formData['Do You Experience Chest Pain During Physical Activity?'] || 'N/A'}`);
+    doc.text(`Bone/Joint Problem: ${formData['Do You Have a Bone or Joint Problem that Physical Activity Could Aggravate?'] || 'N/A'}`);
+    doc.text(`Blood Pressure Medication: ${formData['Has Your Doctor Recommended Medication for your Blood Pressure?'] || 'N/A'}`);
+    doc.text(`Medical Supervision Required: ${formData['Are you Aware of Any Reason you Should Not Exercise Without Medical Supervision'] || 'N/A'}`);
+    doc.moveDown();
+
+    // Fitness Profile
+    doc.fontSize(14).text('Fitness Profile', { underline: true });
+    doc.fontSize(10);
+    doc.text(`Current Workout Routine: ${formData['What is Your Current Workout Routine?'] || 'N/A'}`);
+    doc.text(`Follows Diet/Meal Plan: ${formData['Do You Follow a Diet / Meal Plan?'] || 'N/A'}`);
+    doc.text(`Biggest Obstacles: ${formData['What are your Biggest Obstacles?'] || 'N/A'}`);
+    doc.text(`What Would Help Most: ${formData['What Would Help You the Most?'] || 'N/A'}`);
     doc.moveDown();
 
     // Waiver Text - Full legal text

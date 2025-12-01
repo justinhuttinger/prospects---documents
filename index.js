@@ -95,6 +95,44 @@ function sanitizeAddress(address, fallback = 'N/A') {
   return sanitized;
 }
 
+// Sanitize document name for ABC Financial
+// Rules: max 255 chars, only alpha, numeric, spaces and special chars: .,_!%+-@^'
+function sanitizeDocumentName(firstName, lastName) {
+  // Sanitize each part
+  let cleanFirst = String(firstName || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Only allow: letters, numbers, spaces, and .,_!%+-@^'
+    .replace(/[^a-zA-Z0-9 .,_!%+\-@^']/g, '')
+    .trim();
+  
+  let cleanLast = String(lastName || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 .,_!%+\-@^']/g, '')
+    .trim();
+  
+  // If both are empty, just return "Waiver.pdf"
+  if (!cleanFirst && !cleanLast) {
+    return 'Waiver.pdf';
+  }
+  
+  // Build document name with available parts
+  let docName;
+  if (cleanFirst && cleanLast) {
+    docName = `Waiver_${cleanFirst}_${cleanLast}.pdf`;
+  } else if (cleanFirst) {
+    docName = `Waiver_${cleanFirst}.pdf`;
+  } else {
+    docName = `Waiver_${cleanLast}.pdf`;
+  }
+  
+  // Truncate to 255 characters if needed (keep .pdf extension)
+  if (docName.length > 255) {
+    docName = docName.substring(0, 251) + '.pdf';
+  }
+  
+  return docName;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -480,7 +518,7 @@ console.log(`Prospect ID: ${prospectId}`);
 
     const documentPayload = {
       document: pdfBuffer.toString('base64'),
-      documentName: `Waiver_${formData.first_name}_${formData.last_name}.pdf`,
+      documentName: sanitizeDocumentName(formData.first_name, formData.last_name),
       documentType: "pdf",
       imageType: "member_document",
       memberId: prospectId

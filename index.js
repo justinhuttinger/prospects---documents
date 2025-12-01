@@ -43,6 +43,58 @@ function getStateCode(state) {
   return STATE_CODES[state] || state;
 }
 
+// Sanitize name fields for ABC Financial
+// Rules: 1-19 alphanumeric chars, apostrophes, hyphens, spaces. Cannot begin with number or space.
+function sanitizeName(name, fallback = 'Unknown') {
+  if (!name) return fallback;
+  
+  let sanitized = String(name)
+    // Normalize accented characters (é → e, ñ → n, etc.)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Remove everything except allowed: letters, numbers, apostrophes, hyphens, spaces
+    .replace(/[^a-zA-Z0-9'\- ]/g, '')
+    // Remove leading numbers and spaces
+    .replace(/^[\d ]+/, '')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Truncate to 19 characters
+  sanitized = sanitized.substring(0, 19);
+  
+  // If nothing left after sanitization, use fallback
+  if (!sanitized || sanitized.length === 0) {
+    return fallback;
+  }
+  
+  return sanitized;
+}
+
+// Sanitize address fields for ABC Financial
+// Rules: 1-44 alphanumeric chars, spaces, forward slashes, pound signs
+function sanitizeAddress(address, fallback = 'N/A') {
+  if (!address) return fallback;
+  
+  let sanitized = String(address)
+    // Normalize accented characters
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Remove everything except allowed: letters, numbers, spaces, /, #
+    .replace(/[^a-zA-Z0-9 /#]/g, '')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Truncate to 44 characters
+  sanitized = sanitized.substring(0, 44);
+  
+  // If nothing left after sanitization, use fallback
+  if (!sanitized || sanitized.length === 0) {
+    return fallback;
+  }
+  
+  return sanitized;
+}
+
 const app = express();
 app.use(express.json());
 
@@ -376,15 +428,15 @@ const prospectPayload = {
     {
       prospect: {
         personal: {
-          firstName: formData.first_name,
-          lastName: formData.last_name,
+          firstName: sanitizeName(formData.first_name, 'Unknown'),
+          lastName: sanitizeName(formData.last_name, 'Unknown'),
           email: formData.email,
-          primaryPhone: formattedPhone,  // <-- Changed
-          mobilePhone: formattedPhone,   // <-- Changed
-          addressLine1: formData.address1 || '',  // <-- Add fallback
-          city: formData.city || '',               // <-- Add fallback
+          primaryPhone: formattedPhone,
+          mobilePhone: formattedPhone,
+          addressLine1: sanitizeAddress(formData.address1, 'N/A'),
+          city: sanitizeName(formData.city, 'Unknown'),  // City uses similar rules to names
           state: stateCode,
-          postalCode: formData.postal_code || '',  // <-- Add fallback
+          postalCode: formData.postal_code || '',
           birthDate: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : '',
           gender: formData.Gender || '',
           employer: "1",

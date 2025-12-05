@@ -37,10 +37,19 @@ function formatPhoneNumber(phone) {
 // Helper function to get state code
 function getStateCode(state) {
   if (!state) return '';
-  // If already 2 letters, return as-is
-  if (state.length === 2) return state.toUpperCase();
-  // Otherwise look up the code
-  return STATE_CODES[state] || state;
+  
+  // Trim spaces and convert to string
+  const cleanState = String(state).trim();
+  
+  if (!cleanState) return '';
+  
+  // If already 2 letters, return as-is (uppercase and trimmed)
+  if (cleanState.length === 2) {
+    return cleanState.toUpperCase();
+  }
+  
+  // Otherwise look up the code (after trimming)
+  return STATE_CODES[cleanState] || cleanState.substring(0, 2).toUpperCase();
 }
 
 // Sanitize name fields for ABC Financial
@@ -479,7 +488,7 @@ const prospectPayload = {
           gender: formData.Gender || '',
           employer: "1",
           occupation: "2",
-          countryCode: formData.country || "US"
+          countryCode: "US"  // Always US regardless of input
         },
         agreement: {
           beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0]

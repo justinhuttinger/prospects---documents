@@ -145,21 +145,31 @@ function sanitizeDocumentName(firstName, lastName) {
 const app = express();
 app.use(express.json());
 
+// Load clubs configuration
+const fs = require('fs');
+const clubsConfig = JSON.parse(fs.readFileSync(__dirname + '/clubs-config.json', 'utf8'));
+
+// Build lookup objects from config
+const CLUB_NUMBERS = {};
+const GHL_API_KEYS = {};
+
+clubsConfig.clubs.forEach(club => {
+  if (club.enabled) {
+    // Map club name to club number for backwards compatibility
+    CLUB_NUMBERS[`West Coast Strength - ${club.clubName}`] = club.clubNumber;
+    // Map GHL location ID to API key
+    GHL_API_KEYS[club.ghlLocationId] = club.ghlApiKey;
+  }
+});
+
+console.log('Loaded clubs:', Object.keys(CLUB_NUMBERS));
+
 // Configuration
 const ABC_BASE_URL = 'https://api.abcfinancial.com/rest';
 const ABC_APP_ID = process.env.ABC_APP_ID;
 const ABC_APP_KEY = process.env.ABC_APP_KEY;
 
-const CLUB_NUMBERS = {
-  "West Coast Strength - Salem": "30935",
-  "West Coast Strength - Keizer": "30934",
-  "West Coast Strength - Lancaster": "30936",
-  "West Coast Strength - Eugene": "30937",
-  "West Coast Strength - Bend": "30938",
-  "West Coast Strength - Tigard": "30939",
-  // Test club or club 7 - update the name as needed
-  "Test Club": "31599",
-};
+const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
 
 // Helper function to create ABC headers
 function getAbcHeaders() {
@@ -538,6 +548,43 @@ console.log(`Prospect ID: ${prospectId}`);
     });
 
     console.log('Document uploaded:', documentResponse.data);
+
+    // 5. Update GHL contact with ABC Member ID
+    console.log('Updating GHL contact with ABC Member ID...');
+    try {
+      // Get the location-specific API key
+      const locationId = formData.location?.id;
+      const ghlApiKey = GHL_API_KEYS[locationId];
+      
+      if (!ghlApiKey) {
+        console.warn(`No GHL API key configured for location: ${formData.location?.name} (${locationId})`);
+        console.warn('Skipping GHL contact update. Add GHL_API_KEY_[LOCATION] to environment variables.');
+      } else {
+        const ghlUpdateUrl = `${GHL_BASE_URL}/contacts/${formData.contact_id}`;
+        
+        const ghlUpdatePayload = {
+          customFields: [
+            {
+              key: 'abc_member_id',
+              field_value: prospectId
+            }
+          ]
+        };
+
+        const ghlResponse = await axios.put(ghlUpdateUrl, ghlUpdatePayload, {
+          headers: {
+            'Authorization': `Bearer ${ghlApiKey}`,
+            'Content-Type': 'application/json',
+            'Version': '2021-07-28'
+          }
+        });
+
+        console.log('GHL contact updated successfully');
+      }
+    } catch (ghlError) {
+      console.error('Error updating GHL contact (non-fatal):', ghlError.response?.data || ghlError.message);
+      // Don't throw - we still succeeded in creating the prospect and uploading the document
+    }
 
     // Success response
     res.json({

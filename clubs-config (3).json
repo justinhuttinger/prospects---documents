@@ -1,0 +1,53 @@
+{
+  "clubs": [
+    {
+      "clubNumber": "30935",
+      "clubName": "Salem",
+      "ghlLocationId": "uflpfHNpByAnaBLkQzu3",
+      "ghlApiKey": "pit-e5bcddc8-6b42-4626-acaa-c471165b4fc4",
+      "enabled": true
+    },
+    {
+      "clubNumber": "31599",
+      "clubName": "Keizer",
+      "ghlLocationId": "g75BBgiSvlCRbvxYRMAb",
+      "ghlApiKey": "pit-e3b763e5-358e-46ac-a8a0-59d66f3f0b73",
+      "enabled": true
+    },
+    {
+      "clubNumber": "7655",
+      "clubName": "Eugene",
+      "ghlLocationId": "NNTZT21fPm3SxpLg8s04",
+      "ghlApiKey": "pit-822d1e4a-2123-4b3b-83f8-76c0a744db56",
+      "enabled": true
+    },
+    {
+      "clubNumber": "31601",
+      "clubName": "Milwaukie",
+      "ghlLocationId": "BQfUepBFzqVan4ruCQ6R",
+      "ghlApiKey": "pit-08671077-536e-47ba-8814-974cc339e97f",
+      "enabled": true
+    },
+    {
+      "clubNumber": "31600",
+      "clubName": "Clackamas",
+      "ghlLocationId": "aqSDfuZLimMXuPz6Zx3p",
+      "ghlApiKey": "pit-5aaaf3b1-1100-4554-ab3c-75c60afad470",
+      "enabled": true
+    },
+    {
+      "clubNumber": "31598",
+      "clubName": "Springfield",
+      "ghlLocationId": "xXV3CXt5DkgfGnTt8CG1",
+      "ghlApiKey": "pit-5709f4e6-62ff-4c62-b304-86ee6a5073a8",
+      "enabled": true
+    },
+    {
+      "clubNumber": "32073",
+      "clubName": "Medford",
+      "ghlLocationId": "ZxcRZBvwIO7vd4D3bjJO",
+      "ghlApiKey": "pit-9763fdaa-34d2-4ed7-b010-26e1232437d1",
+      "enabled": true
+    }
+  ]
+}

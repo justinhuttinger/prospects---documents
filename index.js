@@ -202,20 +202,18 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
   const locationTimestamp = new Date().toISOString();
 
   const checkinPayload = {
-    request: {
-      checkins: [
-        {
-          access: {
-            allowed: allowed ? 'true' : 'false',
-            locationTimestamp: locationTimestamp,
-            stationId: stationId
-          }
+    checkins: [
+      {
+        access: {
+          allowed: allowed ? 'true' : 'false',
+          locationTimestamp: locationTimestamp,
+          stationId: stationId
         }
-      ],
-      clubNumber: clubNumber,
-      isRemoteMemberSearchEnabled: 'false',
-      memberId: memberId
-    }
+      }
+    ],
+    clubNumber: clubNumber,
+    isRemoteMemberSearchEnabled: 'false',
+    memberId: memberId
   };
 
   console.log(`Posting check-in for member ${memberId} at club ${clubNumber}...`);

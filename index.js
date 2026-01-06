@@ -200,6 +200,9 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
 
   // Generate ISO timestamp for the check-in
   const locationTimestamp = new Date().toISOString();
+  
+  // ABC requires stationId to be exactly 32 characters
+  const paddedStationId = stationId.padEnd(32, '0').substring(0, 32);
 
   const checkinPayload = {
     checkins: [
@@ -207,7 +210,7 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
         access: {
           allowed: allowed ? 'true' : 'false',
           locationTimestamp: locationTimestamp,
-          stationId: stationId
+          stationId: paddedStationId
         }
       }
     ],

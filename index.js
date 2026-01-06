@@ -180,6 +180,106 @@ function getAbcHeaders() {
   };
 }
 
+// ============================================
+// CHECK-IN FUNCTION FOR ABC FINANCIAL
+// ============================================
+/**
+ * Post a check-in for a member in ABC Financial
+ * @param {string} clubNumber - The club number (e.g., "12345")
+ * @param {string} memberId - The ABC member/prospect ID
+ * @param {object} options - Optional check-in details
+ * @param {string} options.stationId - Station/kiosk identifier (default: "WEB")
+ * @param {boolean} options.allowed - Whether access is allowed (default: true)
+ * @returns {Promise<object>} - ABC Financial response
+ */
+async function postMemberCheckin(clubNumber, memberId, options = {}) {
+  const {
+    stationId = 'WEB',
+    allowed = true
+  } = options;
+
+  // Generate ISO timestamp for the check-in
+  const locationTimestamp = new Date().toISOString();
+
+  const checkinPayload = {
+    request: {
+      checkins: [
+        {
+          access: {
+            allowed: allowed ? 'true' : 'false',
+            locationTimestamp: locationTimestamp,
+            stationId: stationId
+          }
+        }
+      ],
+      clubNumber: clubNumber,
+      isRemoteMemberSearchEnabled: 'false',
+      memberId: memberId
+    }
+  };
+
+  console.log(`Posting check-in for member ${memberId} at club ${clubNumber}...`);
+  console.log('Check-in payload:', JSON.stringify(checkinPayload, null, 2));
+
+  try {
+    const response = await axios.post(
+      `${ABC_BASE_URL}/${clubNumber}/members/checkins/${memberId}`,
+      checkinPayload,
+      { headers: getAbcHeaders() }
+    );
+
+    console.log('Check-in successful:', response.data);
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    console.error('Check-in error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data || error.message
+    };
+  }
+}
+
+// ============================================
+// STANDALONE CHECK-IN ENDPOINT
+// ============================================
+// Use this endpoint to check in a member directly
+// POST /checkin with body: { clubNumber: "12345", memberId: "67890", stationId: "KIOSK1" }
+app.post('/checkin', async (req, res) => {
+  try {
+    const { clubNumber, memberId, stationId } = req.body;
+
+    if (!clubNumber || !memberId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: clubNumber and memberId are required'
+      });
+    }
+
+    const result = await postMemberCheckin(clubNumber, memberId, { stationId });
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: `Check-in posted for member ${memberId} at club ${clubNumber}`,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Helper function to generate PDF using PDF Shift
 async function generatePDF(formData) {
   try {
@@ -549,7 +649,13 @@ console.log(`Prospect ID: ${prospectId}`);
 
     console.log('Document uploaded:', documentResponse.data);
 
-    // 5. Update GHL contact with ABC Member ID
+    // 5. POST CHECK-IN FOR THE NEW PROSPECT
+    console.log('Posting check-in for new prospect...');
+    const checkinResult = await postMemberCheckin(clubNumber, prospectId, {
+      stationId: 'GHL_TRIAL_SIGNUP'
+    });
+
+    // 6. Update GHL contact with ABC Member ID
     console.log('Updating GHL contact with ABC Member ID...');
     try {
       // Get the location-specific API key
@@ -591,10 +697,11 @@ console.log(`Prospect ID: ${prospectId}`);
       success: true,
       clubNumber,
       prospectId,
-      message: 'Prospect created and document uploaded successfully',
+      message: 'Prospect created, document uploaded, and check-in posted successfully',
       abc_responses: {
         prospect: prospectResponse.data,
-        document: documentResponse.data
+        document: documentResponse.data,
+        checkin: checkinResult
       }
     });
 

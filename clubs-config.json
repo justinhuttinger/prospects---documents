@@ -5,6 +5,7 @@
       "clubName": "Salem",
       "ghlLocationId": "uflpfHNpByAnaBLkQzu3",
       "ghlApiKey": "pit-e5bcddc8-6b42-4626-acaa-c471165b4fc4",
+      "stationId": "E42B9D7C33C908BEE0532AE014ACBF25",
       "enabled": true
     },
     {
@@ -12,6 +13,7 @@
       "clubName": "Keizer",
       "ghlLocationId": "g75BBgiSvlCRbvxYRMAb",
       "ghlApiKey": "pit-e3b763e5-358e-46ac-a8a0-59d66f3f0b73",
+      "stationId": "1E19FCD0EF6B33BAE06328E014AC862D",
       "enabled": true
     },
     {
@@ -19,6 +21,7 @@
       "clubName": "Eugene",
       "ghlLocationId": "NNTZT21fPm3SxpLg8s04",
       "ghlApiKey": "pit-822d1e4a-2123-4b3b-83f8-76c0a744db56",
+      "stationId": "76A46412889485A2E05302E014ACDD95",
       "enabled": true
     },
     {
@@ -26,6 +29,7 @@
       "clubName": "Milwaukie",
       "ghlLocationId": "BQfUepBFzqVan4ruCQ6R",
       "ghlApiKey": "pit-08671077-536e-47ba-8814-974cc339e97f",
+      "stationId": "1E185AA71C3E0EF8E06329E014AC4990",
       "enabled": true
     },
     {
@@ -33,6 +37,7 @@
       "clubName": "Clackamas",
       "ghlLocationId": "aqSDfuZLimMXuPz6Zx3p",
       "ghlApiKey": "pit-5aaaf3b1-1100-4554-ab3c-75c60afad470",
+      "stationId": "1E1934CDC139434AE06329E014AC9B64",
       "enabled": true
     },
     {
@@ -40,6 +45,7 @@
       "clubName": "Springfield",
       "ghlLocationId": "xXV3CXt5DkgfGnTt8CG1",
       "ghlApiKey": "pit-5709f4e6-62ff-4c62-b304-86ee6a5073a8",
+      "stationId": "1D8ADAAA302604F9E06348E014AC9B57",
       "enabled": true
     },
     {
@@ -47,6 +53,7 @@
       "clubName": "Medford",
       "ghlLocationId": "ZxcRZBvwIO7vd4D3bjJO",
       "ghlApiKey": "pit-9763fdaa-34d2-4ed7-b010-26e1232437d1",
+      "stationId": null,
       "enabled": true
     }
   ]

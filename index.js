@@ -353,6 +353,44 @@ app.post('/checkin', async (req, res) => {
   }
 });
 
+// ============================================
+// STANDALONE ALERT ENDPOINT
+// ============================================
+// Use this endpoint to add an alert to a member directly
+// POST /alert with body: { clubNumber: "12345", memberId: "67890", text: "CUSTOM MESSAGE", color: "Purple" }
+app.post('/alert', async (req, res) => {
+  try {
+    const { clubNumber, memberId, text, color, showOneTime, acknowledge } = req.body;
+
+    if (!clubNumber || !memberId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: clubNumber and memberId are required'
+      });
+    }
+
+    const result = await addMemberAlert(clubNumber, memberId, { text, color, showOneTime, acknowledge });
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: `Alert added for member ${memberId} at club ${clubNumber}`,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Helper function to generate PDF using PDF Shift
 async function generatePDF(formData) {
   try {

@@ -152,6 +152,7 @@ const clubsConfig = JSON.parse(fs.readFileSync(__dirname + '/clubs-config.json',
 // Build lookup objects from config
 const CLUB_NUMBERS = {};
 const GHL_API_KEYS = {};
+const STATION_IDS = {};
 
 clubsConfig.clubs.forEach(club => {
   if (club.enabled) {
@@ -159,6 +160,8 @@ clubsConfig.clubs.forEach(club => {
     CLUB_NUMBERS[`West Coast Strength - ${club.clubName}`] = club.clubNumber;
     // Map GHL location ID to API key
     GHL_API_KEYS[club.ghlLocationId] = club.ghlApiKey;
+    // Map club number to station ID
+    STATION_IDS[club.clubNumber] = club.stationId;
   }
 });
 
@@ -194,9 +197,18 @@ function getAbcHeaders() {
  */
 async function postMemberCheckin(clubNumber, memberId, options = {}) {
   const {
-    stationId = 'WEB',
+    stationId = STATION_IDS[clubNumber],
     allowed = true
   } = options;
+
+  // If no station ID configured for this club, skip check-in
+  if (!stationId) {
+    console.log(`No station ID configured for club ${clubNumber}, skipping check-in`);
+    return {
+      success: false,
+      error: 'No station ID configured for this club'
+    };
+  }
 
   // Generate timestamp in ABC's required format: YYYY-MM-DD hh:mm:ss.nnnnnn
   // ABC expects local time, not UTC
@@ -212,8 +224,7 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
   const locationTimestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}000`;
   
   // ABC requires stationId to be exactly 32 uppercase hex characters
-  // Using the format from ABC documentation
-  const paddedStationId = 'E42B9D7C33C908BEE0532AE014ACBF25';
+  // stationId is pulled from clubs-config.json based on clubNumber
 
   const checkinPayload = {
     checkins: [
@@ -221,7 +232,7 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
         access: {
           allowed: allowed ? 'true' : 'false',
           locationTimestamp: locationTimestamp,
-          stationId: paddedStationId
+          stationId: stationId
         }
       }
     ],
@@ -663,9 +674,7 @@ console.log(`Prospect ID: ${prospectId}`);
 
     // 5. POST CHECK-IN FOR THE NEW PROSPECT
     console.log('Posting check-in for new prospect...');
-    const checkinResult = await postMemberCheckin(clubNumber, prospectId, {
-      stationId: 'GHL_TRIAL_SIGNUP'
-    });
+    const checkinResult = await postMemberCheckin(clubNumber, prospectId);
 
     // 6. Update GHL contact with ABC Member ID
     console.log('Updating GHL contact with ABC Member ID...');

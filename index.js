@@ -199,10 +199,17 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
   } = options;
 
   // Generate timestamp in ABC's required format: YYYY-MM-DD hh:mm:ss.nnnnnn
+  // ABC expects local time, not UTC
   const now = new Date();
-  const locationTimestamp = now.toISOString()
-    .replace('T', ' ')
-    .replace('Z', '000');
+  const pacificTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const year = pacificTime.getFullYear();
+  const month = String(pacificTime.getMonth() + 1).padStart(2, '0');
+  const day = String(pacificTime.getDate()).padStart(2, '0');
+  const hours = String(pacificTime.getHours()).padStart(2, '0');
+  const minutes = String(pacificTime.getMinutes()).padStart(2, '0');
+  const seconds = String(pacificTime.getSeconds()).padStart(2, '0');
+  const ms = String(pacificTime.getMilliseconds()).padStart(3, '0');
+  const locationTimestamp = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}000`;
   
   // ABC requires stationId to be exactly 32 uppercase hex characters
   // Using the format from ABC documentation

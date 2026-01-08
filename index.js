@@ -197,8 +197,8 @@ async function addMemberAlert(clubNumber, memberId, options = {}) {
   const {
     text = 'NEW PROFILE',
     color = 'Purple',
-    showOneTime = 'Yes',
-    acknowledge = 'No'
+    showOneTime = 'true',
+    acknowledge = 'false'
   } = options;
 
   const alertPayload = {

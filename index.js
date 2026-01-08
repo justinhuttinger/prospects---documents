@@ -201,8 +201,9 @@ async function postMemberCheckin(clubNumber, memberId, options = {}) {
   // Generate ISO timestamp for the check-in
   const locationTimestamp = new Date().toISOString();
   
-  // ABC requires stationId to be exactly 32 characters
-  const paddedStationId = stationId.padEnd(32, '0').substring(0, 32);
+  // ABC requires stationId to be exactly 32 uppercase hex characters
+  // Using the format from ABC documentation
+  const paddedStationId = 'E42B9D7C33C908BEE0532AE014ACBF25';
 
   const checkinPayload = {
     checkins: [

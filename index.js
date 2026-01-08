@@ -742,10 +742,10 @@ console.log(`Prospect ID: ${prospectId}`);
     console.log('Generating PDF...');
     const pdfBuffer = await generatePDF(formData);
 
-    // 4. Upload document to ABC Financial using the new working endpoint
-    console.log('Uploading document to ABC Financial...');
+    // 4. Run document upload and alert in parallel
+    console.log('Uploading document and adding alert in parallel...');
+    
     const documentUrl = `${ABC_BASE_URL}/${clubNumber}/members/documents/${prospectId}`;
-
     const documentPayload = {
       document: pdfBuffer.toString('base64'),
       documentName: sanitizeDocumentName(formData.first_name, formData.last_name),
@@ -754,21 +754,20 @@ console.log(`Prospect ID: ${prospectId}`);
       memberId: prospectId
     };
 
-    const documentResponse = await axios.post(documentUrl, documentPayload, {
-      headers: getAbcHeaders()
-    });
+    const [documentResponse, alertResult] = await Promise.all([
+      axios.post(documentUrl, documentPayload, { headers: getAbcHeaders() }),
+      addMemberAlert(clubNumber, prospectId)
+    ]);
 
     console.log('Document uploaded:', documentResponse.data);
+    console.log('Alert result:', alertResult);
 
-    // 5. ADD ALERT TO THE NEW PROSPECT
-    console.log('Adding alert to new prospect...');
-    const alertResult = await addMemberAlert(clubNumber, prospectId);
-
-    // 6. POST CHECK-IN FOR THE NEW PROSPECT
+    // 5. POST CHECK-IN (after alert is added so it shows up)
     console.log('Posting check-in for new prospect...');
     const checkinResult = await postMemberCheckin(clubNumber, prospectId);
+    console.log('Check-in result:', checkinResult);
 
-    // 7. Update GHL contact with ABC Member ID
+    // 6. Update GHL contact with ABC Member ID
     console.log('Updating GHL contact with ABC Member ID...');
     try {
       // Get the location-specific API key

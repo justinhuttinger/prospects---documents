@@ -184,6 +184,56 @@ function getAbcHeaders() {
 }
 
 // ============================================
+// ALERT FUNCTION FOR ABC FINANCIAL
+// ============================================
+/**
+ * Add an alert to a member's account in ABC Financial
+ * @param {string} clubNumber - The club number
+ * @param {string} memberId - The ABC member/prospect ID
+ * @param {object} options - Alert options
+ * @returns {Promise<object>} - ABC Financial response
+ */
+async function addMemberAlert(clubNumber, memberId, options = {}) {
+  const {
+    text = 'NEW PROFILE',
+    color = 'Purple',
+    showOneTime = 'Yes',
+    acknowledge = 'No'
+  } = options;
+
+  const alertPayload = {
+    acknowledge: acknowledge,
+    clubNumber: clubNumber,
+    color: color,
+    showOneTime: showOneTime,
+    text: text
+  };
+
+  console.log(`Adding alert for member ${memberId} at club ${clubNumber}...`);
+  console.log('Alert payload:', JSON.stringify(alertPayload, null, 2));
+
+  try {
+    const response = await axios.post(
+      `${ABC_BASE_URL}/${clubNumber}/members/alerts/${memberId}`,
+      alertPayload,
+      { headers: getAbcHeaders() }
+    );
+
+    console.log('Alert added successfully:', response.data);
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    console.error('Alert error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data || error.message
+    };
+  }
+}
+
+// ============================================
 // CHECK-IN FUNCTION FOR ABC FINANCIAL
 // ============================================
 /**
@@ -672,11 +722,15 @@ console.log(`Prospect ID: ${prospectId}`);
 
     console.log('Document uploaded:', documentResponse.data);
 
-    // 5. POST CHECK-IN FOR THE NEW PROSPECT
+    // 5. ADD ALERT TO THE NEW PROSPECT
+    console.log('Adding alert to new prospect...');
+    const alertResult = await addMemberAlert(clubNumber, prospectId);
+
+    // 6. POST CHECK-IN FOR THE NEW PROSPECT
     console.log('Posting check-in for new prospect...');
     const checkinResult = await postMemberCheckin(clubNumber, prospectId);
 
-    // 6. Update GHL contact with ABC Member ID
+    // 7. Update GHL contact with ABC Member ID
     console.log('Updating GHL contact with ABC Member ID...');
     try {
       // Get the location-specific API key
@@ -718,10 +772,11 @@ console.log(`Prospect ID: ${prospectId}`);
       success: true,
       clubNumber,
       prospectId,
-      message: 'Prospect created, document uploaded, and check-in posted successfully',
+      message: 'Prospect created, document uploaded, alert added, and check-in posted successfully',
       abc_responses: {
         prospect: prospectResponse.data,
         document: documentResponse.data,
+        alert: alertResult,
         checkin: checkinResult
       }
     });

@@ -143,7 +143,7 @@ function sanitizeDocumentName(firstName, lastName) {
 }
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
 // Load clubs configuration
 const fs = require('fs');
@@ -226,6 +226,44 @@ async function addMemberAlert(clubNumber, memberId, options = {}) {
     };
   } catch (error) {
     console.error('Alert error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data || error.message
+    };
+  }
+}
+
+// ============================================
+// MEMBER PICTURE UPLOAD FOR ABC FINANCIAL
+// ============================================
+/**
+ * Upload a profile picture for a member in ABC Financial
+ * @param {string} clubNumber - The club number
+ * @param {string} memberId - The ABC member/prospect ID
+ * @param {string} imageBase64 - Base64-encoded image (with or without data: URI prefix)
+ * @returns {Promise<object>} - ABC Financial response
+ */
+async function uploadMemberPicture(clubNumber, memberId, imageBase64) {
+  if (!imageBase64) {
+    return { success: false, error: 'No image provided' };
+  }
+
+  // Strip data URI prefix if present (e.g. "data:image/jpeg;base64,...")
+  const base64 = String(imageBase64).replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+
+  console.log(`Uploading picture for member ${memberId} at club ${clubNumber} (${base64.length} base64 chars)...`);
+
+  try {
+    const response = await axios.put(
+      `${ABC_BASE_URL}/${clubNumber}/members/pictures/${memberId}`,
+      { image: base64 },
+      { headers: getAbcHeaders() }
+    );
+
+    console.log('Picture uploaded successfully:', response.data);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('Picture upload error:', error.response?.data || error.message);
     return {
       success: false,
       error: error.response?.data || error.message
@@ -375,6 +413,43 @@ app.post('/alert', async (req, res) => {
       res.json({
         success: true,
         message: `Alert added for member ${memberId} at club ${clubNumber}`,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// STANDALONE PICTURE UPLOAD ENDPOINT
+// ============================================
+// POST /picture with body: { clubNumber: "12345", memberId: "67890", image: "<base64>" }
+app.post('/picture', async (req, res) => {
+  try {
+    const { clubNumber, memberId, image } = req.body;
+
+    if (!clubNumber || !memberId || !image) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: clubNumber, memberId, and image are required'
+      });
+    }
+
+    const result = await uploadMemberPicture(clubNumber, memberId, image);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: `Picture uploaded for member ${memberId} at club ${clubNumber}`,
         data: result.data
       });
     } else {
@@ -762,7 +837,22 @@ console.log(`Prospect ID: ${prospectId}`);
     console.log('Document uploaded:', documentResponse.data);
     console.log('Alert result:', alertResult);
 
-    // 5. POST CHECK-IN (after alert is added so it shows up)
+    // 5. UPLOAD MEMBER PROFILE PHOTO (if survey captured one)
+    const memberPhoto =
+      formData.member_profile_photo ||
+      formData['Member Profile Photo'] ||
+      formData.customData?.member_profile_photo;
+
+    let pictureResult = { success: false, skipped: true, reason: 'No photo provided' };
+    if (memberPhoto) {
+      console.log('Uploading member profile photo...');
+      pictureResult = await uploadMemberPicture(clubNumber, prospectId, memberPhoto);
+      console.log('Picture upload result:', pictureResult.success ? 'success' : pictureResult.error);
+    } else {
+      console.log('No member_profile_photo in webhook payload, skipping picture upload.');
+    }
+
+    // 6. POST CHECK-IN (after alert + photo are in place so the alert/photo show on check-in)
     console.log('Posting check-in for new prospect...');
     const checkinResult = await postMemberCheckin(clubNumber, prospectId);
     console.log('Check-in result:', checkinResult);
@@ -809,11 +899,12 @@ console.log(`Prospect ID: ${prospectId}`);
       success: true,
       clubNumber,
       prospectId,
-      message: 'Prospect created, document uploaded, alert added, and check-in posted successfully',
+      message: 'Prospect created, document uploaded, alert added, photo uploaded, and check-in posted successfully',
       abc_responses: {
         prospect: prospectResponse.data,
         document: documentResponse.data,
         alert: alertResult,
+        picture: pictureResult,
         checkin: checkinResult
       }
     });

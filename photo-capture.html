@@ -1,0 +1,375 @@
+<!--
+  WCS Member Profile Photo Capture Widget (B&W, Poppins)
+  ------------------------------------------------------
+  Drop this entire block (style + HTML + script) into a GHL survey "Custom HTML"
+  element. Add a separate Single-Line (or Paragraph) field to the survey with
+  field key `member_profile_photo` — the widget writes the JPEG base64 there.
+
+  Notes:
+  - getUserMedia requires HTTPS. GHL surveys are served over HTTPS, so this works.
+  - On mobile we prefer the front camera (facingMode: "user").
+  - If camera access is denied or unsupported, we fall back to a native file
+    input with `capture="user"` so a tap still opens the camera.
+  - The captured image is downscaled and JPEG-compressed in-browser before
+    being base64 encoded, keeping webhook payloads small (~50-150KB).
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .wcs-photo {
+    --wcs-ink: #0a0a0a;
+    --wcs-ink-soft: #2a2a2a;
+    --wcs-mute: #6b6b6b;
+    --wcs-border: #d6d6d6;
+    --wcs-border-strong: #0a0a0a;
+    --wcs-bg: #f5f5f5;
+
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--wcs-ink);
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+    box-sizing: border-box;
+  }
+  .wcs-photo *, .wcs-photo *::before, .wcs-photo *::after { box-sizing: border-box; font-family: inherit; }
+
+  .wcs-photo__title {
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-size: 18px;
+    margin: 0 0 4px 0;
+    color: var(--wcs-ink);
+  }
+  .wcs-photo__sub {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--wcs-mute);
+    margin: 0 0 16px 0;
+    line-height: 1.5;
+  }
+  .wcs-photo__accent {
+    height: 3px;
+    width: 36px;
+    background: var(--wcs-ink);
+    border-radius: 2px;
+    margin-bottom: 16px;
+  }
+
+  .wcs-photo__stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--wcs-bg);
+    border: 2px dashed var(--wcs-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wcs-photo__stage--active { border-style: solid; border-color: var(--wcs-border-strong); }
+
+  .wcs-photo__video,
+  .wcs-photo__preview {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* mirror selfie */
+  }
+  .wcs-photo__preview { transform: none; } /* don't mirror saved image */
+  .wcs-photo__placeholder {
+    color: var(--wcs-mute);
+    font-size: 13px;
+    text-align: center;
+    padding: 0 24px;
+  }
+  .wcs-photo__placeholder svg {
+    display: block;
+    margin: 0 auto 8px auto;
+    width: 36px;
+    height: 36px;
+    opacity: 0.5;
+  }
+
+  .wcs-photo__controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .wcs-photo__btn {
+    flex: 1;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: transform 0.05s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    font-family: inherit;
+  }
+  .wcs-photo__btn:active { transform: translateY(1px); }
+  .wcs-photo__btn--primary {
+    background: var(--wcs-ink);
+    color: #fff;
+  }
+  .wcs-photo__btn--primary:hover { background: var(--wcs-ink-soft); }
+  .wcs-photo__btn--ghost {
+    background: #fff;
+    color: var(--wcs-ink);
+    border: 1px solid var(--wcs-border);
+  }
+  .wcs-photo__btn--ghost:hover { background: var(--wcs-bg); }
+  .wcs-photo__btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .wcs-photo__status {
+    margin-top: 12px;
+    font-size: 12px;
+    text-align: center;
+    color: var(--wcs-mute);
+    min-height: 16px;
+  }
+  .wcs-photo__status--ok { color: var(--wcs-ink); font-weight: 600; }
+  .wcs-photo__status--err { color: var(--wcs-ink); font-weight: 500; }
+
+  .wcs-photo__file {
+    display: none;
+  }
+</style>
+
+<div class="wcs-photo" id="wcs-photo-widget">
+  <div class="wcs-photo__accent"></div>
+  <h3 class="wcs-photo__title">Profile Photo</h3>
+  <p class="wcs-photo__sub">Take a quick photo so our team can recognize you on your first visit.</p>
+
+  <div class="wcs-photo__stage" id="wcs-stage">
+    <div class="wcs-photo__placeholder" id="wcs-placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      Tap "Start Camera" to begin
+    </div>
+    <video class="wcs-photo__video" id="wcs-video" autoplay playsinline muted style="display:none;"></video>
+    <img class="wcs-photo__preview" id="wcs-preview" alt="" style="display:none;">
+  </div>
+
+  <div class="wcs-photo__controls" id="wcs-controls">
+    <button type="button" class="wcs-photo__btn wcs-photo__btn--primary" id="wcs-start">Start Camera</button>
+    <button type="button" class="wcs-photo__btn wcs-photo__btn--primary" id="wcs-capture" style="display:none;">Capture</button>
+    <button type="button" class="wcs-photo__btn wcs-photo__btn--ghost" id="wcs-retake" style="display:none;">Retake</button>
+    <button type="button" class="wcs-photo__btn wcs-photo__btn--primary" id="wcs-use" style="display:none;">Use Photo</button>
+  </div>
+
+  <input type="file" accept="image/*" capture="user" class="wcs-photo__file" id="wcs-file">
+
+  <div class="wcs-photo__status" id="wcs-status"></div>
+</div>
+
+<script>
+(function () {
+  var widget = document.getElementById('wcs-photo-widget');
+  if (!widget || widget.dataset.wcsInit) return;
+  widget.dataset.wcsInit = '1';
+
+  var FIELD_NAME = 'member_profile_photo';
+  var MAX_DIM = 640;       // max width/height of stored JPEG
+  var JPEG_QUALITY = 0.85;
+
+  var stage = document.getElementById('wcs-stage');
+  var placeholder = document.getElementById('wcs-placeholder');
+  var video = document.getElementById('wcs-video');
+  var preview = document.getElementById('wcs-preview');
+  var startBtn = document.getElementById('wcs-start');
+  var captureBtn = document.getElementById('wcs-capture');
+  var retakeBtn = document.getElementById('wcs-retake');
+  var useBtn = document.getElementById('wcs-use');
+  var fileInput = document.getElementById('wcs-file');
+  var status = document.getElementById('wcs-status');
+
+  var stream = null;
+  var capturedBase64 = null;
+
+  function setStatus(msg, kind) {
+    status.textContent = msg || '';
+    status.className = 'wcs-photo__status' + (kind ? ' wcs-photo__status--' + kind : '');
+  }
+
+  function showButtons(states) {
+    [['wcs-start', startBtn], ['wcs-capture', captureBtn], ['wcs-retake', retakeBtn], ['wcs-use', useBtn]]
+      .forEach(function (pair) { pair[1].style.display = states[pair[0]] ? '' : 'none'; });
+  }
+
+  function stopStream() {
+    if (stream) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      stream = null;
+    }
+  }
+
+  function openFileFallback(reason) {
+    setStatus(reason || 'Camera unavailable — tap to choose a photo.', 'err');
+    showButtons({ 'wcs-start': true });
+    startBtn.textContent = 'Choose Photo';
+    startBtn.onclick = function () { fileInput.click(); };
+  }
+
+  function showPlaceholder() {
+    placeholder.style.display = '';
+    video.style.display = 'none';
+    preview.style.display = 'none';
+    stage.classList.remove('wcs-photo__stage--active');
+  }
+
+  function showVideo() {
+    placeholder.style.display = 'none';
+    video.style.display = '';
+    preview.style.display = 'none';
+    stage.classList.add('wcs-photo__stage--active');
+  }
+
+  function showPreview(dataUrl) {
+    placeholder.style.display = 'none';
+    video.style.display = 'none';
+    preview.src = dataUrl;
+    preview.style.display = '';
+    stage.classList.add('wcs-photo__stage--active');
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      openFileFallback('Camera not supported on this device.');
+      return;
+    }
+    setStatus('Requesting camera…');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      showVideo();
+      showButtons({ 'wcs-capture': true });
+      setStatus('Frame your face inside the circle, then tap Capture.');
+    } catch (err) {
+      console.warn('getUserMedia failed:', err);
+      openFileFallback('Could not access the camera. Tap to upload a photo instead.');
+    }
+  }
+
+  function drawToCanvas(source, sw, sh) {
+    var scale = Math.min(1, MAX_DIM / Math.max(sw, sh));
+    var w = Math.round(sw * scale);
+    var h = Math.round(sh * scale);
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    if (source === video) {
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(source, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  }
+
+  function capturePhoto() {
+    if (!video.videoWidth) {
+      setStatus('Camera not ready yet, give it a second.', 'err');
+      return;
+    }
+    var dataUrl = drawToCanvas(video, video.videoWidth, video.videoHeight);
+    capturedBase64 = dataUrl;
+    stopStream();
+    showPreview(dataUrl);
+    showButtons({ 'wcs-retake': true, 'wcs-use': true });
+    setStatus('Looks good? Tap "Use Photo" to save it.');
+  }
+
+  function handleFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var dataUrl = drawToCanvas(img, img.naturalWidth, img.naturalHeight);
+        capturedBase64 = dataUrl;
+        showPreview(dataUrl);
+        showButtons({ 'wcs-retake': true, 'wcs-use': true });
+        setStatus('Looks good? Tap "Use Photo" to save it.');
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function retake() {
+    capturedBase64 = null;
+    preview.src = '';
+    setStatus('');
+    showPlaceholder();
+    showButtons({ 'wcs-start': true });
+    startBtn.textContent = 'Start Camera';
+    startBtn.onclick = startCamera;
+  }
+
+  function findTargetField() {
+    var selectors = [
+      '[name="' + FIELD_NAME + '"]',
+      '#' + FIELD_NAME,
+      '[data-q="' + FIELD_NAME + '"]',
+      'input[name*="' + FIELD_NAME + '"]',
+      'textarea[name*="' + FIELD_NAME + '"]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function commitPhoto() {
+    if (!capturedBase64) return;
+    var target = findTargetField();
+    var clean = capturedBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+
+    if (target) {
+      target.value = clean;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+      setStatus('Photo saved. You can move on.', 'ok');
+    } else {
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = FIELD_NAME;
+      hidden.value = clean;
+      widget.appendChild(hidden);
+      setStatus('Photo captured (no matching survey field found — value attached inline).', 'err');
+    }
+
+    showButtons({ 'wcs-retake': true });
+  }
+
+  startBtn.addEventListener('click', startCamera);
+  captureBtn.addEventListener('click', capturePhoto);
+  retakeBtn.addEventListener('click', function () { retake(); startCamera(); });
+  useBtn.addEventListener('click', commitPhoto);
+  fileInput.addEventListener('change', function (e) {
+    handleFile(e.target.files && e.target.files[0]);
+  });
+
+  window.addEventListener('beforeunload', stopStream);
+})();
+</script>

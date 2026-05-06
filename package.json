@@ -4,7 +4,8 @@
   "description": "PDF generation service for West Coast Strength form submissions",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test test/"
   },
   "keywords": ["pdf", "wcs", "forms"],
   "author": "WCS",
@@ -15,6 +16,10 @@
     "@sparticuz/chromium": "^131.0.0",
     "axios": "^1.6.2",
     "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "nock": "^13.5.4",
+    "supertest": "^7.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -11,6 +11,8 @@ process.env.ABC_APP_KEY = 'test-app-key';
 process.env.PDFSHIFT_API_KEY = 'test-pdfshift-key';
 process.env.C2S_RETRY_BASE_MS = '5';
 
+// process.env mutations above MUST happen before requiring the route — RETRY_OPTS
+// and REPLAY_WINDOW_SEC are read at module-load time.
 const handler = require('../routes/click2save');
 
 function makeApp() {
@@ -163,13 +165,16 @@ test.after(() => { nock.cleanAll(); nock.enableNetConnect(); });
 test('CANCEL: valid signed payload uploads Cancel Document', async () => {
   let captured;
   const app = makeApp();
-  mockMemberGet();
-  mockPdfShift();
-  mockDocPost({ capture: b => { captured = b; } });
+  const memberScope = mockMemberGet();
+  const pdfScope = mockPdfShift();
+  const docScope = mockDocPost({ capture: b => { captured = b; } });
 
   const res = await send(app, cancelPayload({ requestId: 'r-cancel-1' }));
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.success, true);
+  assert.strictEqual(memberScope.isDone(), true);
+  assert.strictEqual(pdfScope.isDone(), true);
+  assert.strictEqual(docScope.isDone(), true);
   assert.match(captured.documentName, /^Cancel Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
   assert.strictEqual(captured.documentType, 'pdf');
   assert.strictEqual(captured.imageType, 'member_document');
@@ -178,13 +183,16 @@ test('CANCEL: valid signed payload uploads Cancel Document', async () => {
 test('OFFER: multiple offer subtypes are rendered into the HTML', async () => {
   let renderedHtml;
   const app = makeApp();
-  mockMemberGet();
-  nock(PDF).post('/v3/convert/pdf', body => { renderedHtml = body.source; return true; }).reply(200, Buffer.from('%PDF'));
+  const memberScope = mockMemberGet();
+  const pdfScope = nock(PDF).post('/v3/convert/pdf', body => { renderedHtml = body.source; return true; }).reply(200, Buffer.from('%PDF'));
   let captured;
-  mockDocPost({ capture: b => { captured = b; } });
+  const docScope = mockDocPost({ capture: b => { captured = b; } });
 
   const res = await send(app, offerPayload({ requestId: 'r-offer-1' }));
   assert.strictEqual(res.status, 200);
+  assert.strictEqual(memberScope.isDone(), true);
+  assert.strictEqual(pdfScope.isDone(), true);
+  assert.strictEqual(docScope.isDone(), true);
   assert.match(captured.documentName, /^Save Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
   assert.ok(renderedHtml.includes('MONETARY'));
   assert.ok(renderedHtml.includes('YOGA-MAT-BLUE'));
@@ -194,12 +202,15 @@ test('OFFER: multiple offer subtypes are rendered into the HTML', async () => {
 test('FREEZE: produces Save Document', async () => {
   let captured;
   const app = makeApp();
-  mockMemberGet();
-  mockPdfShift();
-  mockDocPost({ capture: b => { captured = b; } });
+  const memberScope = mockMemberGet();
+  const pdfScope = mockPdfShift();
+  const docScope = mockDocPost({ capture: b => { captured = b; } });
 
   const res = await send(app, freezePayload({ requestId: 'r-freeze-1' }));
   assert.strictEqual(res.status, 200);
+  assert.strictEqual(memberScope.isDone(), true);
+  assert.strictEqual(pdfScope.isDone(), true);
+  assert.strictEqual(docScope.isDone(), true);
   assert.match(captured.documentName, /^Save Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
 });
 

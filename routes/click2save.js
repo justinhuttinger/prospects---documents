@@ -12,11 +12,15 @@ const RETRY_OPTS = {
   baseMs: parseInt(process.env.C2S_RETRY_BASE_MS, 10) || 500,
 };
 
-function documentName(requestType, occurredAt) {
+function documentName(requestType, occurredAt, requestId) {
   const date = new Date(occurredAt);
-  const yyyymmdd = Number.isNaN(date.getTime())
-    ? new Date().toISOString().slice(0, 10)
-    : date.toISOString().slice(0, 10);
+  let yyyymmdd;
+  if (Number.isNaN(date.getTime())) {
+    console.warn(`[c2s ${requestId}] invalid occurredAt: ${occurredAt} — using today's date`);
+    yyyymmdd = new Date().toISOString().slice(0, 10);
+  } else {
+    yyyymmdd = date.toISOString().slice(0, 10);
+  }
   return requestType === 'CANCEL'
     ? `Cancel Document (${yyyymmdd}).pdf`
     : `Save Document (${yyyymmdd}).pdf`;
@@ -98,7 +102,7 @@ async function handler(req, res) {
       return res.status(200).json({ success: true, skipped: 'member_not_found', requestId });
     }
     console.error(`[c2s ${requestId}] member GET failed:`, err.response?.data || err.message);
-    return res.status(500).json({ success: false, error: 'member_lookup_failed', details: err.response?.data || err.message });
+    return res.status(500).json({ success: false, error: 'member_lookup_failed' });
   }
 
   // 8. Render HTML
@@ -113,11 +117,11 @@ async function handler(req, res) {
     pdfBuffer = await retryWithBackoff(() => htmlToPdf(html), RETRY_OPTS);
   } catch (err) {
     console.error(`[c2s ${requestId}] PDFShift failed:`, err.response?.data || err.message);
-    return res.status(500).json({ success: false, error: 'pdf_generation_failed', details: err.response?.data || err.message });
+    return res.status(500).json({ success: false, error: 'pdf_generation_failed' });
   }
 
   // 10. Upload to ABC (with retry)
-  const docName = documentName(requestType, occurredAt);
+  const docName = documentName(requestType, occurredAt, requestId);
   try {
     await retryWithBackoff(
       () => uploadDocument(clubNumber, memberId, { pdfBuffer, documentName: docName }),
@@ -125,7 +129,7 @@ async function handler(req, res) {
     );
   } catch (err) {
     console.error(`[c2s ${requestId}] ABC document upload failed:`, err.response?.data || err.message);
-    return res.status(500).json({ success: false, error: 'document_upload_failed', details: err.response?.data || err.message });
+    return res.status(500).json({ success: false, error: 'document_upload_failed' });
   }
 
   console.log(`[c2s ${requestId}] uploaded "${docName}" for ${clubNumber}/${memberId}`);

@@ -925,7 +925,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// Mount Click2Save webhook BEFORE the global JSON parser is applied.
+// The handler reads the raw body to verify HMAC; the body parser is local to this route.
+const click2saveHandler = require('./routes/click2save');
+app.post('/webhook/click2save', require('express').raw({ type: 'application/json' }), click2saveHandler);
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;

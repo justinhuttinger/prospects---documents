@@ -55,7 +55,7 @@ export default function PersonalDetails({ state, dispatch, location, progress, o
         </div>
         <div className="sm:col-span-2">
           <FieldLabel required>ZIP</FieldLabel>
-          <input className={inputClass} type="text" inputMode="numeric" autoComplete="postal-code" maxLength={5}
+          <input className={inputClass} type="text" inputMode="tel" pattern="[0-9]*" autoComplete="postal-code" maxLength={5}
             value={m.postalCode} onChange={e => set('postalCode', e.target.value)} />
         </div>
       </div>

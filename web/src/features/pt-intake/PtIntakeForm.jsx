@@ -7,9 +7,11 @@ import { digits, formatPhone, isValidEmail, isValidPhone } from '../../lib/utils
 const inputClass =
   'w-full px-4 py-3 rounded-lg border border-border bg-bg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-wcs-red placeholder:text-tile-sub'
 const selectClass = inputClass + ' appearance-none pr-9'
+// Use inputMode="tel" (not "numeric") so iPad shows a clean 10-key
+// number pad with no punctuation. Pattern enforces digits only.
 const numericInputProps = {
   type: 'text',
-  inputMode: 'numeric',
+  inputMode: 'tel',
   pattern: '[0-9]*',
   autoComplete: 'off',
 }

@@ -152,6 +152,9 @@ app.post('/webhook/click2save', express.raw({ type: 'application/json' }), click
 
 app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
+// VIP Referrals widget — public POST + employee dropdown source
+app.use(require('./routes/vip-referrals'));
+
 // Load clubs configuration
 const fs = require('fs');
 const clubsConfig = JSON.parse(fs.readFileSync(__dirname + '/clubs-config.json', 'utf8'));

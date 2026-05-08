@@ -11,12 +11,15 @@ export default function LookupResult({ state, dispatch, location, progress, onBa
   const { match, candidates, found } = state.lookup
   const fullName = `${state.member.firstName} ${state.member.lastName}`.trim()
 
+  // Atomic dispatch: switch lookup AND advance in one action so the new
+  // step is computed against the freshly-set lookup (otherwise React's
+  // async state batching means the flow array still treats the user as
+  // a new member when nextStep runs).
   function pickCandidate(c) {
     dispatch({
-      type: 'set',
-      key: 'lookup',
-      value: {
-        match: 'exact',
+      type: 'setAndAdvance',
+      lookup: {
+        match:        'exact',
         candidates,
         found:        true,
         abcMemberId:  c.abc_member_id,
@@ -24,25 +27,18 @@ export default function LookupResult({ state, dispatch, location, progress, onBa
         hasPhoto:     !!c.has_photo,
         memberStatus: c.member_status || null,
       },
-    })
-    dispatch({
-      type: 'patch',
-      key: 'member',
-      value: {
+      member: {
         firstName: state.member.firstName || c.first_name || '',
         lastName:  state.member.lastName  || c.last_name  || '',
       },
     })
-    onNext()
   }
 
   function declineAndProceedAsNew() {
     dispatch({
-      type: 'set',
-      key: 'lookup',
-      value: { match: 'none', candidates: [], found: false, abcMemberId: null, lastVisit: null, hasPhoto: false, memberStatus: null },
+      type: 'setAndAdvance',
+      lookup: { match: 'none', candidates: [], found: false, abcMemberId: null, lastVisit: null, hasPhoto: false, memberStatus: null },
     })
-    onNext()
   }
 
   // EXACT match: phone + email + name all agree on a single record.

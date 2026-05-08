@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import StepShell, { inputClass } from '../StepShell'
 import { lookupMember } from '../../../lib/api'
 import { digits, formatPhone, isValidEmail, isValidPhone } from '../../../lib/utils'
@@ -12,6 +13,7 @@ function FieldLabel({ children, required }) {
 
 export default function MemberInfo({ state, dispatch, location, progress, onBack, onNext }) {
   const m = state.member
+  const [searching, setSearching] = useState(false)
 
   function set(key, value) {
     dispatch({
@@ -28,28 +30,29 @@ export default function MemberInfo({ state, dispatch, location, progress, onBack
     isValidEmail(m.email)
 
   async function handleNext() {
-    dispatch({ type: 'setLoading', value: true })
+    setSearching(true)
+    // Make sure the searching screen shows for at least ~700ms even on
+    // a fast lookup, so it feels like a real action and not a flicker.
+    const minDelay = new Promise(r => setTimeout(r, 700))
     try {
-      const result = await lookupMember({
+      const lookupP = lookupMember({
         location,
         phone:     digits(m.phone),
         email:     m.email.trim().toLowerCase(),
         firstName: m.firstName.trim(),
         lastName:  m.lastName.trim(),
       })
-
+      const [result] = await Promise.all([lookupP, minDelay])
       const candidates = Array.isArray(result.candidates) ? result.candidates : []
       const matchKind  = result.match || (candidates.length ? 'partial' : 'none')
 
-      // For an exact match (single candidate, all of phone+email+name agree),
-      // auto-confirm. For partial, defer to the LookupResult step's picker.
       let chosen = null
       if (matchKind === 'exact' && candidates.length === 1) chosen = candidates[0]
 
+      // Atomic state-and-advance so the new flow is used for the next step.
       dispatch({
-        type: 'set',
-        key: 'lookup',
-        value: {
+        type: 'setAndAdvance',
+        lookup: {
           match:        matchKind,
           candidates,
           found:        !!chosen,
@@ -59,18 +62,32 @@ export default function MemberInfo({ state, dispatch, location, progress, onBack
           memberStatus: chosen ? chosen.member_status : null,
         },
       })
-      dispatch({ type: 'setLoading', value: false })
-      onNext()
+      setSearching(false)
     } catch (err) {
-      dispatch({ type: 'error', message: `Lookup failed: ${err.message}. Continuing as a new member.` })
-      // Reset lookup so flow proceeds as new member
+      await minDelay
+      // Lookup failed entirely — log, continue as a new member.
       dispatch({
-        type: 'set',
-        key: 'lookup',
-        value: { match: 'none', candidates: [], found: false, abcMemberId: null, lastVisit: null, hasPhoto: false, memberStatus: null },
+        type: 'setAndAdvance',
+        lookup: { match: 'none', candidates: [], found: false, abcMemberId: null, lastVisit: null, hasPhoto: false, memberStatus: null },
       })
-      onNext()
+      setSearching(false)
     }
+  }
+
+  if (searching) {
+    return (
+      <StepShell
+        location={location}
+        current={progress.current} total={progress.total}
+        title="Looking up your account…"
+        subtitle={`${m.firstName.trim()} ${m.lastName.trim()}`.trim() || 'Searching ABC by phone, email, and name.'}
+        showBack={false}
+        showNext={false}
+      >
+        <div className="loading-card mx-0 my-2">Searching ABC for an existing account…</div>
+        <p className="mt-3 text-center text-xs text-tile-sub">This usually takes 1–3 seconds.</p>
+      </StepShell>
+    )
   }
 
   return (

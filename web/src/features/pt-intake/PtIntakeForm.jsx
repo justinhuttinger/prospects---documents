@@ -7,6 +7,12 @@ import { digits, formatPhone, isValidEmail, isValidPhone } from '../../lib/utils
 const inputClass =
   'w-full px-4 py-3 rounded-lg border border-border bg-bg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-wcs-red placeholder:text-tile-sub'
 const selectClass = inputClass + ' appearance-none pr-9'
+const numericInputProps = {
+  type: 'text',
+  inputMode: 'numeric',
+  pattern: '[0-9]*',
+  autoComplete: 'off',
+}
 
 const EXPERIENCE_LEVELS = ['Beginner', 'Intermediate', 'Advanced']
 const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say']
@@ -24,7 +30,8 @@ const INIT = {
   firstName: '', lastName: '', phone: '', email: '',
   gender: '',
   experienceLevel: '',
-  weightLbs: '', height: '',
+  weightLbs: '',
+  heightFeet: '', heightInches: '',
   programGoal: '', durationWeeks: '', daysPerWeek: '',
   day1Focus: '', day2Focus: '', day3Focus: '', day4Focus: '',
   day5Focus: '', day6Focus: '', day7Focus: '',
@@ -79,6 +86,11 @@ function YesNo({ value, onChange, name }) {
   )
 }
 
+function onlyDigits(s, max) {
+  const d = String(s || '').replace(/\D+/g, '')
+  return max ? d.slice(0, max) : d
+}
+
 export default function PtIntakeForm() {
   const location = useMemo(detectLocation, [])
   const [form, setForm] = useState(INIT)
@@ -94,16 +106,17 @@ export default function PtIntakeForm() {
 
   // Required-field validation
   const errs = {
-    firstName:       !form.firstName.trim()           ? 'Required' : '',
-    lastName:        !form.lastName.trim()            ? 'Required' : '',
-    phone:           !isValidPhone(form.phone)        ? (form.phone ? 'Enter a valid phone' : 'Required') : '',
-    email:           !isValidEmail(form.email)        ? (form.email ? 'Enter a valid email' : 'Required') : '',
-    experienceLevel: !form.experienceLevel             ? 'Required' : '',
-    weightLbs:       !form.weightLbs.trim()           ? 'Required' : '',
-    height:          !form.height.trim()              ? 'Required' : '',
-    programGoal:     !form.programGoal.trim()         ? 'Required' : '',
-    durationWeeks:   !form.durationWeeks.trim()       ? 'Required' : '',
-    daysPerWeek:     !form.daysPerWeek.trim()         ? 'Required' : '',
+    firstName:       !form.firstName.trim()      ? 'Required' : '',
+    lastName:        !form.lastName.trim()       ? 'Required' : '',
+    phone:           !isValidPhone(form.phone)   ? (form.phone ? 'Enter a valid phone' : 'Required') : '',
+    email:           !isValidEmail(form.email)   ? (form.email ? 'Enter a valid email' : 'Required') : '',
+    experienceLevel: !form.experienceLevel       ? 'Required' : '',
+    weightLbs:       !form.weightLbs             ? 'Required' : '',
+    heightFeet:      !form.heightFeet            ? 'Required' : '',
+    heightInches:    form.heightInches === '' || isNaN(Number(form.heightInches)) || Number(form.heightInches) > 11 ? 'Required (0-11)' : '',
+    programGoal:     !form.programGoal.trim()    ? 'Required' : '',
+    durationWeeks:   !form.durationWeeks         ? 'Required' : '',
+    daysPerWeek:     !form.daysPerWeek || Number(form.daysPerWeek) < 1 || Number(form.daysPerWeek) > 7 ? 'Required (1-7)' : '',
   }
 
   function getValidationErrors() {
@@ -114,12 +127,15 @@ export default function PtIntakeForm() {
     if (errs.email)           out.push('email')
     if (errs.experienceLevel) out.push('experience level')
     if (errs.weightLbs)       out.push('weight')
-    if (errs.height)          out.push('height')
+    if (errs.heightFeet || errs.heightInches) out.push('height')
     if (errs.programGoal)     out.push('program goal')
     if (errs.durationWeeks)   out.push('duration')
     if (errs.daysPerWeek)     out.push('days per week')
     return out
   }
+
+  // Conditional day focus — show only the days they're training each week
+  const daysCount = Math.max(0, Math.min(7, Number(form.daysPerWeek) || 0))
 
   async function onSubmit() {
     setSubmitAttempted(true)
@@ -135,9 +151,16 @@ export default function PtIntakeForm() {
     setStatusMsg('Sending...')
     setStatusKind('')
     try {
+      const heightStr = `${form.heightFeet}'${form.heightInches || 0}"`
+      const dayFocusFields = {}
+      for (let i = 1; i <= 7; i++) {
+        dayFocusFields[`day${i}Focus`] = i <= daysCount ? form[`day${i}Focus`] : ''
+      }
       await submitPtIntake({
         location,
         ...form,
+        ...dayFocusFields,
+        height: heightStr,
         phone: digits(form.phone),
         email: form.email.trim().toLowerCase(),
         submittedAt: new Date().toISOString(),
@@ -230,18 +253,35 @@ export default function PtIntakeForm() {
             </div>
             {show && <FieldError msg={errs.experienceLevel} />}
           </div>
+
           <div>
             <FieldLabel required>Weight (lbs)</FieldLabel>
-            <input className={inputClass} type="number" inputMode="numeric"
-              value={form.weightLbs} onChange={e => set('weightLbs', e.target.value)} />
+            <input className={inputClass} {...numericInputProps}
+              value={form.weightLbs} onChange={e => set('weightLbs', onlyDigits(e.target.value, 4))} />
             {show && <FieldError msg={errs.weightLbs} />}
           </div>
+
           <div>
             <FieldLabel required>Height</FieldLabel>
-            <input className={inputClass} type="text" placeholder={`5'10" or 70`}
-              value={form.height} onChange={e => set('height', e.target.value)} />
-            {show && <FieldError msg={errs.height} />}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input className={inputClass + ' pr-9'} {...numericInputProps}
+                  value={form.heightFeet}
+                  onChange={e => set('heightFeet', onlyDigits(e.target.value, 1))}
+                  aria-label="Feet" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-tile-sub font-semibold">ft</span>
+              </div>
+              <div className="flex-1 relative">
+                <input className={inputClass + ' pr-9'} {...numericInputProps}
+                  value={form.heightInches}
+                  onChange={e => set('heightInches', onlyDigits(e.target.value, 2))}
+                  aria-label="Inches" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-tile-sub font-semibold">in</span>
+              </div>
+            </div>
+            {show && <FieldError msg={errs.heightFeet || errs.heightInches} />}
           </div>
+
           <div className="sm:col-span-2">
             <FieldLabel required>Program Goal</FieldLabel>
             <input className={inputClass} type="text" placeholder="e.g., lose weight, build strength"
@@ -250,33 +290,37 @@ export default function PtIntakeForm() {
           </div>
           <div>
             <FieldLabel required>Duration (weeks)</FieldLabel>
-            <input className={inputClass} type="number" inputMode="numeric"
-              value={form.durationWeeks} onChange={e => set('durationWeeks', e.target.value)} />
+            <input className={inputClass} {...numericInputProps}
+              value={form.durationWeeks}
+              onChange={e => set('durationWeeks', onlyDigits(e.target.value, 3))} />
             {show && <FieldError msg={errs.durationWeeks} />}
           </div>
           <div>
             <FieldLabel required>Days Per Week</FieldLabel>
-            <input className={inputClass} type="number" inputMode="numeric" min="1" max="7"
-              value={form.daysPerWeek} onChange={e => set('daysPerWeek', e.target.value)} />
+            <input className={inputClass} {...numericInputProps}
+              value={form.daysPerWeek}
+              onChange={e => set('daysPerWeek', onlyDigits(e.target.value, 1))} />
             {show && <FieldError msg={errs.daysPerWeek} />}
           </div>
         </div>
       </section>
 
-      {/* Day-by-day focus */}
-      <section className="mb-6">
-        <SectionTitle optional>Day Focus</SectionTitle>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[1, 2, 3, 4, 5, 6, 7].map(d => (
-            <div key={d}>
-              <FieldLabel>Day {d}</FieldLabel>
-              <input className={inputClass} type="text" placeholder="e.g., upper body, legs, rest"
-                value={form[`day${d}Focus`]}
-                onChange={e => set(`day${d}Focus`, e.target.value)} />
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Day-by-day focus — only render the days they actually train */}
+      {daysCount > 0 && (
+        <section className="mb-6">
+          <SectionTitle optional>Day Focus</SectionTitle>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Array.from({ length: daysCount }, (_, i) => i + 1).map(d => (
+              <div key={d}>
+                <FieldLabel>Day {d}</FieldLabel>
+                <input className={inputClass} type="text" placeholder="e.g., upper body, legs, rest"
+                  value={form[`day${d}Focus`]}
+                  onChange={e => set(`day${d}Focus`, e.target.value)} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Limitations */}
       <section className="mb-6">

@@ -300,3 +300,86 @@ test('Internal retry succeeds on attempt 2 → returns 200', async () => {
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.success, true);
 });
+
+const FORWARD = 'http://forward.test.local';
+
+// Allow the fire-and-forget forward axios call to settle. The handler returns
+// before the forward resolves, so tests need to yield the event loop to let
+// the request actually leave for nock to intercept it.
+function flush() { return new Promise(r => setTimeout(r, 30)); }
+
+test('Forward: when C2S_FORWARD_URL set, forwards parsed event after validation', async () => {
+  process.env.C2S_FORWARD_URL = `${FORWARD}/webhooks/click2save`;
+  delete process.env.C2S_FORWARD_SECRET;
+  let forwarded;
+  const fwdScope = nock(FORWARD)
+    .post('/webhooks/click2save', body => { forwarded = body; return true; })
+    .reply(200, { received: true });
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+
+  const res = await send(app, cancelPayload({ requestId: 'r-fwd-ok' }));
+  assert.strictEqual(res.status, 200);
+  await flush();
+  assert.strictEqual(fwdScope.isDone(), true, 'forward request was not made');
+  assert.strictEqual(forwarded.requestId, 'r-fwd-ok');
+  assert.strictEqual(forwarded.requestType, 'CANCEL');
+  assert.strictEqual(forwarded.data.member.memberId, 'M001');
+  delete process.env.C2S_FORWARD_URL;
+});
+
+test('Forward: when C2S_FORWARD_SECRET set, sends x-webhook-secret header', async () => {
+  process.env.C2S_FORWARD_URL = `${FORWARD}/webhooks/click2save`;
+  process.env.C2S_FORWARD_SECRET = 'shared-secret-xyz';
+  let receivedHeader;
+  const fwdScope = nock(FORWARD, {
+    reqheaders: {
+      'x-webhook-secret': value => { receivedHeader = value; return true; },
+    },
+  })
+    .post('/webhooks/click2save')
+    .reply(200, { received: true });
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+
+  const res = await send(app, cancelPayload({ requestId: 'r-fwd-secret' }));
+  assert.strictEqual(res.status, 200);
+  await flush();
+  assert.strictEqual(fwdScope.isDone(), true);
+  assert.strictEqual(receivedHeader, 'shared-secret-xyz');
+  delete process.env.C2S_FORWARD_URL;
+  delete process.env.C2S_FORWARD_SECRET;
+});
+
+test('Forward: downstream 500 does not affect upstream Click2Save response', async () => {
+  process.env.C2S_FORWARD_URL = `${FORWARD}/webhooks/click2save`;
+  nock(FORWARD).post('/webhooks/click2save').reply(500, { error: 'downstream broken' });
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+
+  const res = await send(app, cancelPayload({ requestId: 'r-fwd-500' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.success, true);
+  await flush();
+  delete process.env.C2S_FORWARD_URL;
+});
+
+test('Forward: when C2S_FORWARD_URL not set, no forward attempt and request still succeeds', async () => {
+  delete process.env.C2S_FORWARD_URL;
+  // Any unintercepted call to FORWARD would fail noisily — that's the test
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+
+  const res = await send(app, cancelPayload({ requestId: 'r-fwd-none' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.success, true);
+  await flush();
+});

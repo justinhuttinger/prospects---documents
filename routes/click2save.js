@@ -1,3 +1,4 @@
+const axios = require('axios');
 const { verifySignature, isFresh } = require('../lib/c2s-signature');
 const { findByClubNumber } = require('../lib/clubs');
 const { getMember, uploadDocument, extractName } = require('../lib/abc');
@@ -11,6 +12,27 @@ const RETRY_OPTS = {
   attempts: 3,
   baseMs: parseInt(process.env.C2S_RETRY_BASE_MS, 10) || 500,
 };
+
+// Fire-and-forget forward of the parsed event to a downstream consumer
+// (e.g. wcs-staff-portal). Any failure is logged but never affects the
+// upstream Click2Save response — the upload to ABC is the contract here,
+// downstream forwarding is best-effort.
+function forwardEvent(event, requestId) {
+  const url = process.env.C2S_FORWARD_URL;
+  if (!url) return;
+  const headers = { 'Content-Type': 'application/json' };
+  const sharedSecret = process.env.C2S_FORWARD_SECRET;
+  if (sharedSecret) headers['x-webhook-secret'] = sharedSecret;
+  axios.post(url, event, { headers, timeout: 10000 })
+    .then((resp) => {
+      console.log(`[c2s ${requestId}] forwarded to ${url} -> ${resp.status}`);
+    })
+    .catch((err) => {
+      const status = err.response?.status;
+      const body = err.response?.data;
+      console.warn(`[c2s ${requestId}] forward to ${url} failed${status ? ` (${status})` : ''}: ${err.message}${body ? ` body=${JSON.stringify(body).slice(0, 300)}` : ''}`);
+    });
+}
 
 function documentName(requestType, occurredAt, requestId) {
   const date = new Date(occurredAt);
@@ -78,6 +100,10 @@ async function handler(req, res) {
     console.warn(`[c2s ${requestId}] missing required fields in data`);
     return res.status(200).json({ success: true, skipped: 'missing_fields', requestId });
   }
+
+  // Forward the validated event to any configured downstream consumer
+  // (e.g. wcs-staff-portal). Fire-and-forget — never blocks ABC pipeline.
+  forwardEvent(event, requestId);
 
   // 6. Resolve club
   const club = findByClubNumber(data.clubCode);

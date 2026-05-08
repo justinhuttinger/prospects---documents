@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { verifySignature, isFresh } = require('../lib/c2s-signature');
 const { findByClubNumber } = require('../lib/clubs');
-const { getMember, uploadDocument, extractName } = require('../lib/abc');
+const { getMember, uploadDocument, updateMemberUdfs, extractName } = require('../lib/abc');
 const { htmlToPdf } = require('../lib/pdfshift');
 const { retryWithBackoff } = require('../lib/retry');
 const cancelTemplate = require('../templates/cancel');
@@ -32,6 +32,38 @@ function forwardEvent(event, requestId) {
       const body = err.response?.data;
       console.warn(`[c2s ${requestId}] forward to ${url} failed${status ? ` (${status})` : ''}: ${err.message}${body ? ` body=${JSON.stringify(body).slice(0, 300)}` : ''}`);
     });
+}
+
+// Build the CANCEL UDF payload. Maps Click2Save event fields to the three
+// UDFs configured in ABC OBC. Field names must match the OBC config exactly
+// (case-sensitive).
+//
+// internalnotes is value-capped at 50 chars by ABC's API, so we ship a
+// compressed one-liner: "C2S Cancel Req:YYYY-MM-DD Eff:YYYY-MM-DD Pay:$X.XX".
+// "Member Payout" is read from financials.buyoutCollected (what the member
+// actually paid as a buyout/early termination fee). Adjust here if the
+// definition should change.
+function buildCancelUdfs(event) {
+  const occurredDate = (event.occurredAt || '').slice(0, 10);
+  const result = (event.data && event.data.result) || {};
+  const financials = (event.data && event.data.financials) || {};
+  const effectiveDate = result.effectiveDate || '';
+  const cancelReason = result.cancelReason || '';
+  const buyout = financials.buyoutCollected || '0.00';
+
+  const reqLabel = occurredDate ? `R:${occurredDate}` : '';
+  const effLabel = effectiveDate ? `E:${effectiveDate}` : '';
+  const payLabel = `Pay:$${buyout}`;
+  const internalNote = ['C2S Cancel', reqLabel, effLabel, payLabel]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 50);
+
+  return [
+    { name: 'cancelEffectiveDate', value: effectiveDate },
+    { name: 'CancelRSN', value: cancelReason },
+    { name: 'internalnotes', value: internalNote },
+  ];
 }
 
 function documentName(requestType, occurredAt, requestId) {
@@ -162,6 +194,24 @@ async function handler(req, res) {
   }
 
   console.log(`[c2s ${requestId}] uploaded "${docName}" for ${clubNumber}/${memberId} — ABC response:`, JSON.stringify(abcResponse));
+
+  // 11. Write UDFs (CANCEL only). Best-effort: failures are logged but do
+  // not affect the upstream Click2Save 200 — the document upload is the
+  // contract here. ABC rejects the whole PUT if any UDF name is invalid,
+  // so a misconfigured name surfaces in logs immediately.
+  if (requestType === 'CANCEL') {
+    const udfs = buildCancelUdfs(event);
+    try {
+      const udfResp = await retryWithBackoff(
+        () => updateMemberUdfs(clubNumber, memberId, udfs),
+        RETRY_OPTS
+      );
+      console.log(`[c2s ${requestId}] UDFs updated for ${clubNumber}/${memberId} — names: ${udfs.map(u => u.name).join(', ')} — ABC response:`, JSON.stringify(udfResp));
+    } catch (err) {
+      console.warn(`[c2s ${requestId}] UDF update failed for ${clubNumber}/${memberId} — ${err.message} — body:`, JSON.stringify(err.response?.data || null));
+    }
+  }
+
   return res.status(200).json({ success: true, requestId, documentName: docName });
 }
 

@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import StepShell from '../StepShell'
-import { checkDayOneAppointment } from '../../../lib/api'
+import { checkDayOneBooked } from '../../../lib/api'
 import { digits } from '../../../lib/utils'
 
 // TODO: paste the GHL Day One booking calendar embed URL here. Until then,
 // staff sees a placeholder; the polling logic below still runs and will
-// detect a booking made through any other channel for this contact.
+// detect the booking via the GHL custom field that WCS workflows set when
+// a Day One is booked.
 const GHL_DAY_ONE_EMBED_URL = ''
 
 const POLL_MS    = 5000
-const SINCE_MIN  = 30
-const MAX_POLLS  = 90 // ~7.5 minutes of polling at 5s intervals
+const MAX_POLLS  = 120 // ~10 minutes of polling at 5s intervals
 
 function formatStart(s) {
   if (!s) return ''
@@ -20,11 +20,10 @@ function formatStart(s) {
 }
 
 export default function DayOne({ state, dispatch, location, progress, onBack, onNext }) {
-  const d = state.dayOne
   const member = state.member
-  const [polling, setPolling]   = useState(true)
-  const [appointment, setAppointment] = useState(null)
-  const [pollErr, setPollErr]   = useState('')
+  const [polling, setPolling] = useState(true)
+  const [booked, setBooked]   = useState(false)
+  const [details, setDetails] = useState({ datetime: '', employeeName: '' })
   const pollsRef = useRef(0)
 
   function setDayOne(value) {
@@ -42,29 +41,29 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
         return
       }
       try {
-        const result = await checkDayOneAppointment({
+        const result = await checkDayOneBooked({
           location,
           phone: digits(member.phone),
           email: member.email.trim().toLowerCase(),
-          sinceMinutes: SINCE_MIN,
         })
         if (cancelled) return
-        const appts = (result && result.appointments) || []
-        const next = appts.find(a => a && a.start) || appts[0]
-        if (next) {
-          setAppointment(next)
+        if (result && result.day_one_booked) {
+          const next = {
+            datetime:     result.day_one_datetime || '',
+            employeeName: result.day_one_employee_name || '',
+          }
+          setDetails(next)
+          setBooked(true)
           setDayOne({
             booked:        'yes',
-            datetime:      next.start || '',
-            employeeName:  next.assignedUserName || '',
-            appointmentId: next.id || '',
+            datetime:      next.datetime,
+            employeeName:  next.employeeName,
+            appointmentId: '',
           })
           setPolling(false)
         }
       } catch (e) {
-        if (cancelled) return
-        // Don't surface a hard error — keep polling silently in the background.
-        setPollErr(e.message || 'check failed')
+        // Silent — keep polling. The skip button is the escape hatch.
       }
     }
 
@@ -84,10 +83,10 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
       location={location}
       current={progress.current} total={progress.total}
       title="Book your Day One"
-      subtitle="Pick a time for your first session — we'll detect the booking automatically once it's confirmed."
+      subtitle="Pick a time inside the calendar — we'll detect the booking automatically once it's confirmed."
       onBack={onBack} onNext={onNext}
-      nextDisabled={!appointment}
-      nextLabel={appointment ? 'Continue' : 'Waiting for booking…'}
+      nextDisabled={!booked}
+      nextLabel={booked ? 'Continue' : 'Waiting for booking…'}
     >
       <div className="rounded-lg border border-border bg-bg overflow-hidden mb-4">
         {GHL_DAY_ONE_EMBED_URL ? (
@@ -105,7 +104,7 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
         )}
       </div>
 
-      {appointment ? (
+      {booked ? (
         <div className="rounded-lg border border-ok/30 bg-ok/5 p-4 mb-2">
           <div className="flex items-start gap-3">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-5 w-5 text-ok flex-none mt-0.5">
@@ -113,9 +112,9 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
             </svg>
             <div>
               <div className="text-sm font-semibold text-text-primary">Day One confirmed</div>
-              <div className="text-sm text-text-primary mt-1">{formatStart(appointment.start)}</div>
-              {appointment.assignedUserName && (
-                <div className="text-xs text-tile-sub mt-0.5">With {appointment.assignedUserName}</div>
+              {details.datetime && <div className="text-sm text-text-primary mt-1">{formatStart(details.datetime)}</div>}
+              {details.employeeName && (
+                <div className="text-xs text-tile-sub mt-0.5">With {details.employeeName}</div>
               )}
             </div>
           </div>
@@ -131,12 +130,6 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
       >
         Skip this step
       </button>
-
-      {pollErr && pollsRef.current > 4 && (
-        <p className="mt-2 text-center text-xs text-tile-sub">
-          (Auto-detect having trouble — that's fine, you can skip this step and we'll record it manually.)
-        </p>
-      )}
     </StepShell>
   )
 }

@@ -48,11 +48,11 @@ export async function lookupMember({ location, phone, email, firstName, lastName
   return jsonOrThrow(res)
 }
 
-export async function checkDayOneAppointment({ location, phone, email, sinceMinutes = 30 }) {
-  const params = new URLSearchParams({ location, sinceMinutes: String(sinceMinutes) })
+export async function checkDayOneBooked({ location, phone, email }) {
+  const params = new URLSearchParams({ location })
   if (phone) params.set('phone', phone)
   if (email) params.set('email', email)
-  const res = await fetch(`${API_BASE}/api/kiosk/check-appointment?${params}`, { credentials: 'omit' })
+  const res = await fetch(`${API_BASE}/api/kiosk/check-day-one?${params}`, { credentials: 'omit' })
   return jsonOrThrow(res)
 }
 

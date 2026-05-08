@@ -169,8 +169,91 @@ router.get('/api/kiosk/lookup', async (req, res) => {
   }
 });
 
-// ---- GHL Day One appointment detector ----
-router.get('/api/kiosk/check-appointment', async (req, res) => {
+// ---- Day One booked detector (custom-field based) ----
+//
+// WCS already has a GHL workflow that sets a "Day One Booked" custom field
+// on the contact when a Day One appointment is created. The kiosk just
+// polls this endpoint while on the Day One step; when the field flips to
+// truthy, we know they booked and can advance.
+//
+// Configurable via env. The default key list below covers both the
+// "fieldKey" and "contact." prefixed shape that GHL returns inconsistently
+// across endpoints. Override with KIOSK_DAY_ONE_FIELD_KEYS as a comma-
+// separated list (e.g. "day_one_booked,contact.day_one_booked") if your
+// field key differs.
+const DAY_ONE_FIELD_KEYS = (process.env.KIOSK_DAY_ONE_FIELD_KEYS
+  ? process.env.KIOSK_DAY_ONE_FIELD_KEYS.split(',')
+  : [
+      'day_one_booked',
+      'contact.day_one_booked',
+      'day_one_appointment_booked',
+      'contact.day_one_appointment_booked',
+    ]
+).map(s => s.trim().toLowerCase()).filter(Boolean);
+
+// Optional companion field keys used for date/time + assigned trainer if
+// they exist (also override-able via env).
+const DAY_ONE_DATE_KEYS = (process.env.KIOSK_DAY_ONE_DATE_FIELD_KEYS
+  ? process.env.KIOSK_DAY_ONE_DATE_FIELD_KEYS.split(',')
+  : [
+      'day_one_date',
+      'contact.day_one_date',
+      'day_one_appointment_date',
+      'contact.day_one_appointment_date',
+    ]
+).map(s => s.trim().toLowerCase()).filter(Boolean);
+
+const DAY_ONE_TRAINER_KEYS = (process.env.KIOSK_DAY_ONE_TRAINER_FIELD_KEYS
+  ? process.env.KIOSK_DAY_ONE_TRAINER_FIELD_KEYS.split(',')
+  : [
+      'day_one_trainer',
+      'contact.day_one_trainer',
+      'day_one_booking_team_member',
+      'contact.day_one_booking_team_member',
+    ]
+).map(s => s.trim().toLowerCase()).filter(Boolean);
+
+// Cache custom-field-defs (id -> fieldKey) per club for 30 minutes.
+const fieldDefsCache = new Map(); // slug -> { at, byId: { [id]: 'key' } }
+
+async function getFieldDefMap(club, slug) {
+  const cached = fieldDefsCache.get(slug);
+  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.byId;
+  try {
+    const r = await axios.get(
+      `${GHL_BASE_URL}/locations/${club.ghlLocationId}/customFields`,
+      {
+        headers: {
+          Authorization: `Bearer ${club.ghlApiKey}`,
+          Version:       GHL_API_VERSION,
+          Accept:        'application/json',
+        },
+        timeout: 10000,
+      }
+    );
+    const list = (r.data && (r.data.customFields || r.data.fields)) || [];
+    const byId = {};
+    list.forEach(d => {
+      const k = d.fieldKey || d.key || d.name;
+      if (d.id && k) byId[d.id] = String(k).toLowerCase();
+    });
+    fieldDefsCache.set(slug, { at: Date.now(), byId });
+    return byId;
+  } catch (e) {
+    return {};
+  }
+}
+
+function isTruthyFieldValue(v) {
+  if (v == null) return false;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return false;
+  if (['no', 'false', '0', 'null', 'undefined'].includes(s)) return false;
+  return true;
+}
+
+router.get('/api/kiosk/check-day-one', async (req, res) => {
   try {
     const slug = String(req.query.location || '').toLowerCase().trim();
     const club = clubBySlug(slug);
@@ -178,7 +261,6 @@ router.get('/api/kiosk/check-appointment', async (req, res) => {
 
     const phone = String(req.query.phone || '').trim();
     const email = String(req.query.email || '').trim().toLowerCase();
-    const sinceMinutes = Math.max(1, Math.min(180, parseInt(req.query.sinceMinutes, 10) || 30));
     if (!phone && !email) return res.status(400).json({ ok: false, error: 'missing_lookup_input' });
 
     const ghlHeaders = {
@@ -187,12 +269,12 @@ router.get('/api/kiosk/check-appointment', async (req, res) => {
       Accept:        'application/json',
     };
 
-    // 1. Find the contact in GHL by phone first, fall back to email.
+    // 1. Find contact by phone (fall back to email).
     let contact = null;
     try {
       if (phone) {
         const resp = await axios.get(`${GHL_BASE_URL}/contacts/search/duplicate`, {
-          params: { locationId: club.ghlLocationId, number: e164(phone) },
+          params:  { locationId: club.ghlLocationId, number: e164(phone) },
           headers: ghlHeaders,
           timeout: 10000,
           validateStatus: s => (s >= 200 && s < 300) || s === 404,
@@ -201,7 +283,7 @@ router.get('/api/kiosk/check-appointment', async (req, res) => {
       }
       if (!contact && email) {
         const resp = await axios.get(`${GHL_BASE_URL}/contacts/search/duplicate`, {
-          params: { locationId: club.ghlLocationId, email },
+          params:  { locationId: club.ghlLocationId, email },
           headers: ghlHeaders,
           timeout: 10000,
           validateStatus: s => (s >= 200 && s < 300) || s === 404,
@@ -209,58 +291,44 @@ router.get('/api/kiosk/check-appointment', async (req, res) => {
         contact = resp.data && (resp.data.contact || (resp.data.contacts && resp.data.contacts[0]));
       }
     } catch (e) {
-      // Treat search failure as "no contact found yet" — front-end will keep polling.
+      // best-effort — frontend will keep polling
     }
 
     if (!contact || !contact.id) {
-      return res.json({ ok: true, contact_found: false, appointments: [] });
+      return res.json({ ok: true, contact_found: false, day_one_booked: false });
     }
 
-    // 2. List the contact's appointments. GHL returns scheduled times in
-    //    ISO; we filter to anything created in the last sinceMinutes
-    //    OR scheduled to start in the future (a fresh booking the
-    //    member just made).
-    let appointments = [];
-    try {
-      const resp = await axios.get(
-        `${GHL_BASE_URL}/contacts/${contact.id}/appointments`,
-        { headers: ghlHeaders, timeout: 10000 }
-      );
-      appointments = (resp.data && (resp.data.appointments || resp.data.events || resp.data)) || [];
-      if (!Array.isArray(appointments)) appointments = [];
-    } catch (e) {
-      appointments = [];
+    // 2. Build keyed view of contact's custom fields and look up the flag(s).
+    const cf = (contact.customFields || []).slice();
+    const defsById = await getFieldDefMap(club, slug);
+
+    function findValueByKeys(targetKeys) {
+      const set = new Set(targetKeys.map(k => k.toLowerCase()));
+      for (const f of cf) {
+        const id = f.id;
+        const fk = (defsById[id] || f.fieldKey || f.key || '').toLowerCase();
+        const stripped = fk.replace(/^contact\./, '');
+        if (set.has(fk) || set.has(stripped)) {
+          return f.value != null ? f.value : (f.fieldValue != null ? f.fieldValue : '');
+        }
+      }
+      return null;
     }
 
-    const now = Date.now();
-    const cutoff = now - sinceMinutes * 60 * 1000;
-
-    const recent = appointments.filter(a => {
-      const start = a.startTime || a.start || a.startDate;
-      const created = a.dateAdded || a.createdAt || a.dateCreated;
-      const startMs   = start   ? Date.parse(start)   : NaN;
-      const createdMs = created ? Date.parse(created) : NaN;
-      const isFutureStart   = !isNaN(startMs)   && startMs   >= now - 60 * 1000;
-      const isRecentlyAdded = !isNaN(createdMs) && createdMs >= cutoff;
-      return isFutureStart || isRecentlyAdded;
-    }).map(a => ({
-      id:         a.id || a.appointmentId,
-      start:      a.startTime || a.start || a.startDate || null,
-      end:        a.endTime   || a.end   || a.endDate   || null,
-      calendarId: a.calendarId || null,
-      title:      a.title || a.appointmentName || '',
-      assignedUserId: a.assignedUserId || a.userId || null,
-      assignedUserName: a.assignedUserName || a.userName || '',
-    }));
+    const flag    = findValueByKeys(DAY_ONE_FIELD_KEYS);
+    const dateVal = findValueByKeys(DAY_ONE_DATE_KEYS);
+    const trainer = findValueByKeys(DAY_ONE_TRAINER_KEYS);
 
     return res.json({
-      ok: true,
-      contact_found: true,
-      contact_id: contact.id,
-      appointments: recent,
+      ok:                    true,
+      contact_found:         true,
+      contact_id:            contact.id,
+      day_one_booked:        isTruthyFieldValue(flag),
+      day_one_datetime:      dateVal ? String(dateVal) : '',
+      day_one_employee_name: trainer ? String(trainer) : '',
     });
   } catch (err) {
-    console.error('[kiosk/check-appointment]', (err.response && err.response.data) || err.message);
+    console.error('[kiosk/check-day-one]', (err.response && err.response.data) || err.message);
     return res.status(500).json({ ok: false, error: (err.response && err.response.data) || err.message });
   }
 });

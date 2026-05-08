@@ -31,7 +31,10 @@ const path    = require('path');
 const router = express.Router();
 
 const ABC_BASE_URL    = process.env.ABC_BASE_URL || 'https://api.abcfinancial.com/rest';
-const EMPLOYEES_TTL_MS = 5 * 60 * 1000;
+const GHL_BASE_URL    = 'https://services.leadconnectorhq.com';
+const GHL_API_VERSION = '2021-07-28';
+const EMPLOYEES_TTL_MS  = 5 * 60 * 1000;
+const FIELD_DEFS_TTL_MS = 30 * 60 * 1000;
 
 const CLUBS_FILE = path.join(__dirname, '..', 'clubs-config.json');
 
@@ -115,6 +118,102 @@ router.get('/api/vip-referrals/employees', async (req, res) => {
   }
 });
 
+// ---- Referrer lookup (GHL contact search + custom-field def map) ----
+//
+// Workflow gotcha: a GHL workflow can only have one active contact, so the
+// "Find Contact (referrer) -> Create Contact (VIP)" pattern doesn't work.
+// Solution: do the lookup here, server-side, and pass the value through to
+// the inbound webhook payload — workflow only sees the VIP it's creating.
+const fieldDefsCache = new Map(); // slug -> { at, byId: { [fieldId]: 'contact.abc_member_id'|'abc_member_id'... } }
+
+async function getFieldDefMap(club, slug) {
+  const cached = fieldDefsCache.get(slug);
+  if (cached && Date.now() - cached.at < FIELD_DEFS_TTL_MS) return cached.byId;
+  try {
+    const resp = await axios.get(
+      `${GHL_BASE_URL}/locations/${club.ghlLocationId}/customFields`,
+      {
+        headers: {
+          Authorization: `Bearer ${club.ghlApiKey}`,
+          Version:       GHL_API_VERSION,
+          Accept:        'application/json'
+        },
+        timeout: 10000
+      }
+    );
+    const list = (resp.data && (resp.data.customFields || resp.data.fields)) || [];
+    const byId = {};
+    list.forEach(d => {
+      const key = d.fieldKey || d.key || d.name;
+      if (d.id && key) byId[d.id] = String(key);
+    });
+    fieldDefsCache.set(slug, { at: Date.now(), byId });
+    return byId;
+  } catch (err) {
+    console.warn('[vip-referrals] field defs lookup failed:', err.response?.data || err.message);
+    return {};
+  }
+}
+
+async function lookupReferrer(club, slug, member) {
+  // Returns { contactId, customFields: { 'abc_member_id': '...', ... } } or {}.
+  // Custom field keys are normalized: `contact.abc_member_id` -> `abc_member_id`
+  // (and the original is also kept for safety).
+  const phone = e164(member.phone);
+  const email = String(member.email || '').trim().toLowerCase();
+  if (!phone && !email) return {};
+
+  let contact = null;
+  try {
+    if (phone) {
+      const resp = await axios.get(`${GHL_BASE_URL}/contacts/search/duplicate`, {
+        params:  { locationId: club.ghlLocationId, number: phone },
+        headers: {
+          Authorization: `Bearer ${club.ghlApiKey}`,
+          Version:       GHL_API_VERSION,
+          Accept:        'application/json'
+        },
+        timeout: 10000,
+        validateStatus: s => (s >= 200 && s < 300) || s === 404
+      });
+      contact = resp.data && (resp.data.contact || (resp.data.contacts && resp.data.contacts[0]));
+    }
+    if (!contact && email) {
+      const resp = await axios.get(`${GHL_BASE_URL}/contacts/search/duplicate`, {
+        params:  { locationId: club.ghlLocationId, email },
+        headers: {
+          Authorization: `Bearer ${club.ghlApiKey}`,
+          Version:       GHL_API_VERSION,
+          Accept:        'application/json'
+        },
+        timeout: 10000,
+        validateStatus: s => (s >= 200 && s < 300) || s === 404
+      });
+      contact = resp.data && (resp.data.contact || (resp.data.contacts && resp.data.contacts[0]));
+    }
+  } catch (err) {
+    console.warn('[vip-referrals] referrer search failed:', err.response?.data || err.message);
+    return {};
+  }
+
+  if (!contact || !contact.id) return {};
+  const cfArray = contact.customFields || [];
+  if (!cfArray.length) return { contactId: contact.id, customFields: {} };
+
+  const defsById = await getFieldDefMap(club, slug);
+  const customFields = {};
+  cfArray.forEach(cf => {
+    const id = cf.id;
+    const rawKey = defsById[id];
+    if (!rawKey) return;
+    const stripped = String(rawKey).replace(/^contact\./, '');
+    const value = cf.value != null ? cf.value : (cf.fieldValue != null ? cf.fieldValue : '');
+    customFields[rawKey]   = value;
+    customFields[stripped] = value;
+  });
+  return { contactId: contact.id, customFields };
+}
+
 // ---- Submission endpoint (fan-out to GHL inbound webhook) ----
 router.post('/webhooks/vip-referrals', async (req, res) => {
   try {
@@ -145,6 +244,12 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'missing_member' });
     }
 
+    // Look up the referrer in GHL once; fan-out then includes their fields.
+    // Failure is non-fatal — we proceed with blank values.
+    const referrer    = await lookupReferrer(club, slug, member);
+    const refContactId = referrer.contactId || '';
+    const refAbcId     = (referrer.customFields && referrer.customFields.abc_member_id) || '';
+
     const results = [];
     for (const v of vips) {
       const firstName = String(v.firstName || '').trim();
@@ -161,11 +266,13 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
         phone:      phone,
 
         // Referrer info — flat keys so GHL Inbound Webhook custom-data mapping is simple
-        referred_by_first_name: refFirst,
-        referred_by_last_name:  refLast,
-        referred_by_full_name:  `${refFirst} ${refLast}`,
-        referred_by_phone:      refPhone,
-        referred_by_email:      refEmail,
+        referred_by_first_name:    refFirst,
+        referred_by_last_name:     refLast,
+        referred_by_full_name:     `${refFirst} ${refLast}`,
+        referred_by_phone:         refPhone,
+        referred_by_email:         refEmail,
+        referred_by_contact_id:    refContactId,
+        referred_by_abc_member_id: refAbcId,
 
         // Employee that took the referral
         referral_employee_id:   employee.id   || '',

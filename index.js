@@ -158,6 +158,9 @@ app.use(require('./routes/vip-referrals'));
 // PT Intake form — public POST that fans out to per-club GHL inbound webhook
 app.use(require('./routes/pt-intake'));
 
+// Tour Kiosk — read-only ABC lookup + tour-completed webhook fan-out
+app.use(require('./routes/kiosk'));
+
 // Load clubs configuration
 const fs = require('fs');
 const clubsConfig = JSON.parse(fs.readFileSync(__dirname + '/clubs-config.json', 'utf8'));

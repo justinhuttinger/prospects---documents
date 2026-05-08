@@ -8,6 +8,7 @@
       "stationId": "E42B9D7C33C908BEE0532AE014ACBF25",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/uflpfHNpByAnaBLkQzu3/webhook-trigger/fb0452d8-24e0-416a-97ac-3e8b26ae10ae",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -18,6 +19,7 @@
       "stationId": "1E19FCD0EF6B33BAE06328E014AC862D",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/g75BBgiSvlCRbvxYRMAb/webhook-trigger/08a820b4-10cf-43f2-85db-be223789d4fd",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -28,6 +30,7 @@
       "stationId": "76A46412889485A2E05302E014ACDD95",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/NNTZT21fPm3SxpLg8s04/webhook-trigger/30c2d588-9114-4d70-b916-3015821a11a3",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -38,6 +41,7 @@
       "stationId": "1E185AA71C3E0EF8E06329E014AC4990",
       "vipReferralWebhookUrl": "",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -48,6 +52,7 @@
       "stationId": "1E1934CDC139434AE06329E014AC9B64",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/aqSDfuZLimMXuPz6Zx3p/webhook-trigger/861f0df2-f181-45c0-9f16-df246b87ece8",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -58,6 +63,7 @@
       "stationId": "1D8ADAAA302604F9E06348E014AC9B57",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/xXV3CXt5DkgfGnTt8CG1/webhook-trigger/018d2fd0-5456-4aec-b5ca-49ee82bc1f0a",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     },
     {
@@ -68,6 +74,7 @@
       "stationId": "401FF85A16BB61E3E0633CE114AC0CD6",
       "vipReferralWebhookUrl": "https://services.leadconnectorhq.com/hooks/ZxcRZBvwIO7vd4D3bjJO/webhook-trigger/9c09408e-41fe-4fdb-ad76-bd964303b91b",
       "ptIntakeWebhookUrl": "",
+      "tourCompletedWebhookUrl": "",
       "enabled": true
     }
   ]

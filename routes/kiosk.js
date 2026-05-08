@@ -181,13 +181,15 @@ router.get('/api/kiosk/lookup', async (req, res) => {
 // across endpoints. Override with KIOSK_DAY_ONE_FIELD_KEYS as a comma-
 // separated list (e.g. "day_one_booked,contact.day_one_booked") if your
 // field key differs.
+// WCS uses a "Day One Booked" custom field on the contact, set by a
+// workflow when a Day One appointment is created. Values are yes/no.
+// Match against both fieldKey shapes GHL returns (with or without
+// the `contact.` prefix).
 const DAY_ONE_FIELD_KEYS = (process.env.KIOSK_DAY_ONE_FIELD_KEYS
   ? process.env.KIOSK_DAY_ONE_FIELD_KEYS.split(',')
   : [
       'day_one_booked',
       'contact.day_one_booked',
-      'day_one_appointment_booked',
-      'contact.day_one_appointment_booked',
     ]
 ).map(s => s.trim().toLowerCase()).filter(Boolean);
 

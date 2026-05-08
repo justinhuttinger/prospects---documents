@@ -175,7 +175,7 @@ test('CANCEL: valid signed payload uploads Cancel Document', async () => {
   assert.strictEqual(memberScope.isDone(), true);
   assert.strictEqual(pdfScope.isDone(), true);
   assert.strictEqual(docScope.isDone(), true);
-  assert.match(captured.documentName, /^Cancel Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
+  assert.match(captured.documentName, /^Cancel Document \d{4}-\d{2}-\d{2}\.pdf$/);
   assert.strictEqual(captured.documentType, 'pdf');
   assert.strictEqual(captured.imageType, 'member_document');
 });
@@ -193,7 +193,7 @@ test('OFFER: multiple offer subtypes are rendered into the HTML', async () => {
   assert.strictEqual(memberScope.isDone(), true);
   assert.strictEqual(pdfScope.isDone(), true);
   assert.strictEqual(docScope.isDone(), true);
-  assert.match(captured.documentName, /^Save Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
+  assert.match(captured.documentName, /^Save Document \d{4}-\d{2}-\d{2}\.pdf$/);
   assert.ok(renderedHtml.includes('MONETARY'));
   assert.ok(renderedHtml.includes('YOGA-MAT-BLUE'));
   assert.ok(renderedHtml.includes('CREDIT'));
@@ -211,7 +211,7 @@ test('FREEZE: produces Save Document', async () => {
   assert.strictEqual(memberScope.isDone(), true);
   assert.strictEqual(pdfScope.isDone(), true);
   assert.strictEqual(docScope.isDone(), true);
-  assert.match(captured.documentName, /^Save Document \(\d{4}-\d{2}-\d{2}\)\.pdf$/);
+  assert.match(captured.documentName, /^Save Document \d{4}-\d{2}-\d{2}\.pdf$/);
 });
 
 test('Bad signature returns 401 and makes no downstream calls', async () => {

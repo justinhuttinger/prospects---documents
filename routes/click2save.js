@@ -21,9 +21,11 @@ function documentName(requestType, occurredAt, requestId) {
   } else {
     yyyymmdd = date.toISOString().slice(0, 10);
   }
+  // ABC document name allowed chars: alphanumeric, spaces, and .,_!%+-@^'
+  // Parentheses are silently dropped by ABC (returns 2xx but the doc never appears).
   return requestType === 'CANCEL'
-    ? `Cancel Document (${yyyymmdd}).pdf`
-    : `Save Document (${yyyymmdd}).pdf`;
+    ? `Cancel Document ${yyyymmdd}.pdf`
+    : `Save Document ${yyyymmdd}.pdf`;
 }
 
 async function handler(req, res) {
@@ -122,8 +124,9 @@ async function handler(req, res) {
 
   // 10. Upload to ABC (with retry)
   const docName = documentName(requestType, occurredAt, requestId);
+  let abcResponse;
   try {
-    await retryWithBackoff(
+    abcResponse = await retryWithBackoff(
       () => uploadDocument(clubNumber, memberId, { pdfBuffer, documentName: docName }),
       RETRY_OPTS
     );
@@ -132,7 +135,7 @@ async function handler(req, res) {
     return res.status(500).json({ success: false, error: 'document_upload_failed' });
   }
 
-  console.log(`[c2s ${requestId}] uploaded "${docName}" for ${clubNumber}/${memberId}`);
+  console.log(`[c2s ${requestId}] uploaded "${docName}" for ${clubNumber}/${memberId} — ABC response:`, JSON.stringify(abcResponse));
   return res.status(200).json({ success: true, requestId, documentName: docName });
 }
 

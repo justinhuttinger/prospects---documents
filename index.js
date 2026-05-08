@@ -143,6 +143,13 @@ function sanitizeDocumentName(firstName, lastName) {
 }
 
 const app = express();
+
+// Mount Click2Save webhook BEFORE the global JSON parser. The handler reads
+// the raw body to verify HMAC; the route-local express.raw parser must run
+// instead of (not after) the global express.json parser.
+const click2saveHandler = require('./routes/click2save');
+app.post('/webhook/click2save', express.raw({ type: 'application/json' }), click2saveHandler);
+
 app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
 // Load clubs configuration
@@ -926,6 +933,10 @@ app.get('/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;

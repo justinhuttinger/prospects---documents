@@ -26,51 +26,40 @@ export default function KioskApp() {
   function back() { go(prevStep(state)) }
   function reset() { dispatch({ type: 'reset' }) }
 
-  // After the waiver step finishes for a NEW member, fire the existing
+  // After the waiver step finishes for a NEW member, kick off the existing
   // /webhook/ghl-form pipeline (creates ABC prospect + waiver PDF + photo
-  // + alert + check-in). The drawn signature is sent as a base64 data
-  // URL via signature_data_url; index.js reads that and embeds it in
-  // the generated waiver PDF.
-  async function finalizeWaiverThenAdvance() {
+  // + alert + check-in) and advance the UI immediately — fire-and-forget,
+  // we don't block the kiosk on a 6-step ABC chain. Errors are logged
+  // server-side and surface in Render logs.
+  function finalizeWaiverThenAdvance() {
     if (state.lookup.found) { next(); return }
-    dispatch({ type: 'setLoading', value: true })
     const dob = state.member.dobYear && state.member.dobMonth && state.member.dobDay
       ? `${state.member.dobYear}-${state.member.dobMonth}-${state.member.dobDay}`
       : ''
-    try {
-      const result = await submitGhlForm({
-        first_name:     state.member.firstName,
-        last_name:      state.member.lastName,
-        email:          state.member.email.trim().toLowerCase(),
-        phone:          digits(state.member.phone),
-        date_of_birth:  dob,
-        address1:       state.member.address1,
-        city:           state.member.city,
-        state:          state.member.state,
-        postal_code:    state.member.postalCode,
-        Gender:         '',
-        location: {
-          name: `West Coast Strength - ${location.charAt(0).toUpperCase() + location.slice(1)}`,
-        },
-        member_profile_photo: state.member.photoBase64 || null,
-        'Trial Start Date':   new Date().toISOString().split('T')[0],
-        'Service Employee':   state.employee.name || '',
-        // Drawn signature: send as a data URL so the PDF generator
-        // embeds it directly without going through GHL's file-URL path.
-        signature_data_url: state.member.signatureDataUrl || null,
-        'Legal Signature':  null,
-        signed_by:          `${state.member.firstName} ${state.member.lastName}`.trim(),
-      })
-      dispatch({
-        type: 'set',
-        key: 'lookup',
-        value: { ...state.lookup, abcMemberId: result?.prospectId || state.lookup.abcMemberId },
-      })
-      dispatch({ type: 'setLoading', value: false })
-      next()
-    } catch (err) {
-      dispatch({ type: 'error', message: `ABC submission failed: ${err.message}. Click Continue to retry, or Back to edit.` })
-    }
+    submitGhlForm({
+      first_name:     state.member.firstName,
+      last_name:      state.member.lastName,
+      email:          state.member.email.trim().toLowerCase(),
+      phone:          digits(state.member.phone),
+      date_of_birth:  dob,
+      address1:       state.member.address1,
+      city:           state.member.city,
+      state:          state.member.state,
+      postal_code:    state.member.postalCode,
+      Gender:         '',
+      location: {
+        name: `West Coast Strength - ${location.charAt(0).toUpperCase() + location.slice(1)}`,
+      },
+      member_profile_photo: state.member.photoBase64 || null,
+      'Trial Start Date':   new Date().toISOString().split('T')[0],
+      'Service Employee':   state.employee.name || '',
+      signature_data_url: state.member.signatureDataUrl || null,
+      'Legal Signature':  null,
+      signed_by:          `${state.member.firstName} ${state.member.lastName}`.trim(),
+    }).catch(err => {
+      console.error('ABC submission failed (kiosk continued anyway):', err)
+    })
+    next()
   }
 
   async function finishTour() {

@@ -60,7 +60,10 @@ function buildCancelUdfs(event) {
     .slice(0, 50);
 
   return [
-    { name: 'canceldate', value: effectiveDate },
+    // canceldate = the date the cancellation was requested/processed (event.occurredAt date)
+    { name: 'canceldate', value: occurredDate },
+    // CancelEffectiveDate1 = the date the cancellation actually takes effect (result.effectiveDate)
+    { name: 'CancelEffectiveDate1', value: effectiveDate },
     { name: 'cancel1reason', value: cancelReason },
     { name: 'internalnotes', value: internalNote },
   ];

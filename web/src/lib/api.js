@@ -38,11 +38,21 @@ export async function submitPtIntake(body) {
   return jsonOrThrow(res)
 }
 
-export async function lookupMember({ location, phone, email }) {
+export async function lookupMember({ location, phone, email, firstName, lastName }) {
+  const params = new URLSearchParams({ location })
+  if (phone)     params.set('phone', phone)
+  if (email)     params.set('email', email)
+  if (firstName) params.set('firstName', firstName)
+  if (lastName)  params.set('lastName', lastName)
+  const res = await fetch(`${API_BASE}/api/kiosk/lookup?${params}`, { credentials: 'omit' })
+  return jsonOrThrow(res)
+}
+
+export async function checkDayOneBooked({ location, phone, email }) {
   const params = new URLSearchParams({ location })
   if (phone) params.set('phone', phone)
   if (email) params.set('email', email)
-  const res = await fetch(`${API_BASE}/api/kiosk/lookup?${params}`, { credentials: 'omit' })
+  const res = await fetch(`${API_BASE}/api/kiosk/check-day-one?${params}`, { credentials: 'omit' })
   return jsonOrThrow(res)
 }
 

@@ -1,15 +1,81 @@
-import StepShell, { inputClass } from '../StepShell'
+import { useEffect, useRef, useState } from 'react'
+import StepShell from '../StepShell'
+import { checkDayOneBooked } from '../../../lib/api'
+import { digits } from '../../../lib/utils'
 
-// TODO: replace this iframe placeholder with the actual GHL Day One booking
-// widget snippet. The kiosk just needs the iframe to render — staff or
-// member books inside it — then the confirm fields below capture the
-// outcome for the final tour-completed webhook.
-const GHL_DAY_ONE_EMBED_URL = '' // TODO: paste the GHL calendar embed URL here
+// TODO: paste the GHL Day One booking calendar embed URL here. Until then,
+// staff sees a placeholder; the polling logic below still runs and will
+// detect the booking via the GHL custom field that WCS workflows set when
+// a Day One is booked.
+const GHL_DAY_ONE_EMBED_URL = ''
+
+const POLL_MS    = 5000
+const MAX_POLLS  = 120 // ~10 minutes of polling at 5s intervals
+
+function formatStart(s) {
+  if (!s) return ''
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return s
+  return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
 export default function DayOne({ state, dispatch, location, progress, onBack, onNext }) {
-  const d = state.dayOne
-  function set(key, value) {
-    dispatch({ type: 'patch', key: 'dayOne', value: { [key]: value } })
+  const member = state.member
+  const [polling, setPolling] = useState(true)
+  const [booked, setBooked]   = useState(false)
+  const [details, setDetails] = useState({ datetime: '', employeeName: '' })
+  const pollsRef = useRef(0)
+
+  function setDayOne(value) {
+    dispatch({ type: 'patch', key: 'dayOne', value })
+  }
+
+  useEffect(() => {
+    if (!polling) return
+    let cancelled = false
+
+    async function tick() {
+      pollsRef.current += 1
+      if (pollsRef.current > MAX_POLLS) {
+        if (!cancelled) setPolling(false)
+        return
+      }
+      try {
+        const result = await checkDayOneBooked({
+          location,
+          phone: digits(member.phone),
+          email: member.email.trim().toLowerCase(),
+        })
+        if (cancelled) return
+        if (result && result.day_one_booked) {
+          const next = {
+            datetime:     result.day_one_datetime || '',
+            employeeName: result.day_one_employee_name || '',
+          }
+          setDetails(next)
+          setBooked(true)
+          setDayOne({
+            booked:        'yes',
+            datetime:      next.datetime,
+            employeeName:  next.employeeName,
+            appointmentId: '',
+          })
+          setPolling(false)
+        }
+      } catch (e) {
+        // Silent — keep polling. The skip button is the escape hatch.
+      }
+    }
+
+    tick()
+    const id = setInterval(tick, POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polling, location, member.phone, member.email])
+
+  function skipForNow() {
+    setDayOne({ booked: 'no', datetime: '', employeeName: '', appointmentId: '' })
+    onNext()
   }
 
   return (
@@ -17,8 +83,10 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
       location={location}
       current={progress.current} total={progress.total}
       title="Book your Day One"
-      subtitle="Pick a time for your first session — or skip and book later."
+      subtitle="Pick a time inside the calendar — we'll detect the booking automatically once it's confirmed."
       onBack={onBack} onNext={onNext}
+      nextDisabled={!booked}
+      nextLabel={booked ? 'Continue' : 'Waiting for booking…'}
     >
       <div className="rounded-lg border border-border bg-bg overflow-hidden mb-4">
         {GHL_DAY_ONE_EMBED_URL ? (
@@ -26,7 +94,7 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
             src={GHL_DAY_ONE_EMBED_URL}
             title="Day One booking"
             className="w-full"
-            style={{ height: 480, border: 0 }}
+            style={{ height: 520, border: 0 }}
           />
         ) : (
           <div className="p-8 text-center text-sm text-text-muted">
@@ -36,39 +104,32 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
         )}
       </div>
 
-      <div className="text-sm font-semibold text-text-primary mb-2">Did they book?</div>
-      <div className="flex gap-2 mb-3">
-        {[
-          { v: 'yes', label: 'Booked' },
-          { v: 'no', label: 'Not yet' },
-          { v: 'skipped', label: 'Skip' },
-        ].map(opt => (
-          <button key={opt.v} type="button" onClick={() => set('booked', opt.v)}
-            className={
-              'flex-1 px-4 py-3 rounded-lg border text-sm font-semibold transition-colors ' +
-              (d.booked === opt.v
-                ? 'bg-wcs-red text-white border-wcs-red'
-                : 'bg-bg text-text-primary border-border hover:border-wcs-red/40')
-            }>
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      {d.booked === 'yes' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-          <div>
-            <label className="block text-xs font-semibold text-text-primary mb-1.5">Date / time</label>
-            <input className={inputClass} type="datetime-local"
-              value={d.datetime} onChange={e => set('datetime', e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-text-primary mb-1.5">With (optional)</label>
-            <input className={inputClass} type="text" placeholder="Trainer name"
-              value={d.employeeName} onChange={e => set('employeeName', e.target.value)} />
+      {booked ? (
+        <div className="rounded-lg border border-ok/30 bg-ok/5 p-4 mb-2">
+          <div className="flex items-start gap-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-5 w-5 text-ok flex-none mt-0.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <div className="text-sm font-semibold text-text-primary">Day One confirmed</div>
+              {details.datetime && <div className="text-sm text-text-primary mt-1">{formatStart(details.datetime)}</div>}
+              {details.employeeName && (
+                <div className="text-xs text-tile-sub mt-0.5">With {details.employeeName}</div>
+              )}
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="loading-card mx-0 my-2">Watching for the booking…</div>
       )}
+
+      <button
+        type="button"
+        onClick={skipForNow}
+        className="mt-3 w-full text-xs text-tile-sub hover:text-wcs-red font-semibold uppercase tracking-wider py-2"
+      >
+        Skip this step
+      </button>
     </StepShell>
   )
 }

@@ -62,8 +62,14 @@ export const initialState = {
     waiverSignatureName: '',
   },
 
-  // Populated by the lookup step
+  // Populated by the lookup step. `match` is 'exact' | 'partial' | 'none'.
+  // candidates is whatever the backend returned, kept as-is so the
+  // LookupResult step can render an "is this you?" picker for partial.
+  // After the user confirms (or declines), we set `found` + the chosen
+  // candidate's fields.
   lookup: {
+    match: 'none',
+    candidates: [],
     found: false,
     abcMemberId: null,
     lastVisit: null,
@@ -82,8 +88,9 @@ export const initialState = {
   // Populated after the VIP step submits
   vip: { count: 0, names: [], phones: [] },
 
-  dayOne: { booked: 'skipped', datetime: '', employeeName: '' },
+  dayOne: { booked: 'no', datetime: '', employeeName: '', appointmentId: '' },
 
+  tourOutcome: '', // 'started_trial' | 'day_pass' | 'just_a_tour' | 'sold_membership'
   tourSummary: '',
 
   // For inline UX feedback at the kiosk shell level

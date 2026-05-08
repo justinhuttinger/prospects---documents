@@ -85,6 +85,7 @@ export default function KioskApp() {
         vip: state.vip,
         dayOne: state.dayOne,
         tourQuestions: state.tourQuestions,
+        tourOutcome: state.tourOutcome,
         tourSummary: state.tourSummary,
         submittedAt: new Date().toISOString(),
       })

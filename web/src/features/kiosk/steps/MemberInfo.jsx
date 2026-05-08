@@ -32,36 +32,43 @@ export default function MemberInfo({ state, dispatch, location, progress, onBack
     try {
       const result = await lookupMember({
         location,
-        phone: digits(m.phone),
-        email: m.email.trim().toLowerCase(),
+        phone:     digits(m.phone),
+        email:     m.email.trim().toLowerCase(),
+        firstName: m.firstName.trim(),
+        lastName:  m.lastName.trim(),
       })
+
+      const candidates = Array.isArray(result.candidates) ? result.candidates : []
+      const matchKind  = result.match || (candidates.length ? 'partial' : 'none')
+
+      // For an exact match (single candidate, all of phone+email+name agree),
+      // auto-confirm. For partial, defer to the LookupResult step's picker.
+      let chosen = null
+      if (matchKind === 'exact' && candidates.length === 1) chosen = candidates[0]
+
       dispatch({
         type: 'set',
         key: 'lookup',
         value: {
-          found:         !!result.found,
-          abcMemberId:   result.abc_member_id || null,
-          lastVisit:     result.last_visit || null,
-          hasPhoto:      !!result.has_photo,
-          memberStatus:  result.member_status || null,
+          match:        matchKind,
+          candidates,
+          found:        !!chosen,
+          abcMemberId:  chosen ? chosen.abc_member_id : null,
+          lastVisit:    chosen ? chosen.last_visit    : null,
+          hasPhoto:     chosen ? !!chosen.has_photo   : false,
+          memberStatus: chosen ? chosen.member_status : null,
         },
       })
-      // If the lookup returned member name and we don't have one entered, fill it in.
-      if (result.found && (result.first_name || result.last_name)) {
-        dispatch({
-          type: 'patch',
-          key: 'member',
-          value: {
-            firstName: m.firstName || result.first_name || '',
-            lastName:  m.lastName  || result.last_name  || '',
-          },
-        })
-      }
       dispatch({ type: 'setLoading', value: false })
       onNext()
     } catch (err) {
-      dispatch({ type: 'error', message: `Lookup failed: ${err.message}. Try again or continue without.` })
-      // Still allow continuing — they can complete the tour as a new member
+      dispatch({ type: 'error', message: `Lookup failed: ${err.message}. Continuing as a new member.` })
+      // Reset lookup so flow proceeds as new member
+      dispatch({
+        type: 'set',
+        key: 'lookup',
+        value: { match: 'none', candidates: [], found: false, abcMemberId: null, lastVisit: null, hasPhoto: false, memberStatus: null },
+      })
       onNext()
     }
   }

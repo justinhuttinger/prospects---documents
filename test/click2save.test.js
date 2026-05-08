@@ -159,6 +159,16 @@ function mockDocPost({ clubNumber = SALEM_CLUB_NUMBER, memberId = 'M001', status
     .reply(status, status === 200 ? { result: 'ok' } : { error: 'boom' });
 }
 
+function mockUdfPut({ clubNumber = SALEM_CLUB_NUMBER, memberId = 'M001', status = 200, times = 1, capture } = {}) {
+  return nock(ABC)
+    .put(`/rest/${clubNumber}/members/udfs/${memberId}`, body => {
+      if (capture) capture(body);
+      return true;
+    })
+    .times(times)
+    .reply(status, status === 200 ? { clubNumber, udfs: [] } : { error: 'boom' });
+}
+
 test.beforeEach(() => { nock.cleanAll(); });
 test.after(() => { nock.cleanAll(); nock.enableNetConnect(); });
 
@@ -168,6 +178,7 @@ test('CANCEL: valid signed payload uploads Cancel Document', async () => {
   const memberScope = mockMemberGet();
   const pdfScope = mockPdfShift();
   const docScope = mockDocPost({ capture: b => { captured = b; } });
+  const udfScope = mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-cancel-1' }));
   assert.strictEqual(res.status, 200);
@@ -175,6 +186,7 @@ test('CANCEL: valid signed payload uploads Cancel Document', async () => {
   assert.strictEqual(memberScope.isDone(), true);
   assert.strictEqual(pdfScope.isDone(), true);
   assert.strictEqual(docScope.isDone(), true);
+  assert.strictEqual(udfScope.isDone(), true);
   assert.match(captured.documentName, /^Cancel Document \d{4}-\d{2}-\d{2}\.pdf$/);
   assert.strictEqual(captured.documentType, 'pdf');
   assert.strictEqual(captured.imageType, 'member_document');
@@ -295,6 +307,7 @@ test('Internal retry succeeds on attempt 2 → returns 200', async () => {
   nock(ABC)
     .post(`/rest/${SALEM_CLUB_NUMBER}/members/documents/M001`)
     .reply(200, { result: 'ok' });
+  mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-retry' }));
   assert.strictEqual(res.status, 200);
@@ -319,6 +332,7 @@ test('Forward: when C2S_FORWARD_URL set, forwards parsed event after validation'
   mockMemberGet();
   mockPdfShift();
   mockDocPost();
+  mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-fwd-ok' }));
   assert.strictEqual(res.status, 200);
@@ -345,6 +359,7 @@ test('Forward: when C2S_FORWARD_SECRET set, sends x-webhook-secret header', asyn
   mockMemberGet();
   mockPdfShift();
   mockDocPost();
+  mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-fwd-secret' }));
   assert.strictEqual(res.status, 200);
@@ -362,6 +377,7 @@ test('Forward: downstream 500 does not affect upstream Click2Save response', asy
   mockMemberGet();
   mockPdfShift();
   mockDocPost();
+  mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-fwd-500' }));
   assert.strictEqual(res.status, 200);
@@ -377,9 +393,102 @@ test('Forward: when C2S_FORWARD_URL not set, no forward attempt and request stil
   mockMemberGet();
   mockPdfShift();
   mockDocPost();
+  mockUdfPut();
 
   const res = await send(app, cancelPayload({ requestId: 'r-fwd-none' }));
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.success, true);
   await flush();
+});
+
+// =================================
+// UDF write tests (CANCEL only)
+// =================================
+
+test('UDF: CANCEL writes 3 UDFs with mapped names and values', async () => {
+  let udfBody;
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+  const udfScope = mockUdfPut({ capture: b => { udfBody = b; } });
+
+  const payload = cancelPayload({ requestId: 'r-udf-1' });
+  payload.data.result.cancelReason = 'Moving out of town';
+  payload.data.result.effectiveDate = '2026-05-31';
+  payload.data.financials.buyoutCollected = '120.00';
+  payload.occurredAt = '2026-05-08T10:30:00.000Z';
+
+  const res = await send(app, payload);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(udfScope.isDone(), true, 'UDF PUT was not called');
+
+  const byName = Object.fromEntries(udfBody.udfs.map(u => [u.name, u.value]));
+  assert.strictEqual(byName.cancelEffectiveDate, '2026-05-31');
+  assert.strictEqual(byName.CancelRSN, 'Moving out of town');
+  assert.match(byName.internalnotes, /^C2S Cancel R:2026-05-08 E:2026-05-31 Pay:\$120\.00$/);
+  assert.ok(byName.internalnotes.length <= 50, `internalnotes (${byName.internalnotes.length}) exceeds 50 chars: "${byName.internalnotes}"`);
+});
+
+test('UDF: long cancelReason is truncated to 50 chars', async () => {
+  let udfBody;
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+  mockUdfPut({ capture: b => { udfBody = b; } });
+
+  const payload = cancelPayload({ requestId: 'r-udf-long' });
+  payload.data.result.cancelReason = 'X'.repeat(120);
+
+  const res = await send(app, payload);
+  assert.strictEqual(res.status, 200);
+  const byName = Object.fromEntries(udfBody.udfs.map(u => [u.name, u.value]));
+  assert.strictEqual(byName.CancelRSN.length, 50);
+  assert.strictEqual(byName.CancelRSN, 'X'.repeat(50));
+});
+
+test('UDF: PUT failure does not break upstream 200', async () => {
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+  // 5xx will trigger 3 retries (RETRY_OPTS.attempts = 3 from default).
+  // The handler swallows the error after retries.
+  nock(ABC)
+    .put(`/rest/${SALEM_CLUB_NUMBER}/members/udfs/M001`)
+    .times(3)
+    .reply(503, { error: 'transient' });
+
+  const res = await send(app, cancelPayload({ requestId: 'r-udf-fail' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.success, true);
+});
+
+test('UDF: FREEZE event does NOT call the UDF endpoint', async () => {
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+  // No mockUdfPut — if the handler called it, the test would fail
+  // because nock would either throw (if disableNetConnect) or the call
+  // would fail and raise something. Instead, we explicitly intercept and
+  // assert it was NOT called.
+  const udfScope = nock(ABC).put(`/rest/${SALEM_CLUB_NUMBER}/members/udfs/M001`).reply(200, {});
+
+  const res = await send(app, freezePayload({ requestId: 'r-udf-freeze' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(udfScope.isDone(), false, 'UDF PUT should not have been called for FREEZE');
+});
+
+test('UDF: OFFER event does NOT call the UDF endpoint', async () => {
+  const app = makeApp();
+  mockMemberGet();
+  mockPdfShift();
+  mockDocPost();
+  const udfScope = nock(ABC).put(`/rest/${SALEM_CLUB_NUMBER}/members/udfs/M001`).reply(200, {});
+
+  const res = await send(app, offerPayload({ requestId: 'r-udf-offer' }));
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(udfScope.isDone(), false, 'UDF PUT should not have been called for OFFER');
 });

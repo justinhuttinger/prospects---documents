@@ -405,7 +405,7 @@ test('Forward: when C2S_FORWARD_URL not set, no forward attempt and request stil
 // UDF write tests (CANCEL only)
 // =================================
 
-test('UDF: CANCEL writes 3 UDFs with mapped names and values', async () => {
+test('UDF: CANCEL writes 4 UDFs with mapped names and values', async () => {
   let udfBody;
   const app = makeApp();
   mockMemberGet();
@@ -424,7 +424,8 @@ test('UDF: CANCEL writes 3 UDFs with mapped names and values', async () => {
   assert.strictEqual(udfScope.isDone(), true, 'UDF PUT was not called');
 
   const byName = Object.fromEntries(udfBody.udfs.map(u => [u.name, u.value]));
-  assert.strictEqual(byName.canceldate, '2026-05-31');
+  assert.strictEqual(byName.canceldate, '2026-05-08');           // request/processed date
+  assert.strictEqual(byName.CancelEffectiveDate1, '2026-05-31'); // effective date
   assert.strictEqual(byName.cancel1reason, 'Moving out of town');
   assert.match(byName.internalnotes, /^C2S Cancel R:2026-05-08 E:2026-05-31 Pay:\$120\.00$/);
   assert.ok(byName.internalnotes.length <= 50, `internalnotes (${byName.internalnotes.length}) exceeds 50 chars: "${byName.internalnotes}"`);

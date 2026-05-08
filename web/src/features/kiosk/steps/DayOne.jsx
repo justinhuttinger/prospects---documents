@@ -73,8 +73,14 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polling, location, member.phone, member.email])
 
-  function skipForNow() {
-    setDayOne({ booked: 'no', datetime: '', employeeName: '', appointmentId: '' })
+  // The red "Next" bar is BOTH a skip and a complete-step button: if
+  // polling has already detected a booking, dayOne is already populated
+  // (booked='yes' + datetime + employee). If not, it stays as the
+  // initial-state {booked:'no', ...} and we advance as a skip.
+  function handleNext() {
+    if (!booked) {
+      setDayOne({ booked: 'no', datetime: '', employeeName: '', appointmentId: '' })
+    }
     onNext()
   }
 
@@ -84,9 +90,8 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
       current={progress.current} total={progress.total}
       title="Book your Day One"
       subtitle="Pick a time inside the calendar — we'll detect the booking automatically once it's confirmed."
-      onBack={onBack} onNext={onNext}
-      nextDisabled={!booked}
-      nextLabel={booked ? 'Continue' : 'Waiting for booking…'}
+      onBack={onBack} onNext={handleNext}
+      nextLabel="Next"
     >
       <div className="rounded-lg border border-border bg-bg overflow-hidden mb-4">
         {GHL_DAY_ONE_EMBED_URL ? (
@@ -122,14 +127,6 @@ export default function DayOne({ state, dispatch, location, progress, onBack, on
       ) : (
         <div className="loading-card mx-0 my-2">Watching for the booking…</div>
       )}
-
-      <button
-        type="button"
-        onClick={skipForNow}
-        className="mt-3 w-full text-xs text-tile-sub hover:text-wcs-red font-semibold uppercase tracking-wider py-2"
-      >
-        Skip this step
-      </button>
     </StepShell>
   )
 }

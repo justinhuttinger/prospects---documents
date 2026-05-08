@@ -28,3 +28,12 @@ export async function submitVipReferrals(body) {
   })
   return jsonOrThrow(res)
 }
+
+export async function submitPtIntake(body) {
+  const res = await fetch(`${API_BASE}/webhooks/pt-intake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return jsonOrThrow(res)
+}

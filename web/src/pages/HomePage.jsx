@@ -3,8 +3,9 @@ import AppShell from '../components/AppShell'
 import { detectLocation, clubName } from '../lib/clubs'
 
 const LINKS = [
-  { to: '/vip',  label: 'VIP Referrals',          subtitle: 'Internal — with team member credit' },
-  { to: '/vipx', label: 'VIP Referrals (member)', subtitle: 'Member-facing version' },
+  { to: '/vip',       label: 'VIP Referrals',          subtitle: 'Internal — with team member credit' },
+  { to: '/vipx',      label: 'VIP Referrals (member)', subtitle: 'Member-facing version' },
+  { to: '/form-page', label: 'PT Intake',              subtitle: 'Personal training program intake' },
 ]
 
 export default function HomePage() {

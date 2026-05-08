@@ -728,7 +728,7 @@ async function generatePDF(formData) {
       <div style="margin-top: 20px;">
         <div class="label">Digital Signature:</div>
         <img src="${signatureBase64}" class="signature-img" alt="Signature">
-        <div class="signature-info">Timestamp: ${formData['Legal Signature'].meta?.timestamp ? new Date(parseInt(formData['Legal Signature'].meta.timestamp) * 1000).toLocaleString() : 'N/A'}</div>
+        <div class="signature-info">Timestamp: ${formData['Legal Signature']?.meta?.timestamp ? new Date(parseInt(formData['Legal Signature'].meta.timestamp) * 1000).toLocaleString() : new Date().toLocaleString()}</div>
       </div>
     ` : ''}
   </div>

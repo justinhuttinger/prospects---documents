@@ -30,11 +30,16 @@ const path    = require('path');
 
 const router = express.Router();
 
-const GHL_BASE_URL    = 'https://services.leadconnectorhq.com';
-const GHL_API_VERSION = '2021-07-28';
+const ABC_BASE_URL    = process.env.ABC_BASE_URL || 'https://api.abcfinancial.com/rest';
 const EMPLOYEES_TTL_MS = 5 * 60 * 1000;
 
 const CLUBS_FILE = path.join(__dirname, '..', 'clubs-config.json');
+
+// Match wcs-staff-portal/ghl-sync employeeSync.js — bot/system accounts to drop.
+const EXCLUDED_EMPLOYEE_NAMES = new Set([
+  'easalytics bot', 'click2save bot', 'reporting bot',
+  'abc support',    'test test',     'personal trainer'
+]);
 
 // ---- Helpers ----
 function loadClubs() {
@@ -67,7 +72,7 @@ router.use((req, res, next) => {
   next();
 });
 
-// ---- Employees endpoint (GHL /users/ per location, lightly cached) ----
+// ---- Employees endpoint (ABC /{clubNumber}/employees, lightly cached) ----
 const employeesCache = new Map(); // slug -> { at, list }
 
 router.get('/api/vip-referrals/employees', async (req, res) => {
@@ -81,23 +86,25 @@ router.get('/api/vip-referrals/employees', async (req, res) => {
       return res.json(cached.list);
     }
 
-    const resp = await axios.get(`${GHL_BASE_URL}/users/`, {
-      params:  { locationId: club.ghlLocationId },
+    const resp = await axios.get(`${ABC_BASE_URL}/${club.clubNumber}/employees`, {
       headers: {
-        Authorization: `Bearer ${club.ghlApiKey}`,
-        Version:       GHL_API_VERSION,
-        Accept:        'application/json'
+        app_id:  process.env.ABC_APP_ID,
+        app_key: process.env.ABC_APP_KEY,
+        Accept:  'application/json'
       },
-      timeout: 10000
+      timeout: 15000
     });
 
-    const users = Array.isArray(resp.data) ? resp.data : (resp.data && resp.data.users) || [];
-    const list = users
-      .map(u => ({
-        id:   u.id,
-        name: (u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || '').trim()
-      }))
-      .filter(u => u.id && u.name)
+    const employees = (resp.data && resp.data.employees) || [];
+    const list = employees
+      .filter(e => ((e.employment && e.employment.employeeStatus) || '').toLowerCase() === 'active')
+      .map(e => {
+        const firstName = (e.personal && e.personal.firstName) || '';
+        const lastName  = (e.personal && e.personal.lastName)  || '';
+        const name = `${firstName} ${lastName}`.trim();
+        return { id: e.employeeId || e.id || name, name };
+      })
+      .filter(e => e.name && !EXCLUDED_EMPLOYEE_NAMES.has(e.name.toLowerCase()))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     employeesCache.set(slug, { at: Date.now(), list });

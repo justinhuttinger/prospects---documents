@@ -60,8 +60,8 @@ function buildCancelUdfs(event) {
     .slice(0, 50);
 
   return [
-    { name: 'cancelEffectiveDate', value: effectiveDate },
-    { name: 'CancelRSN', value: cancelReason },
+    { name: 'canceldate', value: effectiveDate },
+    { name: 'cancel1reason', value: cancelReason },
     { name: 'internalnotes', value: internalNote },
   ];
 }

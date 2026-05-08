@@ -424,8 +424,8 @@ test('UDF: CANCEL writes 3 UDFs with mapped names and values', async () => {
   assert.strictEqual(udfScope.isDone(), true, 'UDF PUT was not called');
 
   const byName = Object.fromEntries(udfBody.udfs.map(u => [u.name, u.value]));
-  assert.strictEqual(byName.cancelEffectiveDate, '2026-05-31');
-  assert.strictEqual(byName.CancelRSN, 'Moving out of town');
+  assert.strictEqual(byName.canceldate, '2026-05-31');
+  assert.strictEqual(byName.cancel1reason, 'Moving out of town');
   assert.match(byName.internalnotes, /^C2S Cancel R:2026-05-08 E:2026-05-31 Pay:\$120\.00$/);
   assert.ok(byName.internalnotes.length <= 50, `internalnotes (${byName.internalnotes.length}) exceeds 50 chars: "${byName.internalnotes}"`);
 });
@@ -444,8 +444,8 @@ test('UDF: long cancelReason is truncated to 50 chars', async () => {
   const res = await send(app, payload);
   assert.strictEqual(res.status, 200);
   const byName = Object.fromEntries(udfBody.udfs.map(u => [u.name, u.value]));
-  assert.strictEqual(byName.CancelRSN.length, 50);
-  assert.strictEqual(byName.CancelRSN, 'X'.repeat(50));
+  assert.strictEqual(byName.cancel1reason.length, 50);
+  assert.strictEqual(byName.cancel1reason, 'X'.repeat(50));
 });
 
 test('UDF: PUT failure does not break upstream 200', async () => {

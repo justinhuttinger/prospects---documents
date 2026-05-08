@@ -1,15 +1,14 @@
-import StepShell, { inputClass } from '../StepShell'
+import StepShell from '../StepShell'
+import SignaturePad from '../components/SignaturePad'
 
-// TODO: replace this with a real signature pad (canvas-based, captures a
-// PNG data URL and submits via the existing /webhook/ghl-form pipeline).
-// For v1 the kiosk collects a typed-name "I agree" + a checkbox, which the
-// existing webhook can render into the waiver PDF as a textual signature.
-export default function Waiver({ state, dispatch, location, progress, onBack, onNext }) {
+export default function Waiver({ state, dispatch, location, progress, onBack, onNext, loading, error }) {
   const m = state.member
-  function set(key, value) {
+  function setField(key, value) {
     dispatch({ type: 'patch', key: 'member', value: { [key]: value } })
   }
-  const valid = m.waiverAgreed && m.waiverSignatureName.trim().length >= 3
+
+  const hasSignature = !!m.signatureDataUrl
+  const valid = m.waiverAgreed && hasSignature
 
   return (
     <StepShell
@@ -20,6 +19,8 @@ export default function Waiver({ state, dispatch, location, progress, onBack, on
       onBack={onBack} onNext={onNext}
       nextDisabled={!valid}
       nextLabel="Sign and continue"
+      loading={loading}
+      error={error}
     >
       <div className="rounded-lg border border-border bg-bg p-4 text-xs text-text-primary leading-relaxed max-h-56 overflow-y-auto mb-4">
         <p className="font-semibold mb-2">West Coast Strength Liability Waiver</p>
@@ -31,9 +32,7 @@ export default function Waiver({ state, dispatch, location, progress, onBack, on
           its officers, agents, and employees from any liability arising out of my participation.
         </p>
         <p className="mt-2">
-          <span className="font-semibold">Note:</span> a fully detailed waiver PDF is generated when
-          you finish — this short summary is what's shown at the kiosk. (TODO: pad component for
-          drawn signature; for now we collect a typed signature.)
+          A fully detailed waiver PDF is generated when you finish — your signature below is embedded into it.
         </p>
       </div>
 
@@ -41,25 +40,20 @@ export default function Waiver({ state, dispatch, location, progress, onBack, on
         <input
           type="checkbox"
           checked={m.waiverAgreed}
-          onChange={e => set('waiverAgreed', e.target.checked)}
-          className="mt-1 h-4 w-4 accent-wcs-red"
+          onChange={e => setField('waiverAgreed', e.target.checked)}
+          className="mt-1 h-5 w-5 accent-wcs-red"
         />
         <span className="text-sm text-text-primary">
           I have read, understand, and agree to the waiver above.
         </span>
       </label>
 
-      <label className="block text-xs font-semibold text-text-primary mb-1.5">
-        Signature (type your full legal name)
-        <span className="ml-1 text-wcs-red font-bold">*</span>
-      </label>
-      <input
-        className={inputClass}
-        type="text"
-        autoComplete="off"
-        value={m.waiverSignatureName}
-        onChange={e => set('waiverSignatureName', e.target.value)}
-        placeholder="Full legal name"
+      <div className="mb-2 text-xs font-semibold text-text-primary">
+        Signature <span className="ml-1 text-wcs-red font-bold">*</span>
+      </div>
+      <SignaturePad
+        value={m.signatureDataUrl}
+        onChange={dataUrl => setField('signatureDataUrl', dataUrl)}
       />
     </StepShell>
   )

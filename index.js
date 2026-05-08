@@ -497,7 +497,7 @@ async function generatePDF(formData) {
       logoBase64 = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIGZpbGw9IiNkZGQiLz48L3N2Zz4=';
     }
     
-    // Download signature image if available
+    // Download signature image if the GHL survey path provided a URL.
     let signatureBase64 = '';
     if (formData['Legal Signature']?.url) {
       try {
@@ -508,6 +508,12 @@ async function generatePDF(formData) {
       } catch (error) {
         console.error('Error downloading signature:', error.message);
       }
+    }
+    // Fallback: kiosk submits the drawn signature inline as a data URL,
+    // not as a hosted file URL. Use it directly when present.
+    if (!signatureBase64 && typeof formData.signature_data_url === 'string'
+        && formData.signature_data_url.startsWith('data:image/')) {
+      signatureBase64 = formData.signature_data_url;
     }
 
     // Create beautiful HTML with your branding

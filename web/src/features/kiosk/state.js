@@ -54,12 +54,12 @@ export const initialState = {
 
   member: {
     firstName: '', lastName: '', phone: '', email: '',
-    dob: '',
+    dobMonth: '', dobDay: '', dobYear: '',
     address1: '', city: '', state: '', postalCode: '',
     photoBase64: null,
     howHeard: '',
     waiverAgreed: false,
-    waiverSignatureName: '',
+    signatureDataUrl: null,
   },
 
   // Populated by the lookup step. `match` is 'exact' | 'partial' | 'none'.
@@ -112,6 +112,18 @@ export function reducer(state, action) {
       return { ...state, loading: false, error: action.message }
     case 'reset':
       return { ...initialState }
+    // Atomic update + advance: lets a step set new state AND step in one
+    // dispatch so the step calculation sees the new state, not the old.
+    // Used by LookupResult to switch to the returning-member flow when
+    // the user picks a candidate.
+    case 'setAndAdvance': {
+      const next = { ...state }
+      if (action.lookup) next.lookup = { ...state.lookup, ...action.lookup }
+      if (action.member) next.member = { ...state.member, ...action.member }
+      next.error = null
+      next.step  = nextStep(next)
+      return next
+    }
     default:
       return state
   }

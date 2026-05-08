@@ -37,3 +37,32 @@ export async function submitPtIntake(body) {
   })
   return jsonOrThrow(res)
 }
+
+export async function lookupMember({ location, phone, email }) {
+  const params = new URLSearchParams({ location })
+  if (phone) params.set('phone', phone)
+  if (email) params.set('email', email)
+  const res = await fetch(`${API_BASE}/api/kiosk/lookup?${params}`, { credentials: 'omit' })
+  return jsonOrThrow(res)
+}
+
+export async function submitTourCompleted(body) {
+  const res = await fetch(`${API_BASE}/webhooks/tour-completed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return jsonOrThrow(res)
+}
+
+// Submits the existing /webhook/ghl-form pipeline (creates ABC prospect +
+// waiver + alert + photo + check-in). Fired once at the end of the waiver
+// step, only for new (non-existing) members.
+export async function submitGhlForm(body) {
+  const res = await fetch(`${API_BASE}/webhook/ghl-form`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return jsonOrThrow(res)
+}

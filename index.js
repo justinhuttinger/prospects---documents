@@ -161,6 +161,10 @@ app.use(require('./routes/pt-intake'));
 // Tour Kiosk — read-only ABC lookup + tour-completed webhook fan-out
 app.use(require('./routes/kiosk'));
 
+// Online Join — admin CRUD (admin role required via JWT)
+const requireAdmin = require('./middleware/require-admin');
+app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
+
 // Load clubs configuration
 const fs = require('fs');
 const clubsConfig = JSON.parse(fs.readFileSync(__dirname + '/clubs-config.json', 'utf8'));

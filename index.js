@@ -152,6 +152,19 @@ app.post('/webhook/click2save', express.raw({ type: 'application/json' }), click
 
 app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
+// CORS for the public online-join widget (called from westcoaststrength.com via WP).
+// Permissive on Origin since the widget is public; lock down later if needed.
+app.use('/api/online-join', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use('/api/online-join', require('./routes/online-join-public'));
+
 // VIP Referrals widget — public POST + employee dropdown source
 app.use(require('./routes/vip-referrals'));
 

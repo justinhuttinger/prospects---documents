@@ -152,8 +152,15 @@ app.post('/webhook/click2save', express.raw({ type: 'application/json' }), click
 
 app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
-// CORS for the public online-join widget (called from westcoaststrength.com via WP).
-// Permissive on Origin since the widget is public; lock down later if needed.
+// ---------------------------------------------------------------------------
+// CORS for Online Join — MUST run before the catch-all routers below
+// (vip-referrals / pt-intake / kiosk each register a router-level CORS
+// middleware with NO path prefix, so any of them would otherwise intercept
+// the OPTIONS preflight for our /api/online-join and /api/admin/online-join
+// paths and respond with their own (more restrictive) headers).
+// ---------------------------------------------------------------------------
+
+// Public widget — called from westcoaststrength.com.
 app.use('/api/online-join', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Vary', 'Origin');
@@ -165,18 +172,8 @@ app.use('/api/online-join', (req, res, next) => {
 });
 app.use('/api/online-join', require('./routes/online-join-public'));
 
-// VIP Referrals widget — public POST + employee dropdown source
-app.use(require('./routes/vip-referrals'));
-
-// PT Intake form — public POST that fans out to per-club GHL inbound webhook
-app.use(require('./routes/pt-intake'));
-
-// Tour Kiosk — read-only ABC lookup + tour-completed webhook fan-out
-app.use(require('./routes/kiosk'));
-
-// Online Join — admin CRUD (admin role required via JWT)
-// CORS must run BEFORE the JWT middleware so the browser preflight (OPTIONS,
-// which carries no Authorization header) gets a 204 instead of a 401.
+// Admin — JWT required. CORS sits in front of the auth middleware so the
+// browser preflight (no Authorization header) gets 204 instead of 401.
 const requireAdmin = require('./middleware/require-admin');
 app.use('/api/admin/online-join', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -188,6 +185,15 @@ app.use('/api/admin/online-join', (req, res, next) => {
   next();
 });
 app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
+
+// VIP Referrals widget — public POST + employee dropdown source
+app.use(require('./routes/vip-referrals'));
+
+// PT Intake form — public POST that fans out to per-club GHL inbound webhook
+app.use(require('./routes/pt-intake'));
+
+// Tour Kiosk — read-only ABC lookup + tour-completed webhook fan-out
+app.use(require('./routes/kiosk'));
 
 // Load clubs configuration
 const fs = require('fs');

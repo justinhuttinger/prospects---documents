@@ -186,6 +186,18 @@ app.use('/api/admin/online-join', (req, res, next) => {
 });
 app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
 
+// Serve the public widget HTML (single source of truth — Elementor copy/paste
+// + portal Preview tab both reference this URL). Iframe-friendly headers; no
+// auth. The widget reads ?location= from the URL when no data-location is set.
+app.get('/widget/online-join', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  // Allow embedding from any origin — needed by the staff portal preview.
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *;");
+  res.sendFile(__dirname + '/join-flow-widget.html');
+});
+
 // VIP Referrals widget — public POST + employee dropdown source
 app.use(require('./routes/vip-referrals'));
 

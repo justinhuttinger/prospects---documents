@@ -5,6 +5,8 @@
     <div id="wcs-join-app" data-location="salem"></div>
     <!-- paste this entire file below -->
 
+  Location source order: data-location attribute → ?location= URL param → 'salem'.
+
   Steps:
     1. Location confirmation
     2. Plan selection
@@ -21,197 +23,344 @@
       payment input and returns only a transaction ID via postMessage.
     - postMessage origin MUST equal https://apipayservice.abcfinancial.net.
     - Eligibility is verified server-side too; client check here is UX only.
+
+  Style: deliberately mirrors the wcs-staff-portal aesthetic — slate text,
+  rounded-xl cards, subtle borders, calm density. All CSS scoped to
+  #wcs-join-app so it can't bleed into Elementor's theme.
 -->
 
 <style>
-  /* Scope everything to #wcs-join-app so Elementor/site styles don't leak in. */
+  /* Scope everything to #wcs-join-app so site styles don't leak in. */
   #wcs-join-app, #wcs-join-app *, #wcs-join-app *::before, #wcs-join-app *::after {
     box-sizing: border-box;
   }
   #wcs-join-app {
-    --wcs-red: #E31837;
-    --wcs-red-dark: #B91426;
-    --wcs-ink: #0F172A;
-    --wcs-ink-soft: #475569;
-    --wcs-line: #E2E8F0;
-    --wcs-bg: #F8FAFC;
-    --wcs-card: #FFFFFF;
-    --wcs-success: #16A34A;
-    --wcs-error: #DC2626;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    color: var(--wcs-ink);
+    /* Portal-aligned tokens (slate + brand red). */
+    --w-bg: #F8FAFC;            /* page background */
+    --w-surface: #FFFFFF;       /* card background */
+    --w-soft: #F1F5F9;          /* secondary surface (input bg, etc.) */
+    --w-border: #E2E8F0;        /* default border */
+    --w-border-strong: #CBD5E1; /* emphasized border */
+    --w-text: #0F172A;          /* primary text */
+    --w-text-muted: #64748B;    /* secondary text */
+    --w-text-soft: #94A3B8;     /* hint / label text */
+    --w-red: #E31837;
+    --w-red-dark: #B91426;
+    --w-red-tint: #FEF2F2;
+    --w-success: #16A34A;
+    --w-error: #DC2626;
+    --w-radius-lg: 12px;
+    --w-radius-md: 8px;
+
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--w-text);
     max-width: 720px;
     margin: 0 auto;
-    padding: 24px 16px;
+    padding: 20px 16px;
     line-height: 1.5;
+    background: transparent;
   }
   #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3 {
-    font-family: 'Bebas Neue', 'Oswald', Impact, sans-serif;
-    letter-spacing: 0.02em;
-    color: var(--wcs-ink);
-    margin: 0 0 8px;
+    color: var(--w-text);
+    margin: 0 0 6px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
   }
-  #wcs-join-app h1 { font-size: 32px; }
-  #wcs-join-app h2 { font-size: 24px; }
-  #wcs-join-app h3 { font-size: 18px; }
-  #wcs-join-app p { margin: 0 0 12px; color: var(--wcs-ink-soft); }
+  #wcs-join-app h1 { font-size: 22px; line-height: 1.25; }
+  #wcs-join-app h2 { font-size: 18px; line-height: 1.3; }
+  #wcs-join-app h3 { font-size: 15px; line-height: 1.35; }
+  #wcs-join-app p { margin: 0 0 10px; color: var(--w-text-muted); font-size: 14px; }
+
+  /* Progress */
   #wcs-join-app .wcs-progress {
-    display: flex; gap: 4px; margin-bottom: 20px;
+    display: flex; gap: 4px; margin-bottom: 14px;
   }
   #wcs-join-app .wcs-progress-step {
-    flex: 1; height: 4px; border-radius: 2px; background: var(--wcs-line);
+    flex: 1; height: 3px; border-radius: 2px;
+    background: var(--w-border);
     transition: background 0.2s;
   }
-  #wcs-join-app .wcs-progress-step.is-done { background: var(--wcs-red); }
-  #wcs-join-app .wcs-progress-step.is-current { background: var(--wcs-red); }
+  #wcs-join-app .wcs-progress-step.is-done,
+  #wcs-join-app .wcs-progress-step.is-current { background: var(--w-red); }
+
+  /* Cards */
   #wcs-join-app .wcs-card {
-    background: var(--wcs-card); border: 1px solid var(--wcs-line);
-    border-radius: 12px; padding: 20px; margin-bottom: 12px;
+    background: var(--w-surface);
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-lg);
+    padding: 18px;
+    margin-bottom: 10px;
   }
   #wcs-join-app .wcs-step-label {
-    font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--wcs-red); margin-bottom: 8px;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--w-text-soft);
+    margin-bottom: 8px;
   }
+
+  /* Buttons */
   #wcs-join-app .wcs-btn {
-    display: inline-block; padding: 12px 24px; border-radius: 8px;
-    font-weight: 700; font-size: 15px; cursor: pointer; border: none;
-    transition: background 0.15s, transform 0.05s;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 9px 16px; border-radius: var(--w-radius-md);
+    font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     font-family: inherit;
   }
   #wcs-join-app .wcs-btn-primary {
-    background: var(--wcs-red); color: white;
+    background: var(--w-red); color: white;
   }
-  #wcs-join-app .wcs-btn-primary:hover { background: var(--wcs-red-dark); }
-  #wcs-join-app .wcs-btn-primary:disabled { background: #94A3B8; cursor: not-allowed; }
+  #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red-dark); }
+  #wcs-join-app .wcs-btn-primary:disabled {
+    background: var(--w-soft); color: var(--w-text-soft); cursor: not-allowed;
+  }
   #wcs-join-app .wcs-btn-secondary {
-    background: white; color: var(--wcs-ink); border: 1px solid var(--wcs-line);
+    background: var(--w-surface); color: var(--w-text); border-color: var(--w-border);
   }
-  #wcs-join-app .wcs-btn-secondary:hover { background: var(--wcs-bg); }
+  #wcs-join-app .wcs-btn-secondary:hover { background: var(--w-soft); }
   #wcs-join-app .wcs-btn-row {
     display: flex; gap: 8px; justify-content: space-between; align-items: center;
-    margin-top: 16px; flex-wrap: wrap;
+    margin-top: 14px; flex-wrap: wrap;
   }
-  #wcs-join-app .wcs-field { margin-bottom: 12px; }
-  #wcs-join-app .wcs-field label {
-    display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;
-    color: var(--wcs-ink);
+
+  /* Form fields */
+  #wcs-join-app .wcs-field { margin-bottom: 10px; }
+  #wcs-join-app .wcs-field label,
+  #wcs-join-app .wcs-checkbox span,
+  #wcs-join-app .wcs-field-label {
+    display: block; font-size: 12px; font-weight: 500;
+    color: var(--w-text-muted); margin-bottom: 4px;
   }
   #wcs-join-app .wcs-field input,
   #wcs-join-app .wcs-field select,
   #wcs-join-app .wcs-field textarea {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--wcs-line);
-    border-radius: 8px; font-size: 15px; font-family: inherit;
-    background: white; color: var(--wcs-ink);
+    width: 100%; padding: 8px 11px;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-md);
+    font-size: 14px; font-family: inherit;
+    background: var(--w-surface);
+    color: var(--w-text);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   #wcs-join-app .wcs-field input:focus,
-  #wcs-join-app .wcs-field select:focus {
-    outline: 2px solid var(--wcs-red); outline-offset: -1px;
+  #wcs-join-app .wcs-field select:focus,
+  #wcs-join-app .wcs-field textarea:focus {
+    outline: none;
+    border-color: var(--w-red);
+    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.12);
   }
   #wcs-join-app .wcs-field input.is-error,
   #wcs-join-app .wcs-field select.is-error {
-    border-color: var(--wcs-error);
+    border-color: var(--w-error);
   }
   #wcs-join-app .wcs-field-error {
-    color: var(--wcs-error); font-size: 12px; margin-top: 4px;
+    color: var(--w-error); font-size: 11px; margin-top: 3px;
   }
   #wcs-join-app .wcs-row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   }
   #wcs-join-app .wcs-row-3 {
-    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-row, #wcs-join-app .wcs-row-3 { grid-template-columns: 1fr; }
   }
+
+  /* Plan cards */
   #wcs-join-app .wcs-plan-card {
-    border: 2px solid var(--wcs-line); border-radius: 12px; padding: 16px;
-    cursor: pointer; transition: border-color 0.15s, background 0.15s;
-    margin-bottom: 12px; position: relative;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-lg);
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    margin-bottom: 10px;
+    position: relative;
+    background: var(--w-surface);
   }
-  #wcs-join-app .wcs-plan-card:hover { border-color: #94A3B8; }
+  #wcs-join-app .wcs-plan-card:hover { border-color: var(--w-border-strong); }
   #wcs-join-app .wcs-plan-card.is-selected {
-    border-color: var(--wcs-red); background: #FEF2F2;
+    border-color: var(--w-red);
+    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
   }
   #wcs-join-app .wcs-plan-card .wcs-plan-badge {
-    position: absolute; top: -10px; right: 12px; background: var(--wcs-red);
-    color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px;
-    font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    position: absolute; top: -8px; left: 14px;
+    background: var(--w-red); color: white;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-price {
-    font-size: 20px; font-weight: 800; color: var(--wcs-red); margin: 4px 0;
+  #wcs-join-app .wcs-plan-card .wcs-plan-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-name {
+    font-size: 15px; font-weight: 700; color: var(--w-text);
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-prices {
+    text-align: right; white-space: nowrap;
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-today {
+    font-size: 16px; font-weight: 700; color: var(--w-text);
   }
   #wcs-join-app .wcs-plan-card .wcs-plan-monthly {
-    font-size: 13px; color: var(--wcs-ink-soft);
+    font-size: 12px; color: var(--w-text-muted);
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-description {
+    font-size: 13px; color: var(--w-text-muted); margin-top: 4px;
   }
   #wcs-join-app .wcs-plan-card ul {
-    margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--wcs-ink-soft);
+    margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--w-text-muted);
   }
+  #wcs-join-app .wcs-plan-card ul li { margin-bottom: 2px; }
+
+  /* Payment method choice */
   #wcs-join-app .wcs-payment-choice {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;
   }
   #wcs-join-app .wcs-payment-card {
-    border: 2px solid var(--wcs-line); border-radius: 12px; padding: 20px;
-    cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-lg);
+    padding: 16px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    background: var(--w-surface);
   }
-  #wcs-join-app .wcs-payment-card:hover { border-color: #94A3B8; }
+  #wcs-join-app .wcs-payment-card:hover { border-color: var(--w-border-strong); }
   #wcs-join-app .wcs-payment-card.is-selected {
-    border-color: var(--wcs-red); background: #FEF2F2;
+    border-color: var(--w-red);
+    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
   }
-  #wcs-join-app .wcs-payment-card .wcs-icon { font-size: 32px; margin-bottom: 8px; }
+  #wcs-join-app .wcs-payment-card .wcs-pm-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--w-soft);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  #wcs-join-app .wcs-payment-card .wcs-pm-icon svg {
+    width: 18px; height: 18px; color: var(--w-text-muted);
+  }
+  #wcs-join-app .wcs-payment-card.is-selected .wcs-pm-icon { background: var(--w-red-tint); }
+  #wcs-join-app .wcs-payment-card.is-selected .wcs-pm-icon svg { color: var(--w-red); }
+  #wcs-join-app .wcs-payment-card .wcs-pm-name {
+    font-size: 14px; font-weight: 600; color: var(--w-text);
+  }
+  #wcs-join-app .wcs-payment-card .wcs-pm-sub {
+    font-size: 12px; color: var(--w-text-muted); margin-top: 2px;
+  }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-payment-choice { grid-template-columns: 1fr; }
   }
+
+  /* Checkboxes + alerts */
   #wcs-join-app .wcs-checkbox {
-    display: flex; gap: 8px; align-items: flex-start; font-size: 14px;
-    color: var(--wcs-ink-soft); margin: 8px 0;
+    display: flex; gap: 8px; align-items: flex-start;
+    font-size: 13px; color: var(--w-text-muted); margin: 6px 0;
+    cursor: pointer;
   }
-  #wcs-join-app .wcs-checkbox input { width: 18px; height: 18px; margin-top: 2px; }
+  #wcs-join-app .wcs-checkbox input {
+    width: 16px; height: 16px; margin-top: 2px; accent-color: var(--w-red);
+  }
+  #wcs-join-app .wcs-checkbox span { display: inline; margin: 0; font-size: 13px; color: var(--w-text); }
+  #wcs-join-app .wcs-checkbox a { color: var(--w-red); text-decoration: underline; }
+
   #wcs-join-app .wcs-alert {
-    padding: 12px 16px; border-radius: 8px; margin-bottom: 12px;
-    font-size: 14px;
+    padding: 10px 12px; border-radius: var(--w-radius-md);
+    margin-bottom: 10px; font-size: 13px;
+    border: 1px solid;
   }
   #wcs-join-app .wcs-alert-error {
-    background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B;
+    background: #FEF2F2; border-color: #FECACA; color: #991B1B;
   }
   #wcs-join-app .wcs-alert-info {
-    background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A8A;
+    background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A;
   }
+
+  /* Step 5 */
   #wcs-join-app .wcs-trust {
-    font-size: 13px; color: var(--wcs-ink-soft); text-align: center;
-    padding: 12px; background: var(--wcs-bg); border-radius: 8px;
+    font-size: 12px; color: var(--w-text-muted);
+    padding: 10px 12px;
+    background: var(--w-soft);
+    border-radius: var(--w-radius-md);
+    display: flex; gap: 8px; align-items: flex-start;
   }
+  #wcs-join-app .wcs-trust svg { flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px; color: var(--w-text-muted); }
   #wcs-join-app .wcs-paypage-frame {
-    width: 100%; min-height: 540px; border: 1px solid var(--wcs-line);
-    border-radius: 8px; background: white;
+    width: 100%; min-height: 540px;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-md);
+    background: var(--w-surface);
+    margin-bottom: 10px;
   }
+
+  /* Confirmation */
   #wcs-join-app .wcs-success {
-    text-align: center; padding: 24px 16px;
+    text-align: center; padding: 20px 16px;
   }
-  #wcs-join-app .wcs-success .wcs-checkmark {
-    width: 56px; height: 56px; border-radius: 28px; background: var(--wcs-success);
-    color: white; font-size: 32px; line-height: 56px;
-    display: inline-block; margin-bottom: 12px;
+  #wcs-join-app .wcs-checkmark {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--w-success); color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 10px;
   }
+  #wcs-join-app .wcs-checkmark svg { width: 24px; height: 24px; }
   #wcs-join-app .wcs-member-id {
-    background: var(--wcs-bg); padding: 12px; border-radius: 8px;
+    display: inline-block;
+    background: var(--w-soft);
+    padding: 8px 14px;
+    border-radius: var(--w-radius-md);
     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-    font-size: 14px; margin: 12px auto; display: inline-block;
+    font-size: 13px;
+    color: var(--w-text);
+    margin: 10px auto;
+    border: 1px solid var(--w-border);
   }
+
+  /* Loading + spinner */
   #wcs-join-app .wcs-spinner {
-    display: inline-block; width: 20px; height: 20px; border: 3px solid #E2E8F0;
-    border-top-color: var(--wcs-red); border-radius: 50%;
-    animation: wcs-spin 0.7s linear infinite; vertical-align: middle;
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--w-border);
+    border-top-color: var(--w-red);
+    border-radius: 50%;
+    animation: wcs-spin 0.7s linear infinite;
+    vertical-align: middle;
   }
   @keyframes wcs-spin { to { transform: rotate(360deg); } }
   #wcs-join-app .wcs-loading-block {
-    text-align: center; padding: 40px 16px; color: var(--wcs-ink-soft);
+    text-align: center; padding: 32px 16px;
+    color: var(--w-text-muted); font-size: 13px;
+  }
+  #wcs-join-app .wcs-loading-block p { margin-top: 8px; }
+
+  /* Location summary block (step 1) */
+  #wcs-join-app .wcs-location-detail {
+    background: var(--w-soft);
+    border-radius: var(--w-radius-md);
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+  #wcs-join-app .wcs-location-detail p {
+    margin: 0; font-size: 13px;
+    color: var(--w-text);
+  }
+  #wcs-join-app .wcs-location-detail .wcs-muted {
+    color: var(--w-text-muted); font-size: 12px; margin-top: 4px;
+  }
+
+  /* Section divider for personal info */
+  #wcs-join-app .wcs-divider {
+    height: 1px; background: var(--w-border); margin: 18px 0 12px;
+  }
+  #wcs-join-app .wcs-subheading {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--w-text-soft); margin-bottom: 8px;
   }
 </style>
 
 <div id="wcs-join-app" data-location="salem">
   <div class="wcs-loading-block">
     <span class="wcs-spinner"></span>
-    <p style="margin-top: 12px;">Loading…</p>
+    <p>Loading…</p>
   </div>
 </div>
 
@@ -225,13 +374,25 @@
   const API_BASE = (window.WCS_JOIN_API_BASE || 'https://prospects-documents.onrender.com') + '/api/online-join';
   const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
   const STORAGE_KEY = 'wcs_join_state_v1';
-  const STORAGE_TTL_MS = 60 * 60 * 1000; // 1 hour — abandoned flows expire
+  const STORAGE_TTL_MS = 60 * 60 * 1000; // 1h — abandoned flows expire
 
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
-  const LOCATION_ID = (root.dataset.location || '').trim().toLowerCase();
+
+  // Location source order: data-location → ?location= URL param → 'salem'
+  function resolveLocation() {
+    const fromAttr = (root.dataset.location || '').trim().toLowerCase();
+    if (fromAttr) return fromAttr;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = (params.get('location') || '').trim().toLowerCase();
+      if (fromQuery) return fromQuery;
+    } catch (_) {}
+    return 'salem';
+  }
+  const LOCATION_ID = resolveLocation();
   if (!LOCATION_ID) {
-    root.innerHTML = '<div class="wcs-alert wcs-alert-error">Configuration error: data-location attribute is required.</div>';
+    root.innerHTML = '<div class="wcs-alert wcs-alert-error">Configuration error: location is required.</div>';
     return;
   }
 
@@ -258,6 +419,9 @@
     flashMessage: null,
   };
 
+  // sessionStorage namespaced by location so two preview tabs don't collide.
+  const STORAGE_NS_KEY = STORAGE_KEY + ':' + LOCATION_ID;
+
   function saveState() {
     try {
       const snapshot = {
@@ -272,35 +436,34 @@
         signupId: state.signupId,
         paypageUrl: state.paypageUrl,
       };
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-    } catch (_) { /* sessionStorage may be unavailable */ }
+      sessionStorage.setItem(STORAGE_NS_KEY, JSON.stringify(snapshot));
+    } catch (_) {}
   }
 
-  function loadState() {
+  function loadStoredState() {
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
+      const raw = sessionStorage.getItem(STORAGE_NS_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
-        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_NS_KEY);
         return null;
       }
       return parsed;
     } catch (_) { return null; }
   }
 
-  function clearState() {
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  function clearStoredState() {
+    try { sessionStorage.removeItem(STORAGE_NS_KEY); } catch (_) {}
   }
 
   // -------------------------------------------------------------------------
-  // Attribution capture
+  // Attribution
   // -------------------------------------------------------------------------
   function readCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
   }
-
   function captureAttribution() {
     const params = new URLSearchParams(window.location.search);
     return {
@@ -320,20 +483,17 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-
   function formatPhoneInput(value) {
     const digits = String(value || '').replace(/\D/g, '').slice(0, 10);
     if (digits.length < 4) return digits;
     if (digits.length < 7) return `(${digits.slice(0,3)}) ${digits.slice(3)}`;
     return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
   }
-
   function money(n) {
     const num = Number(n);
     if (Number.isNaN(num)) return '';
     return num % 1 === 0 ? `$${num}` : `$${num.toFixed(2)}`;
   }
-
   function ageFrom(birthday) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday || '');
     if (!m) return null;
@@ -343,7 +503,6 @@
     if (md < 0 || (md === 0 && today.getDate() < Number(m[3]))) age -= 1;
     return age;
   }
-
   function clientValidateContact() {
     const errors = {};
     const c = state.contact;
@@ -359,8 +518,8 @@
     const ec = state.emergencyContact;
     if (!ec.first_name.trim()) errors.ec_first_name = 'Emergency contact first name is required.';
     if (!ec.last_name.trim()) errors.ec_last_name = 'Emergency contact last name is required.';
-    if (ec.phone.replace(/\D/g, '').length !== 10) errors.ec_phone = 'Emergency contact phone must be 10 digits.';
-    if (!state.termsAccepted) errors.terms = 'You must accept the terms to continue.';
+    if (ec.phone.replace(/\D/g, '').length !== 10) errors.ec_phone = 'Phone must be 10 digits.';
+    if (!state.termsAccepted) errors.terms = 'You must accept the terms.';
     return errors;
   }
 
@@ -373,24 +532,20 @@
     try { body = await res.json(); } catch (_) {}
     return { ok: res.ok, status: res.status, body };
   }
-
   async function fetchConfig() {
     const r = await api(`/config/${encodeURIComponent(LOCATION_ID)}`);
     if (!r.ok) throw new Error(r.body?.error || `Failed to load (${r.status})`);
     return r.body;
   }
-
   async function checkEligibility(planId, birthday) {
-    const r = await api('/eligibility', {
+    return api('/eligibility', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan_id: planId, birthday }),
     });
-    return { ok: r.ok, status: r.status, body: r.body };
   }
-
   async function startSignup() {
-    const r = await api('/start', {
+    return api('/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -403,11 +558,9 @@
         attribution: captureAttribution(),
       }),
     });
-    return { ok: r.ok, status: r.status, body: r.body };
   }
-
   async function submitAgreement(transactionId, paymentType) {
-    const r = await api('/submit', {
+    return api('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -416,8 +569,18 @@
         paypage_payment_type: paymentType,
       }),
     });
-    return { ok: r.ok, status: r.status, body: r.body };
   }
+
+  // -------------------------------------------------------------------------
+  // Icons (inline SVG)
+  // -------------------------------------------------------------------------
+  const ICONS = {
+    card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+    bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-left:4px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
+  };
 
   // -------------------------------------------------------------------------
   // Renderer
@@ -432,7 +595,6 @@
     html += '</div>';
     return html;
   }
-
   function renderFlash() {
     if (!state.flashMessage) return '';
     const cls = state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info';
@@ -441,23 +603,22 @@
 
   function renderStep1() {
     const loc = state.config.location;
-    const addr = [loc.address_line1, loc.city && `${loc.city}, ${loc.state || ''} ${loc.zip || ''}`]
-      .filter(Boolean).join(' · ');
+    const cityLine = [loc.city, loc.state, loc.zip].filter(Boolean).join(', ');
     return `
       <div class="wcs-card">
-        <div class="wcs-step-label">Step 1 of 6 — Confirm Location</div>
+        <div class="wcs-step-label">Step 1 of 6 — Confirm your gym</div>
         <h1>${escapeHtml(loc.hero_headline || `Join ${loc.display_name}`)}</h1>
         ${loc.hero_subhead ? `<p>${escapeHtml(loc.hero_subhead)}</p>` : ''}
-        <div style="margin-top: 16px;">
-          <h3>${escapeHtml(loc.display_name)}</h3>
-          ${addr ? `<p>${escapeHtml(addr)}</p>` : ''}
-          ${loc.phone ? `<p>${escapeHtml(loc.phone)}</p>` : ''}
-          ${loc.hours_summary ? `<p><strong>Hours:</strong> ${escapeHtml(loc.hours_summary)}</p>` : ''}
+        <div class="wcs-location-detail">
+          <p style="font-weight: 600;">${escapeHtml(loc.display_name)}</p>
+          ${loc.address_line1 ? `<p class="wcs-muted">${escapeHtml(loc.address_line1)}${cityLine ? ' · ' + escapeHtml(cityLine) : ''}</p>` : ''}
+          ${loc.phone ? `<p class="wcs-muted">${escapeHtml(loc.phone)}</p>` : ''}
+          ${loc.hours_summary ? `<p class="wcs-muted">${escapeHtml(loc.hours_summary)}</p>` : ''}
         </div>
         <div class="wcs-btn-row">
           <span></span>
           <button class="wcs-btn wcs-btn-primary" data-action="advance-to-2">
-            Yes, this is my gym →
+            Yes, this is my gym${ICONS.arrow}
           </button>
         </div>
       </div>
@@ -469,10 +630,16 @@
     return `
       <div class="wcs-plan-card ${selected ? 'is-selected' : ''}" data-action="select-plan" data-plan-id="${plan.id}">
         ${plan.badge ? `<div class="wcs-plan-badge">${escapeHtml(plan.badge)}</div>` : ''}
-        <h3>${escapeHtml(plan.plan_label)}</h3>
-        ${plan.plan_description ? `<p style="margin: 4px 0;">${escapeHtml(plan.plan_description)}</p>` : ''}
-        <div class="wcs-plan-price">${money(plan.today_amount)} today</div>
-        <div class="wcs-plan-monthly">then ${money(plan.monthly_amount)} / month</div>
+        <div class="wcs-plan-row">
+          <div style="min-width:0;">
+            <div class="wcs-plan-name">${escapeHtml(plan.plan_label)}</div>
+            ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
+          </div>
+          <div class="wcs-plan-prices">
+            <div class="wcs-plan-today">${money(plan.today_amount)}</div>
+            <div class="wcs-plan-monthly">then ${money(plan.monthly_amount)}/mo</div>
+          </div>
+        </div>
         ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}
       </div>
     `;
@@ -483,7 +650,7 @@
     if (plans.length === 0) {
       return `
         <div class="wcs-card">
-          <div class="wcs-step-label">Step 2 of 6 — Choose Your Plan</div>
+          <div class="wcs-step-label">Step 2 of 6 — Choose your plan</div>
           <div class="wcs-alert wcs-alert-info">No plans are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>
         </div>
       `;
@@ -491,13 +658,15 @@
     const sel = state.selectedPlan?.id;
     return `
       <div class="wcs-card">
-        <div class="wcs-step-label">Step 2 of 6 — Choose Your Plan</div>
+        <div class="wcs-step-label">Step 2 of 6 — Choose your plan</div>
         <h2>Pick the plan that fits</h2>
-        ${plans.map(p => renderPlanCard(p, sel === p.id)).join('')}
+        <div style="margin-top: 10px;">
+          ${plans.map(p => renderPlanCard(p, sel === p.id)).join('')}
+        </div>
         <div class="wcs-btn-row">
           <button class="wcs-btn wcs-btn-secondary" data-action="back-to-1">← Back</button>
           <button class="wcs-btn wcs-btn-primary" data-action="advance-to-3" ${sel ? '' : 'disabled'}>
-            Continue →
+            Continue${ICONS.arrow}
           </button>
         </div>
       </div>
@@ -524,8 +693,10 @@
     const err = state.inlineErrors;
     return `
       <div class="wcs-card">
-        <div class="wcs-step-label">Step 3 of 6 — Your Info</div>
+        <div class="wcs-step-label">Step 3 of 6 — Your info</div>
         <h2>Tell us about you</h2>
+        <div class="wcs-divider"></div>
+        <div class="wcs-subheading">Contact</div>
         <div class="wcs-row">
           ${fieldHtml({ name: 'first_name', label: 'First name', value: c.first_name, autocomplete: 'given-name', error: err.first_name })}
           ${fieldHtml({ name: 'last_name', label: 'Last name', value: c.last_name, autocomplete: 'family-name', error: err.last_name })}
@@ -546,6 +717,9 @@
             </select>
           </div>
         </div>
+
+        <div class="wcs-divider"></div>
+        <div class="wcs-subheading">Address</div>
         ${fieldHtml({ name: 'address_line1', label: 'Street address', value: c.address_line1, autocomplete: 'address-line1', error: err.address_line1, full: true })}
         ${fieldHtml({ name: 'address_line2', label: 'Apt / suite (optional)', value: c.address_line2, autocomplete: 'address-line2', full: true })}
         <div class="wcs-row-3">
@@ -553,15 +727,19 @@
           ${fieldHtml({ name: 'state', label: 'State', value: c.state, max: 2, autocomplete: 'address-level1', error: err.state })}
           ${fieldHtml({ name: 'zip_code', label: 'ZIP', value: c.zip_code, autocomplete: 'postal-code', error: err.zip_code })}
         </div>
-        <h3 style="margin-top: 20px;">Emergency contact</h3>
+
+        <div class="wcs-divider"></div>
+        <div class="wcs-subheading">Emergency contact</div>
         <div class="wcs-row">
           ${fieldHtml({ name: 'ec_first_name', label: 'First name', value: ec.first_name, error: err.ec_first_name })}
           ${fieldHtml({ name: 'ec_last_name', label: 'Last name', value: ec.last_name, error: err.ec_last_name })}
         </div>
         ${fieldHtml({ name: 'ec_phone', label: 'Phone', type: 'tel', value: ec.phone, placeholder: '(555) 555-5555', error: err.ec_phone, full: true })}
+
+        <div class="wcs-divider"></div>
         <label class="wcs-checkbox">
           <input type="checkbox" name="marketing_email" ${state.marketing.email ? 'checked' : ''}>
-          <span>Send me promotional emails (you can unsubscribe anytime).</span>
+          <span>Send me promotional emails (unsubscribe anytime).</span>
         </label>
         <label class="wcs-checkbox">
           <input type="checkbox" name="marketing_sms" ${state.marketing.sms ? 'checked' : ''}>
@@ -576,9 +754,10 @@
           </span>
         </label>
         ${err.terms ? `<div class="wcs-field-error">${escapeHtml(err.terms)}</div>` : ''}
+
         <div class="wcs-btn-row">
           <button class="wcs-btn wcs-btn-secondary" data-action="back-to-2">← Back</button>
-          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-4">Continue →</button>
+          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-4">Continue${ICONS.arrow}</button>
         </div>
       </div>
     `;
@@ -588,25 +767,25 @@
     const choice = state.paymentMethodChoice;
     return `
       <div class="wcs-card">
-        <div class="wcs-step-label">Step 4 of 6 — Payment Method</div>
+        <div class="wcs-step-label">Step 4 of 6 — Payment method</div>
         <h2>How would you like to pay?</h2>
-        <p>Choose how you'd like to be charged today and for monthly dues.</p>
+        <p>Pick how you'd like to be charged today and for monthly dues.</p>
         <div class="wcs-payment-choice">
           <div class="wcs-payment-card ${choice === 'card' ? 'is-selected' : ''}" data-action="select-pm" data-pm="card">
-            <div class="wcs-icon">💳</div>
-            <h3>Credit / Debit Card</h3>
-            <p style="margin: 4px 0 0;">Visa, Mastercard, AmEx, Discover</p>
+            <div class="wcs-pm-icon">${ICONS.card}</div>
+            <div class="wcs-pm-name">Credit / Debit Card</div>
+            <div class="wcs-pm-sub">Visa, Mastercard, AmEx, Discover</div>
           </div>
           <div class="wcs-payment-card ${choice === 'ach' ? 'is-selected' : ''}" data-action="select-pm" data-pm="ach">
-            <div class="wcs-icon">🏦</div>
-            <h3>Bank Account (ACH)</h3>
-            <p style="margin: 4px 0 0;">Lower fees, draft from checking</p>
+            <div class="wcs-pm-icon">${ICONS.bank}</div>
+            <div class="wcs-pm-name">Bank Account (ACH)</div>
+            <div class="wcs-pm-sub">Lower fees · draft from checking</div>
           </div>
         </div>
         <div class="wcs-btn-row">
           <button class="wcs-btn wcs-btn-secondary" data-action="back-to-3">← Back</button>
           <button class="wcs-btn wcs-btn-primary" data-action="advance-to-5" ${choice ? '' : 'disabled'}>
-            Continue to payment →
+            Continue to payment${ICONS.arrow}
           </button>
         </div>
       </div>
@@ -617,10 +796,10 @@
     if (!state.paypageUrl) {
       return `
         <div class="wcs-card">
-          <div class="wcs-step-label">Step 5 of 6 — Secure Payment</div>
+          <div class="wcs-step-label">Step 5 of 6 — Secure payment</div>
           <div class="wcs-loading-block">
             <span class="wcs-spinner"></span>
-            <p style="margin-top: 12px;">Preparing secure payment…</p>
+            <p>Preparing secure payment…</p>
           </div>
         </div>
       `;
@@ -629,11 +808,11 @@
       'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
     return `
       <div class="wcs-card">
-        <div class="wcs-step-label">Step 5 of 6 — Secure Payment</div>
+        <div class="wcs-step-label">Step 5 of 6 — Secure payment</div>
         <h2>Enter your payment details</h2>
         <iframe class="wcs-paypage-frame" src="${escapeHtml(state.paypageUrl)}" title="Secure payment form"
                 allow="payment" referrerpolicy="strict-origin"></iframe>
-        <div class="wcs-trust" style="margin-top: 12px;">🔒 ${escapeHtml(trust)}</div>
+        <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
         <div class="wcs-btn-row">
           <button class="wcs-btn wcs-btn-secondary" data-action="back-to-4">← Back</button>
           <span></span>
@@ -649,19 +828,18 @@
           <div class="wcs-step-label">Finalizing</div>
           <div class="wcs-loading-block">
             <span class="wcs-spinner"></span>
-            <p style="margin-top: 12px;">Activating your membership…</p>
+            <p>Activating your membership…</p>
           </div>
         </div>
       `;
     }
     if (state.successData?.error) {
+      const phone = state.config.location.phone || state.config.copy?.support_phone || 'us';
       return `
         <div class="wcs-card">
           <div class="wcs-step-label">We hit a snag</div>
-          <div class="wcs-alert wcs-alert-error">
-            ${escapeHtml(state.successData.error)}
-          </div>
-          <p>Please call ${escapeHtml(state.config.location.phone || state.config.copy?.support_phone || 'us')} — we'll get you sorted.</p>
+          <div class="wcs-alert wcs-alert-error">${escapeHtml(state.successData.error)}</div>
+          <p>Please call ${escapeHtml(phone)} — we'll get you sorted.</p>
         </div>
       `;
     }
@@ -671,13 +849,13 @@
       'Your membership is active. Book your free Day One session below to meet your trainer and tour the gym.';
     return `
       <div class="wcs-card wcs-success">
-        <div class="wcs-checkmark">✓</div>
+        <div class="wcs-checkmark">${ICONS.check}</div>
         <h1>${escapeHtml(heading)}</h1>
         <p>${escapeHtml(body)}</p>
-        ${s.member_id ? `<div class="wcs-member-id"><strong>Member #</strong> ${escapeHtml(s.member_id)}</div>` : ''}
-        ${s.plan_label ? `<p style="margin-top: 12px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` — ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
+        ${s.member_id ? `<div class="wcs-member-id">Member # ${escapeHtml(s.member_id)}</div>` : ''}
+        ${s.plan_label ? `<p style="margin-top: 6px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
         ${s.day_one_booking_url
-          ? `<div style="margin-top: 16px;"><a class="wcs-btn wcs-btn-primary" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener">Book your Day One →</a></div>`
+          ? `<div style="margin-top: 14px;"><a class="wcs-btn wcs-btn-primary" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener">Book your Day One${ICONS.arrow}</a></div>`
           : ''}
       </div>
     `;
@@ -691,7 +869,6 @@
     root.innerHTML = renderProgress() + renderFlash() + stepHtml;
     state.flashMessage = null;
     attachListeners();
-    if (state.currentStep === 1) window.scrollTo({ top: root.offsetTop - 20, behavior: 'smooth' });
   }
 
   // -------------------------------------------------------------------------
@@ -706,7 +883,6 @@
       const action = el.dataset.action;
       el.addEventListener('click', (e) => handleAction(action, el, e));
     });
-    // Inputs
     root.querySelectorAll('input, select, textarea').forEach(el => {
       el.addEventListener('input', handleInputChange);
       el.addEventListener('change', handleInputChange);
@@ -744,11 +920,7 @@
     else if (action === 'select-plan') {
       const id = el.dataset.planId;
       const plan = state.config.plans.find(p => p.id === id);
-      if (plan) {
-        state.selectedPlan = plan;
-        render();
-        saveState();
-      }
+      if (plan) { state.selectedPlan = plan; render(); saveState(); }
     } else if (action === 'select-pm') {
       state.paymentMethodChoice = el.dataset.pm;
       render();
@@ -757,14 +929,12 @@
       const errors = clientValidateContact();
       state.inlineErrors = errors;
       if (Object.keys(errors).length) { render(); return; }
-      // Server-side eligibility before payment-method step (spec §7.3).
       try {
         el.disabled = true;
         const elig = await checkEligibility(state.selectedPlan.id, state.contact.birthday);
         if (!elig.ok) {
           flash('error', elig.body?.error || 'Could not verify eligibility. Please try again.');
-          render();
-          return;
+          render(); return;
         }
         if (elig.body.eligible === false) {
           handleIneligible(elig.body);
@@ -775,14 +945,13 @@
         el.disabled = false;
       }
     } else if (action === 'advance-to-5') {
-      // Call /start to create signup row + PayPage URL.
       try {
         el.disabled = true;
         flash('info', 'Setting up secure payment…');
         render();
         const r = await startSignup();
         if (!r.ok) {
-          const msg = r.body?.errors?.join(' ') || r.body?.error || `Failed to start (${r.status})`;
+          const msg = (r.body?.errors || []).join(' ') || r.body?.error || `Failed to start (${r.status})`;
           flash('error', msg);
           state.currentStep = 4;
           render();
@@ -793,7 +962,7 @@
         saveState();
         goto(5);
       } finally {
-        // already re-rendered
+        // re-rendered already
       }
     } else if (action === 'switch-plan') {
       const id = el.dataset.planId;
@@ -802,7 +971,6 @@
         state.selectedPlan = plan;
         state.inlineErrors = {};
         saveState();
-        // Re-run eligibility for the new plan.
         const elig = await checkEligibility(plan.id, state.contact.birthday);
         if (elig.body?.eligible === false) {
           handleIneligible(elig.body);
@@ -817,10 +985,16 @@
   function handleIneligible(elig) {
     const suggested = (elig.suggested_plans || []).map(p => `
       <div class="wcs-plan-card" data-action="switch-plan" data-plan-id="${p.id}">
-        <h3>${escapeHtml(p.plan_label)}</h3>
-        <div class="wcs-plan-price">${money(p.today_amount)} today</div>
-        <div class="wcs-plan-monthly">then ${money(p.monthly_amount)} / month</div>
-        <button class="wcs-btn wcs-btn-primary" style="margin-top: 8px;" data-action="switch-plan" data-plan-id="${p.id}">Switch to this plan →</button>
+        <div class="wcs-plan-row">
+          <div class="wcs-plan-name">${escapeHtml(p.plan_label)}</div>
+          <div class="wcs-plan-prices">
+            <div class="wcs-plan-today">${money(p.today_amount)}</div>
+            <div class="wcs-plan-monthly">then ${money(p.monthly_amount)}/mo</div>
+          </div>
+        </div>
+        <button class="wcs-btn wcs-btn-primary" style="margin-top: 10px;" data-action="switch-plan" data-plan-id="${p.id}">
+          Switch to this plan${ICONS.arrow}
+        </button>
       </div>
     `).join('');
     const phone = state.config.location.phone || state.config.copy?.support_phone || '';
@@ -847,16 +1021,11 @@
   }
 
   // -------------------------------------------------------------------------
-  // PayPage postMessage handling
+  // PayPage postMessage (strict origin check, spec §12.2)
   // -------------------------------------------------------------------------
-  // ABC's PayPage iframe posts the transaction ID when the form submits.
-  // Origin check is non-negotiable (spec §12.2). We accept multiple message
-  // shapes since ABC's exact format is documented loosely — extract whatever
-  // looks like a transaction ID.
   function extractTransaction(data) {
     if (!data) return null;
     if (typeof data === 'string') {
-      // Try parsing as JSON.
       try { data = JSON.parse(data); } catch (_) { return null; }
     }
     if (typeof data !== 'object') return null;
@@ -870,7 +1039,7 @@
   }
 
   window.addEventListener('message', async (event) => {
-    if (event.origin !== PAYPAGE_ORIGIN) return; // strict origin check
+    if (event.origin !== PAYPAGE_ORIGIN) return;
     if (state.currentStep < 5) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;
@@ -880,12 +1049,10 @@
     const r = await submitAgreement(tx.id, tx.paymentType);
     if (r.ok && r.body?.success) {
       state.successData = r.body;
-      clearState();
+      clearStoredState();
       render();
     } else {
-      state.successData = {
-        error: r.body?.error || 'We could not finalize your membership. Our team has been notified.',
-      };
+      state.successData = { error: r.body?.error || 'We could not finalize your membership. Our team has been notified.' };
       render();
     }
   });
@@ -894,7 +1061,7 @@
   // Boot
   // -------------------------------------------------------------------------
   function hydrateFromStorage() {
-    const stored = loadState();
+    const stored = loadStoredState();
     if (!stored) return;
     if (stored.contact) Object.assign(state.contact, stored.contact);
     if (stored.emergencyContact) Object.assign(state.emergencyContact, stored.emergencyContact);
@@ -906,8 +1073,7 @@
     if (stored.selectedPlanId && state.config?.plans) {
       state.selectedPlan = state.config.plans.find(p => p.id === stored.selectedPlanId) || null;
     }
-    // Don't auto-resume into step 5 — payment must be re-initiated since the
-    // PayPage URL token has a short-lived session inside ABC's iframe.
+    // Don't auto-resume into step 5 — PayPage URL is session-bound in ABC.
     state.currentStep = Math.min(stored.currentStep || 1, 4);
   }
 

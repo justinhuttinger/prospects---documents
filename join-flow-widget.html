@@ -7,26 +7,10 @@
 
   Location source order: data-location attribute → ?location= URL param → 'salem'.
 
-  Steps:
-    1. Location confirmation
-    2. Plan selection
-    3. Personal info (+ eligibility check, suggested-plan fallback)
-    4. Payment type
-    5. PayPage iframe (strict postMessage origin check)
-    6. Confirmation (member ID + Day One CTA)
-
-  State lives in sessionStorage so a refresh during the flow doesn't lose
-  progress. Cleared on completion.
-
-  Constraints (spec §12):
-    - No raw card data ever crosses this widget — PayPage iframe handles all
-      payment input and returns only a transaction ID via postMessage.
-    - postMessage origin MUST equal https://apipayservice.abcfinancial.net.
-    - Eligibility is verified server-side too; client check here is UX only.
-
-  Style: deliberately mirrors the wcs-staff-portal aesthetic — slate text,
-  rounded-xl cards, subtle borders, calm density. All CSS scoped to
-  #wcs-join-app so it can't bleed into Elementor's theme.
+  Style: portal-density rewrite. Matches the wcs-staff-portal admin look
+  structurally — single rounded card with header / body / footer bars,
+  compact buttons (px-3 py-1.5 text-xs equivalent), small headings, slate
+  palette. Less landing-page, more admin tool.
 -->
 
 <style>
@@ -35,119 +19,146 @@
     box-sizing: border-box;
   }
   #wcs-join-app {
-    /* Portal-aligned tokens (slate + brand red). */
-    --w-bg: #F8FAFC;            /* page background */
-    --w-surface: #FFFFFF;       /* card background */
-    --w-soft: #F1F5F9;          /* secondary surface (input bg, etc.) */
-    --w-border: #E2E8F0;        /* default border */
-    --w-border-strong: #CBD5E1; /* emphasized border */
-    --w-text: #0F172A;          /* primary text */
-    --w-text-muted: #64748B;    /* secondary text */
-    --w-text-soft: #94A3B8;     /* hint / label text */
+    /* Tokens lifted from the staff portal Tailwind config. */
+    --w-bg: #F8FAFC;            /* slate-50 — page background */
+    --w-bg-soft: #F1F5F9;       /* slate-100 — input bg, soft surface */
+    --w-surface: #FFFFFF;
+    --w-border: #E2E8F0;        /* slate-200 */
+    --w-border-strong: #CBD5E1; /* slate-300 */
+    --w-text: #0F172A;          /* slate-900 */
+    --w-text-muted: #64748B;    /* slate-500 */
+    --w-text-soft: #94A3B8;     /* slate-400 */
     --w-red: #E31837;
     --w-red-dark: #B91426;
     --w-red-tint: #FEF2F2;
     --w-success: #16A34A;
     --w-error: #DC2626;
-    --w-radius-lg: 12px;
-    --w-radius-md: 8px;
+    --w-radius: 12px;
+    --w-radius-sm: 8px;
 
     font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     color: var(--w-text);
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 20px 16px;
+    font-size: 14px;
     line-height: 1.5;
-    background: transparent;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 16px;
+    background: var(--w-bg);
+    border-radius: var(--w-radius);
   }
-  #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3 {
+  #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3, #wcs-join-app h4 {
     color: var(--w-text);
-    margin: 0 0 6px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.005em;
   }
-  #wcs-join-app h1 { font-size: 22px; line-height: 1.25; }
-  #wcs-join-app h2 { font-size: 18px; line-height: 1.3; }
-  #wcs-join-app h3 { font-size: 15px; line-height: 1.35; }
-  #wcs-join-app p { margin: 0 0 10px; color: var(--w-text-muted); font-size: 14px; }
+  #wcs-join-app h1 { font-size: 17px; }
+  #wcs-join-app h2 { font-size: 15px; }
+  #wcs-join-app h3 { font-size: 13px; }
+  #wcs-join-app p { margin: 0; color: var(--w-text-muted); font-size: 13px; }
 
-  /* Progress */
-  #wcs-join-app .wcs-progress {
-    display: flex; gap: 4px; margin-bottom: 14px;
-  }
-  #wcs-join-app .wcs-progress-step {
-    flex: 1; height: 3px; border-radius: 2px;
-    background: var(--w-border);
-    transition: background 0.2s;
-  }
-  #wcs-join-app .wcs-progress-step.is-done,
-  #wcs-join-app .wcs-progress-step.is-current { background: var(--w-red); }
-
-  /* Cards */
-  #wcs-join-app .wcs-card {
+  /* The single panel that holds every step. Header / body / footer bands. */
+  #wcs-join-app .wcs-panel {
     background: var(--w-surface);
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-lg);
-    padding: 18px;
-    margin-bottom: 10px;
+    border-radius: var(--w-radius);
+    overflow: hidden;
   }
-  #wcs-join-app .wcs-step-label {
+  #wcs-join-app .wcs-panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--w-border);
+    background: var(--w-surface);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  #wcs-join-app .wcs-panel-header .wcs-eyebrow {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--w-text-soft);
+    margin-bottom: 2px;
+  }
+  #wcs-join-app .wcs-panel-header h1 { font-size: 16px; }
+  #wcs-join-app .wcs-progress-pill {
     font-size: 11px; font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    background: var(--w-bg-soft);
+    color: var(--w-text-muted);
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+  #wcs-join-app .wcs-panel-progress {
+    height: 2px;
+    background: var(--w-bg-soft);
+    overflow: hidden;
+  }
+  #wcs-join-app .wcs-panel-progress-fill {
+    height: 100%;
+    background: var(--w-red);
+    transition: width 0.25s ease;
+  }
+  #wcs-join-app .wcs-panel-body { padding: 16px; }
+  #wcs-join-app .wcs-panel-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--w-border);
+    background: var(--w-bg);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+
+  /* Sections within the body */
+  #wcs-join-app .wcs-section + .wcs-section { margin-top: 16px; }
+  #wcs-join-app .wcs-section-label {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--w-text-soft);
     margin-bottom: 8px;
   }
 
-  /* Buttons */
+  /* Buttons — portal density */
   #wcs-join-app .wcs-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 9px 16px; border-radius: var(--w-radius-md);
-    font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid transparent;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-    font-family: inherit;
+    padding: 6px 12px; border-radius: var(--w-radius-sm);
+    font-weight: 600; font-size: 12px;
+    cursor: pointer; border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    font-family: inherit; line-height: 1.4;
   }
-  #wcs-join-app .wcs-btn-primary {
-    background: var(--w-red); color: white;
-  }
+  #wcs-join-app .wcs-btn-primary { background: var(--w-red); color: white; }
   #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red-dark); }
   #wcs-join-app .wcs-btn-primary:disabled {
-    background: var(--w-soft); color: var(--w-text-soft); cursor: not-allowed;
+    background: var(--w-bg-soft); color: var(--w-text-soft); cursor: not-allowed;
   }
   #wcs-join-app .wcs-btn-secondary {
-    background: var(--w-surface); color: var(--w-text); border-color: var(--w-border);
+    background: var(--w-surface); color: var(--w-text-muted); border-color: var(--w-border);
   }
-  #wcs-join-app .wcs-btn-secondary:hover { background: var(--w-soft); }
-  #wcs-join-app .wcs-btn-row {
-    display: flex; gap: 8px; justify-content: space-between; align-items: center;
-    margin-top: 14px; flex-wrap: wrap;
+  #wcs-join-app .wcs-btn-secondary:hover { background: var(--w-bg-soft); color: var(--w-text); }
+  #wcs-join-app .wcs-btn-cta {
+    padding: 8px 14px; font-size: 12px;
   }
 
-  /* Form fields */
-  #wcs-join-app .wcs-field { margin-bottom: 10px; }
-  #wcs-join-app .wcs-field label,
-  #wcs-join-app .wcs-checkbox span,
-  #wcs-join-app .wcs-field-label {
-    display: block; font-size: 12px; font-weight: 500;
-    color: var(--w-text-muted); margin-bottom: 4px;
+  /* Form fields — portal density */
+  #wcs-join-app .wcs-field { margin-bottom: 8px; }
+  #wcs-join-app .wcs-field label {
+    display: block; font-size: 11px; font-weight: 500;
+    color: var(--w-text-muted); margin-bottom: 3px;
+    letter-spacing: 0.005em;
   }
   #wcs-join-app .wcs-field input,
   #wcs-join-app .wcs-field select,
   #wcs-join-app .wcs-field textarea {
-    width: 100%; padding: 8px 11px;
+    width: 100%; padding: 6px 10px;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-md);
-    font-size: 14px; font-family: inherit;
-    background: var(--w-surface);
+    border-radius: var(--w-radius-sm);
+    font-size: 13px; font-family: inherit;
+    background: var(--w-bg-soft);
     color: var(--w-text);
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
   }
   #wcs-join-app .wcs-field input:focus,
   #wcs-join-app .wcs-field select:focus,
   #wcs-join-app .wcs-field textarea:focus {
     outline: none;
     border-color: var(--w-red);
-    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.12);
+    background: var(--w-surface);
+    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
   }
   #wcs-join-app .wcs-field input.is-error,
   #wcs-join-app .wcs-field select.is-error {
@@ -157,115 +168,113 @@
     color: var(--w-error); font-size: 11px; margin-top: 3px;
   }
   #wcs-join-app .wcs-row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   }
   #wcs-join-app .wcs-row-3 {
-    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;
+    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px;
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-row, #wcs-join-app .wcs-row-3 { grid-template-columns: 1fr; }
   }
 
-  /* Plan cards */
+  /* Plan cards — flat, portal-style list items */
+  #wcs-join-app .wcs-plan-list {
+    display: flex; flex-direction: column; gap: 6px;
+  }
   #wcs-join-app .wcs-plan-card {
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-lg);
-    padding: 14px;
+    border-radius: var(--w-radius-sm);
+    padding: 10px 12px;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-    margin-bottom: 10px;
-    position: relative;
+    transition: border-color 0.12s, background 0.12s;
     background: var(--w-surface);
+    position: relative;
   }
-  #wcs-join-app .wcs-plan-card:hover { border-color: var(--w-border-strong); }
+  #wcs-join-app .wcs-plan-card:hover { border-color: var(--w-border-strong); background: var(--w-bg); }
   #wcs-join-app .wcs-plan-card.is-selected {
     border-color: var(--w-red);
-    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
+    background: var(--w-red-tint);
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-badge {
-    position: absolute; top: -8px; left: 14px;
-    background: var(--w-red); color: white;
-    padding: 2px 8px; border-radius: 10px;
-    font-size: 10px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.04em;
-  }
-  #wcs-join-app .wcs-plan-card .wcs-plan-row {
+  #wcs-join-app .wcs-plan-row {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-name {
-    font-size: 15px; font-weight: 700; color: var(--w-text);
+  #wcs-join-app .wcs-plan-name {
+    font-size: 13px; font-weight: 600; color: var(--w-text);
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-prices {
-    text-align: right; white-space: nowrap;
+  #wcs-join-app .wcs-plan-badge {
+    display: inline-block;
+    background: var(--w-red); color: white;
+    padding: 1px 6px; border-radius: 10px;
+    font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-left: 6px; vertical-align: middle;
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-today {
-    font-size: 16px; font-weight: 700; color: var(--w-text);
+  #wcs-join-app .wcs-plan-prices {
+    text-align: right; white-space: nowrap; font-size: 11px;
+    color: var(--w-text-muted);
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-monthly {
-    font-size: 12px; color: var(--w-text-muted);
+  #wcs-join-app .wcs-plan-prices b {
+    color: var(--w-text); font-size: 13px; font-weight: 700; margin-right: 2px;
   }
-  #wcs-join-app .wcs-plan-card .wcs-plan-description {
-    font-size: 13px; color: var(--w-text-muted); margin-top: 4px;
+  #wcs-join-app .wcs-plan-description {
+    font-size: 12px; color: var(--w-text-muted); margin-top: 3px;
   }
   #wcs-join-app .wcs-plan-card ul {
-    margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--w-text-muted);
+    margin: 6px 0 0; padding-left: 14px; font-size: 11px; color: var(--w-text-muted);
   }
-  #wcs-join-app .wcs-plan-card ul li { margin-bottom: 2px; }
+  #wcs-join-app .wcs-plan-card ul li { margin-bottom: 1px; }
 
-  /* Payment method choice */
-  #wcs-join-app .wcs-payment-choice {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;
+  /* Payment method choice — same flat list style */
+  #wcs-join-app .wcs-pm-list {
+    display: flex; flex-direction: column; gap: 6px;
   }
-  #wcs-join-app .wcs-payment-card {
+  #wcs-join-app .wcs-pm-card {
+    display: flex; align-items: center; gap: 12px;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-lg);
-    padding: 16px;
+    border-radius: var(--w-radius-sm);
+    padding: 10px 12px;
     cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    transition: border-color 0.12s, background 0.12s;
     background: var(--w-surface);
   }
-  #wcs-join-app .wcs-payment-card:hover { border-color: var(--w-border-strong); }
-  #wcs-join-app .wcs-payment-card.is-selected {
+  #wcs-join-app .wcs-pm-card:hover { border-color: var(--w-border-strong); background: var(--w-bg); }
+  #wcs-join-app .wcs-pm-card.is-selected {
     border-color: var(--w-red);
-    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
+    background: var(--w-red-tint);
   }
-  #wcs-join-app .wcs-payment-card .wcs-pm-icon {
-    width: 32px; height: 32px; border-radius: 8px;
-    background: var(--w-soft);
+  #wcs-join-app .wcs-pm-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--w-bg-soft);
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 8px;
+    flex-shrink: 0;
   }
-  #wcs-join-app .wcs-payment-card .wcs-pm-icon svg {
-    width: 18px; height: 18px; color: var(--w-text-muted);
+  #wcs-join-app .wcs-pm-icon svg {
+    width: 14px; height: 14px; color: var(--w-text-muted);
   }
-  #wcs-join-app .wcs-payment-card.is-selected .wcs-pm-icon { background: var(--w-red-tint); }
-  #wcs-join-app .wcs-payment-card.is-selected .wcs-pm-icon svg { color: var(--w-red); }
-  #wcs-join-app .wcs-payment-card .wcs-pm-name {
-    font-size: 14px; font-weight: 600; color: var(--w-text);
-  }
-  #wcs-join-app .wcs-payment-card .wcs-pm-sub {
-    font-size: 12px; color: var(--w-text-muted); margin-top: 2px;
-  }
-  @media (max-width: 520px) {
-    #wcs-join-app .wcs-payment-choice { grid-template-columns: 1fr; }
-  }
+  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon { background: var(--w-surface); }
+  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon svg { color: var(--w-red); }
+  #wcs-join-app .wcs-pm-text { flex: 1; min-width: 0; }
+  #wcs-join-app .wcs-pm-name { font-size: 13px; font-weight: 600; color: var(--w-text); }
+  #wcs-join-app .wcs-pm-sub { font-size: 11px; color: var(--w-text-muted); margin-top: 1px; }
 
-  /* Checkboxes + alerts */
+  /* Checkboxes */
   #wcs-join-app .wcs-checkbox {
     display: flex; gap: 8px; align-items: flex-start;
-    font-size: 13px; color: var(--w-text-muted); margin: 6px 0;
+    font-size: 12px; color: var(--w-text);
+    margin: 6px 0;
     cursor: pointer;
   }
   #wcs-join-app .wcs-checkbox input {
-    width: 16px; height: 16px; margin-top: 2px; accent-color: var(--w-red);
+    width: 14px; height: 14px; margin-top: 1px;
+    accent-color: var(--w-red);
+    flex-shrink: 0;
   }
-  #wcs-join-app .wcs-checkbox span { display: inline; margin: 0; font-size: 13px; color: var(--w-text); }
   #wcs-join-app .wcs-checkbox a { color: var(--w-red); text-decoration: underline; }
 
+  /* Alerts */
   #wcs-join-app .wcs-alert {
-    padding: 10px 12px; border-radius: var(--w-radius-md);
-    margin-bottom: 10px; font-size: 13px;
+    padding: 8px 10px; border-radius: var(--w-radius-sm);
+    margin-bottom: 10px; font-size: 12px;
     border: 1px solid;
   }
   #wcs-join-app .wcs-alert-error {
@@ -275,49 +284,61 @@
     background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A;
   }
 
-  /* Step 5 */
+  /* Step 1 location info table */
+  #wcs-join-app .wcs-info-table {
+    display: grid; grid-template-columns: 100px 1fr; row-gap: 4px;
+    font-size: 12px;
+  }
+  #wcs-join-app .wcs-info-table dt { color: var(--w-text-muted); }
+  #wcs-join-app .wcs-info-table dd { margin: 0; color: var(--w-text); }
+
+  /* Step 5 — PayPage */
+  #wcs-join-app .wcs-paypage-frame {
+    width: 100%; min-height: 520px;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-sm);
+    background: var(--w-surface);
+    margin-bottom: 8px;
+  }
   #wcs-join-app .wcs-trust {
-    font-size: 12px; color: var(--w-text-muted);
-    padding: 10px 12px;
-    background: var(--w-soft);
-    border-radius: var(--w-radius-md);
+    font-size: 11px; color: var(--w-text-muted);
+    padding: 8px 10px;
+    background: var(--w-bg-soft);
+    border-radius: var(--w-radius-sm);
     display: flex; gap: 8px; align-items: flex-start;
   }
-  #wcs-join-app .wcs-trust svg { flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px; color: var(--w-text-muted); }
-  #wcs-join-app .wcs-paypage-frame {
-    width: 100%; min-height: 540px;
-    border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-md);
-    background: var(--w-surface);
-    margin-bottom: 10px;
+  #wcs-join-app .wcs-trust svg {
+    flex-shrink: 0; width: 12px; height: 12px;
+    margin-top: 2px; color: var(--w-text-muted);
   }
 
-  /* Confirmation */
+  /* Step 6 — confirmation */
   #wcs-join-app .wcs-success {
-    text-align: center; padding: 20px 16px;
+    text-align: center; padding: 8px 4px;
   }
   #wcs-join-app .wcs-checkmark {
-    width: 48px; height: 48px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 50%;
     background: var(--w-success); color: white;
     display: inline-flex; align-items: center; justify-content: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
-  #wcs-join-app .wcs-checkmark svg { width: 24px; height: 24px; }
+  #wcs-join-app .wcs-checkmark svg { width: 20px; height: 20px; }
+  #wcs-join-app .wcs-success h1 { font-size: 18px; margin-bottom: 4px; }
   #wcs-join-app .wcs-member-id {
     display: inline-block;
-    background: var(--w-soft);
-    padding: 8px 14px;
-    border-radius: var(--w-radius-md);
+    background: var(--w-bg-soft);
+    padding: 6px 12px;
+    border-radius: var(--w-radius-sm);
     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--w-text);
-    margin: 10px auto;
+    margin: 10px 0;
     border: 1px solid var(--w-border);
   }
 
   /* Loading + spinner */
   #wcs-join-app .wcs-spinner {
-    display: inline-block; width: 18px; height: 18px;
+    display: inline-block; width: 14px; height: 14px;
     border: 2px solid var(--w-border);
     border-top-color: var(--w-red);
     border-radius: 50%;
@@ -326,41 +347,18 @@
   }
   @keyframes wcs-spin { to { transform: rotate(360deg); } }
   #wcs-join-app .wcs-loading-block {
-    text-align: center; padding: 32px 16px;
-    color: var(--w-text-muted); font-size: 13px;
+    text-align: center; padding: 28px 12px;
+    color: var(--w-text-muted); font-size: 12px;
   }
-  #wcs-join-app .wcs-loading-block p { margin-top: 8px; }
-
-  /* Location summary block (step 1) */
-  #wcs-join-app .wcs-location-detail {
-    background: var(--w-soft);
-    border-radius: var(--w-radius-md);
-    padding: 12px 14px;
-    margin-top: 12px;
-  }
-  #wcs-join-app .wcs-location-detail p {
-    margin: 0; font-size: 13px;
-    color: var(--w-text);
-  }
-  #wcs-join-app .wcs-location-detail .wcs-muted {
-    color: var(--w-text-muted); font-size: 12px; margin-top: 4px;
-  }
-
-  /* Section divider for personal info */
-  #wcs-join-app .wcs-divider {
-    height: 1px; background: var(--w-border); margin: 18px 0 12px;
-  }
-  #wcs-join-app .wcs-subheading {
-    font-size: 11px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--w-text-soft); margin-bottom: 8px;
-  }
+  #wcs-join-app .wcs-loading-block p { margin-top: 6px; }
 </style>
 
 <div id="wcs-join-app" data-location="salem">
-  <div class="wcs-loading-block">
-    <span class="wcs-spinner"></span>
-    <p>Loading…</p>
+  <div class="wcs-panel">
+    <div class="wcs-panel-body wcs-loading-block">
+      <span class="wcs-spinner"></span>
+      <p>Loading…</p>
+    </div>
   </div>
 </div>
 
@@ -368,18 +366,15 @@
 (function () {
   'use strict';
 
-  // -------------------------------------------------------------------------
-  // Config
-  // -------------------------------------------------------------------------
   const API_BASE = (window.WCS_JOIN_API_BASE || 'https://prospects-documents.onrender.com') + '/api/online-join';
   const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
   const STORAGE_KEY = 'wcs_join_state_v1';
-  const STORAGE_TTL_MS = 60 * 60 * 1000; // 1h — abandoned flows expire
+  const STORAGE_TTL_MS = 60 * 60 * 1000;
+  const TOTAL_STEPS = 6;
 
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
 
-  // Location source order: data-location → ?location= URL param → 'salem'
   function resolveLocation() {
     const fromAttr = (root.dataset.location || '').trim().toLowerCase();
     if (fromAttr) return fromAttr;
@@ -392,13 +387,12 @@
   }
   const LOCATION_ID = resolveLocation();
   if (!LOCATION_ID) {
-    root.innerHTML = '<div class="wcs-alert wcs-alert-error">Configuration error: location is required.</div>';
+    root.innerHTML = '<div class="wcs-panel"><div class="wcs-panel-body"><div class="wcs-alert wcs-alert-error">Configuration error: location is required.</div></div></div>';
     return;
   }
+  const STORAGE_NS_KEY = STORAGE_KEY + ':' + LOCATION_ID;
 
-  // -------------------------------------------------------------------------
-  // State
-  // -------------------------------------------------------------------------
+  // ----- State ------------------------------------------------------------
   const state = {
     currentStep: 1,
     config: null,
@@ -419,12 +413,9 @@
     flashMessage: null,
   };
 
-  // sessionStorage namespaced by location so two preview tabs don't collide.
-  const STORAGE_NS_KEY = STORAGE_KEY + ':' + LOCATION_ID;
-
   function saveState() {
     try {
-      const snapshot = {
+      sessionStorage.setItem(STORAGE_NS_KEY, JSON.stringify({
         ts: Date.now(),
         currentStep: state.currentStep,
         selectedPlanId: state.selectedPlan?.id || null,
@@ -435,11 +426,9 @@
         paymentMethodChoice: state.paymentMethodChoice,
         signupId: state.signupId,
         paypageUrl: state.paypageUrl,
-      };
-      sessionStorage.setItem(STORAGE_NS_KEY, JSON.stringify(snapshot));
+      }));
     } catch (_) {}
   }
-
   function loadStoredState() {
     try {
       const raw = sessionStorage.getItem(STORAGE_NS_KEY);
@@ -452,14 +441,11 @@
       return parsed;
     } catch (_) { return null; }
   }
-
   function clearStoredState() {
     try { sessionStorage.removeItem(STORAGE_NS_KEY); } catch (_) {}
   }
 
-  // -------------------------------------------------------------------------
-  // Attribution
-  // -------------------------------------------------------------------------
+  // ----- Helpers ----------------------------------------------------------
   function readCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? decodeURIComponent(match[2]) : null;
@@ -474,10 +460,6 @@
       utm_campaign: params.get('utm_campaign') || null,
     };
   }
-
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
   function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -494,38 +476,27 @@
     if (Number.isNaN(num)) return '';
     return num % 1 === 0 ? `$${num}` : `$${num.toFixed(2)}`;
   }
-  function ageFrom(birthday) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday || '');
-    if (!m) return null;
-    const today = new Date();
-    let age = today.getFullYear() - Number(m[1]);
-    const md = (today.getMonth() + 1) - Number(m[2]);
-    if (md < 0 || (md === 0 && today.getDate() < Number(m[3]))) age -= 1;
-    return age;
-  }
   function clientValidateContact() {
     const errors = {};
     const c = state.contact;
-    if (!c.first_name.trim()) errors.first_name = 'First name is required.';
-    if (!c.last_name.trim()) errors.last_name = 'Last name is required.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) errors.email = 'A valid email is required.';
-    if (c.cell_phone.replace(/\D/g, '').length !== 10) errors.cell_phone = 'A 10-digit phone is required.';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) errors.birthday = 'Birthday is required.';
-    if (!c.address_line1.trim()) errors.address_line1 = 'Street address is required.';
-    if (!c.city.trim()) errors.city = 'City is required.';
-    if (!/^[A-Za-z]{2}$/.test(c.state || '')) errors.state = 'State must be a 2-letter code.';
-    if (!/^\d{5}(-\d{4})?$/.test(c.zip_code)) errors.zip_code = 'ZIP code is required.';
+    if (!c.first_name.trim()) errors.first_name = 'Required.';
+    if (!c.last_name.trim()) errors.last_name = 'Required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) errors.email = 'Invalid email.';
+    if (c.cell_phone.replace(/\D/g, '').length !== 10) errors.cell_phone = '10 digits.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) errors.birthday = 'Required.';
+    if (!c.address_line1.trim()) errors.address_line1 = 'Required.';
+    if (!c.city.trim()) errors.city = 'Required.';
+    if (!/^[A-Za-z]{2}$/.test(c.state || '')) errors.state = '2 letters.';
+    if (!/^\d{5}(-\d{4})?$/.test(c.zip_code)) errors.zip_code = 'Required.';
     const ec = state.emergencyContact;
-    if (!ec.first_name.trim()) errors.ec_first_name = 'Emergency contact first name is required.';
-    if (!ec.last_name.trim()) errors.ec_last_name = 'Emergency contact last name is required.';
-    if (ec.phone.replace(/\D/g, '').length !== 10) errors.ec_phone = 'Phone must be 10 digits.';
-    if (!state.termsAccepted) errors.terms = 'You must accept the terms.';
+    if (!ec.first_name.trim()) errors.ec_first_name = 'Required.';
+    if (!ec.last_name.trim()) errors.ec_last_name = 'Required.';
+    if (ec.phone.replace(/\D/g, '').length !== 10) errors.ec_phone = '10 digits.';
+    if (!state.termsAccepted) errors.terms = 'Required.';
     return errors;
   }
 
-  // -------------------------------------------------------------------------
-  // API
-  // -------------------------------------------------------------------------
+  // ----- API --------------------------------------------------------------
   async function api(path, opts) {
     const res = await fetch(API_BASE + path, opts);
     let body = null;
@@ -571,73 +542,82 @@
     });
   }
 
-  // -------------------------------------------------------------------------
-  // Icons (inline SVG)
-  // -------------------------------------------------------------------------
+  // ----- Inline SVG icons -------------------------------------------------
   const ICONS = {
     card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
     bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-left:4px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
   };
 
-  // -------------------------------------------------------------------------
-  // Renderer
-  // -------------------------------------------------------------------------
-  function renderProgress() {
-    const total = 6;
-    let html = '<div class="wcs-progress">';
-    for (let i = 1; i <= total; i++) {
-      const cls = i < state.currentStep ? 'is-done' : (i === state.currentStep ? 'is-current' : '');
-      html += `<div class="wcs-progress-step ${cls}"></div>`;
-    }
-    html += '</div>';
-    return html;
-  }
-  function renderFlash() {
-    if (!state.flashMessage) return '';
-    const cls = state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info';
-    return `<div class="wcs-alert ${cls}">${escapeHtml(state.flashMessage.text)}</div>`;
+  // ----- Step title / eyebrow lookups ------------------------------------
+  function stepMeta() {
+    return {
+      1: { eyebrow: 'Confirm your gym',   title: state.config.location.hero_headline || `Join ${state.config.location.display_name}` },
+      2: { eyebrow: 'Choose your plan',   title: 'Pick the plan that fits' },
+      3: { eyebrow: 'Your info',          title: 'Tell us about you' },
+      4: { eyebrow: 'Payment method',     title: 'How would you like to pay?' },
+      5: { eyebrow: 'Secure payment',     title: 'Enter your payment details' },
+      6: { eyebrow: 'Confirmation',       title: 'Welcome!' },
+    }[state.currentStep] || { eyebrow: '', title: '' };
   }
 
-  function renderStep1() {
-    const loc = state.config.location;
-    const cityLine = [loc.city, loc.state, loc.zip].filter(Boolean).join(', ');
+  function renderPanelHeader() {
+    if (state.currentStep === 6 && state.successData && !state.successData.pending && !state.successData.error) {
+      // Confirmation has its own celebratory header inside body
+      return `
+        <div class="wcs-panel-header">
+          <div>
+            <div class="wcs-eyebrow">Online Join</div>
+            <h1>Membership confirmed</h1>
+          </div>
+          <span class="wcs-progress-pill">${escapeHtml(state.config.location.display_name)}</span>
+        </div>
+        <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: 100%;"></div></div>
+      `;
+    }
+    const meta = stepMeta();
     return `
-      <div class="wcs-card">
-        <div class="wcs-step-label">Step 1 of 6 — Confirm your gym</div>
-        <h1>${escapeHtml(loc.hero_headline || `Join ${loc.display_name}`)}</h1>
-        ${loc.hero_subhead ? `<p>${escapeHtml(loc.hero_subhead)}</p>` : ''}
-        <div class="wcs-location-detail">
-          <p style="font-weight: 600;">${escapeHtml(loc.display_name)}</p>
-          ${loc.address_line1 ? `<p class="wcs-muted">${escapeHtml(loc.address_line1)}${cityLine ? ' · ' + escapeHtml(cityLine) : ''}</p>` : ''}
-          ${loc.phone ? `<p class="wcs-muted">${escapeHtml(loc.phone)}</p>` : ''}
-          ${loc.hours_summary ? `<p class="wcs-muted">${escapeHtml(loc.hours_summary)}</p>` : ''}
+      <div class="wcs-panel-header">
+        <div>
+          <div class="wcs-eyebrow">${escapeHtml(meta.eyebrow)}</div>
+          <h1>${escapeHtml(meta.title)}</h1>
         </div>
-        <div class="wcs-btn-row">
-          <span></span>
-          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-2">
-            Yes, this is my gym${ICONS.arrow}
-          </button>
-        </div>
+        <span class="wcs-progress-pill">Step ${state.currentStep} / ${TOTAL_STEPS}</span>
+      </div>
+      <div class="wcs-panel-progress">
+        <div class="wcs-panel-progress-fill" style="width: ${(state.currentStep / TOTAL_STEPS) * 100}%;"></div>
       </div>
     `;
   }
 
-  function renderPlanCard(plan, selected) {
+  // ----- Step bodies ------------------------------------------------------
+  function renderStep1() {
+    const loc = state.config.location;
+    return `
+      ${loc.hero_subhead ? `<p style="margin-bottom: 12px;">${escapeHtml(loc.hero_subhead)}</p>` : ''}
+      <dl class="wcs-info-table">
+        <dt>Location</dt><dd><strong>${escapeHtml(loc.display_name)}</strong></dd>
+        ${loc.address_line1 ? `<dt>Address</dt><dd>${escapeHtml(loc.address_line1)}${loc.city ? `, ${escapeHtml([loc.city, loc.state, loc.zip].filter(Boolean).join(' '))}` : ''}</dd>` : ''}
+        ${loc.phone ? `<dt>Phone</dt><dd>${escapeHtml(loc.phone)}</dd>` : ''}
+        ${loc.hours_summary ? `<dt>Hours</dt><dd>${escapeHtml(loc.hours_summary)}</dd>` : ''}
+      </dl>
+    `;
+  }
+
+  function renderPlanItem(plan, selected) {
     const featuresHtml = (plan.features || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
     return `
       <div class="wcs-plan-card ${selected ? 'is-selected' : ''}" data-action="select-plan" data-plan-id="${plan.id}">
-        ${plan.badge ? `<div class="wcs-plan-badge">${escapeHtml(plan.badge)}</div>` : ''}
         <div class="wcs-plan-row">
           <div style="min-width:0;">
-            <div class="wcs-plan-name">${escapeHtml(plan.plan_label)}</div>
+            <span class="wcs-plan-name">${escapeHtml(plan.plan_label)}</span>
+            ${plan.badge ? `<span class="wcs-plan-badge">${escapeHtml(plan.badge)}</span>` : ''}
             ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
           </div>
           <div class="wcs-plan-prices">
-            <div class="wcs-plan-today">${money(plan.today_amount)}</div>
-            <div class="wcs-plan-monthly">then ${money(plan.monthly_amount)}/mo</div>
+            <div><b>${money(plan.today_amount)}</b>today</div>
+            <div>then <b style="font-size:11px;">${money(plan.monthly_amount)}</b>/mo</div>
           </div>
         </div>
         ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}
@@ -648,29 +628,10 @@
   function renderStep2() {
     const plans = state.config.plans || [];
     if (plans.length === 0) {
-      return `
-        <div class="wcs-card">
-          <div class="wcs-step-label">Step 2 of 6 — Choose your plan</div>
-          <div class="wcs-alert wcs-alert-info">No plans are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>
-        </div>
-      `;
+      return `<div class="wcs-alert wcs-alert-info">No plans are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>`;
     }
     const sel = state.selectedPlan?.id;
-    return `
-      <div class="wcs-card">
-        <div class="wcs-step-label">Step 2 of 6 — Choose your plan</div>
-        <h2>Pick the plan that fits</h2>
-        <div style="margin-top: 10px;">
-          ${plans.map(p => renderPlanCard(p, sel === p.id)).join('')}
-        </div>
-        <div class="wcs-btn-row">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-1">← Back</button>
-          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-3" ${sel ? '' : 'disabled'}>
-            Continue${ICONS.arrow}
-          </button>
-        </div>
-      </div>
-    `;
+    return `<div class="wcs-plan-list">${plans.map(p => renderPlanItem(p, sel === p.id)).join('')}</div>`;
   }
 
   function fieldHtml({ name, label, type = 'text', value, placeholder, autocomplete, max, error, full }) {
@@ -692,11 +653,8 @@
     const ec = state.emergencyContact;
     const err = state.inlineErrors;
     return `
-      <div class="wcs-card">
-        <div class="wcs-step-label">Step 3 of 6 — Your info</div>
-        <h2>Tell us about you</h2>
-        <div class="wcs-divider"></div>
-        <div class="wcs-subheading">Contact</div>
+      <div class="wcs-section">
+        <div class="wcs-section-label">Contact</div>
         <div class="wcs-row">
           ${fieldHtml({ name: 'first_name', label: 'First name', value: c.first_name, autocomplete: 'given-name', error: err.first_name })}
           ${fieldHtml({ name: 'last_name', label: 'Last name', value: c.last_name, autocomplete: 'family-name', error: err.last_name })}
@@ -717,33 +675,33 @@
             </select>
           </div>
         </div>
-
-        <div class="wcs-divider"></div>
-        <div class="wcs-subheading">Address</div>
-        ${fieldHtml({ name: 'address_line1', label: 'Street address', value: c.address_line1, autocomplete: 'address-line1', error: err.address_line1, full: true })}
+      </div>
+      <div class="wcs-section">
+        <div class="wcs-section-label">Address</div>
+        ${fieldHtml({ name: 'address_line1', label: 'Street', value: c.address_line1, autocomplete: 'address-line1', error: err.address_line1, full: true })}
         ${fieldHtml({ name: 'address_line2', label: 'Apt / suite (optional)', value: c.address_line2, autocomplete: 'address-line2', full: true })}
         <div class="wcs-row-3">
           ${fieldHtml({ name: 'city', label: 'City', value: c.city, autocomplete: 'address-level2', error: err.city })}
           ${fieldHtml({ name: 'state', label: 'State', value: c.state, max: 2, autocomplete: 'address-level1', error: err.state })}
           ${fieldHtml({ name: 'zip_code', label: 'ZIP', value: c.zip_code, autocomplete: 'postal-code', error: err.zip_code })}
         </div>
-
-        <div class="wcs-divider"></div>
-        <div class="wcs-subheading">Emergency contact</div>
+      </div>
+      <div class="wcs-section">
+        <div class="wcs-section-label">Emergency contact</div>
         <div class="wcs-row">
           ${fieldHtml({ name: 'ec_first_name', label: 'First name', value: ec.first_name, error: err.ec_first_name })}
           ${fieldHtml({ name: 'ec_last_name', label: 'Last name', value: ec.last_name, error: err.ec_last_name })}
         </div>
         ${fieldHtml({ name: 'ec_phone', label: 'Phone', type: 'tel', value: ec.phone, placeholder: '(555) 555-5555', error: err.ec_phone, full: true })}
-
-        <div class="wcs-divider"></div>
+      </div>
+      <div class="wcs-section">
         <label class="wcs-checkbox">
           <input type="checkbox" name="marketing_email" ${state.marketing.email ? 'checked' : ''}>
-          <span>Send me promotional emails (unsubscribe anytime).</span>
+          <span>Send me promotional emails.</span>
         </label>
         <label class="wcs-checkbox">
           <input type="checkbox" name="marketing_sms" ${state.marketing.sms ? 'checked' : ''}>
-          <span>Send me promotional texts (msg &amp; data rates may apply).</span>
+          <span>Send me promotional texts.</span>
         </label>
         <label class="wcs-checkbox">
           <input type="checkbox" name="terms" ${state.termsAccepted ? 'checked' : ''}>
@@ -754,11 +712,6 @@
           </span>
         </label>
         ${err.terms ? `<div class="wcs-field-error">${escapeHtml(err.terms)}</div>` : ''}
-
-        <div class="wcs-btn-row">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-2">← Back</button>
-          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-4">Continue${ICONS.arrow}</button>
-        </div>
       </div>
     `;
   }
@@ -766,27 +719,21 @@
   function renderStep4() {
     const choice = state.paymentMethodChoice;
     return `
-      <div class="wcs-card">
-        <div class="wcs-step-label">Step 4 of 6 — Payment method</div>
-        <h2>How would you like to pay?</h2>
-        <p>Pick how you'd like to be charged today and for monthly dues.</p>
-        <div class="wcs-payment-choice">
-          <div class="wcs-payment-card ${choice === 'card' ? 'is-selected' : ''}" data-action="select-pm" data-pm="card">
-            <div class="wcs-pm-icon">${ICONS.card}</div>
+      <p style="margin-bottom: 12px;">Pick how you'd like to be charged today and for monthly dues.</p>
+      <div class="wcs-pm-list">
+        <div class="wcs-pm-card ${choice === 'card' ? 'is-selected' : ''}" data-action="select-pm" data-pm="card">
+          <div class="wcs-pm-icon">${ICONS.card}</div>
+          <div class="wcs-pm-text">
             <div class="wcs-pm-name">Credit / Debit Card</div>
             <div class="wcs-pm-sub">Visa, Mastercard, AmEx, Discover</div>
           </div>
-          <div class="wcs-payment-card ${choice === 'ach' ? 'is-selected' : ''}" data-action="select-pm" data-pm="ach">
-            <div class="wcs-pm-icon">${ICONS.bank}</div>
+        </div>
+        <div class="wcs-pm-card ${choice === 'ach' ? 'is-selected' : ''}" data-action="select-pm" data-pm="ach">
+          <div class="wcs-pm-icon">${ICONS.bank}</div>
+          <div class="wcs-pm-text">
             <div class="wcs-pm-name">Bank Account (ACH)</div>
             <div class="wcs-pm-sub">Lower fees · draft from checking</div>
           </div>
-        </div>
-        <div class="wcs-btn-row">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-3">← Back</button>
-          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-5" ${choice ? '' : 'disabled'}>
-            Continue to payment${ICONS.arrow}
-          </button>
         </div>
       </div>
     `;
@@ -795,52 +742,34 @@
   function renderStep5() {
     if (!state.paypageUrl) {
       return `
-        <div class="wcs-card">
-          <div class="wcs-step-label">Step 5 of 6 — Secure payment</div>
-          <div class="wcs-loading-block">
-            <span class="wcs-spinner"></span>
-            <p>Preparing secure payment…</p>
-          </div>
+        <div class="wcs-loading-block">
+          <span class="wcs-spinner"></span>
+          <p>Preparing secure payment…</p>
         </div>
       `;
     }
     const trust = state.config.copy?.step_5_trust_text ||
       'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
     return `
-      <div class="wcs-card">
-        <div class="wcs-step-label">Step 5 of 6 — Secure payment</div>
-        <h2>Enter your payment details</h2>
-        <iframe class="wcs-paypage-frame" src="${escapeHtml(state.paypageUrl)}" title="Secure payment form"
-                allow="payment" referrerpolicy="strict-origin"></iframe>
-        <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
-        <div class="wcs-btn-row">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-4">← Back</button>
-          <span></span>
-        </div>
-      </div>
+      <iframe class="wcs-paypage-frame" src="${escapeHtml(state.paypageUrl)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe>
+      <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
     `;
   }
 
   function renderStep6() {
     if (state.successData?.pending) {
       return `
-        <div class="wcs-card">
-          <div class="wcs-step-label">Finalizing</div>
-          <div class="wcs-loading-block">
-            <span class="wcs-spinner"></span>
-            <p>Activating your membership…</p>
-          </div>
+        <div class="wcs-loading-block">
+          <span class="wcs-spinner"></span>
+          <p>Activating your membership…</p>
         </div>
       `;
     }
     if (state.successData?.error) {
       const phone = state.config.location.phone || state.config.copy?.support_phone || 'us';
       return `
-        <div class="wcs-card">
-          <div class="wcs-step-label">We hit a snag</div>
-          <div class="wcs-alert wcs-alert-error">${escapeHtml(state.successData.error)}</div>
-          <p>Please call ${escapeHtml(phone)} — we'll get you sorted.</p>
-        </div>
+        <div class="wcs-alert wcs-alert-error">${escapeHtml(state.successData.error)}</div>
+        <p>Please call ${escapeHtml(phone)} — we'll get you sorted.</p>
       `;
     }
     const s = state.successData;
@@ -848,47 +777,74 @@
     const body = state.config.copy?.step_6_welcome_body ||
       'Your membership is active. Book your free Day One session below to meet your trainer and tour the gym.';
     return `
-      <div class="wcs-card wcs-success">
+      <div class="wcs-success">
         <div class="wcs-checkmark">${ICONS.check}</div>
         <h1>${escapeHtml(heading)}</h1>
-        <p>${escapeHtml(body)}</p>
+        <p style="margin-top: 4px;">${escapeHtml(body)}</p>
         ${s.member_id ? `<div class="wcs-member-id">Member # ${escapeHtml(s.member_id)}</div>` : ''}
-        ${s.plan_label ? `<p style="margin-top: 6px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
+        ${s.plan_label ? `<p style="margin: 4px 0 8px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
         ${s.day_one_booking_url
-          ? `<div style="margin-top: 14px;"><a class="wcs-btn wcs-btn-primary" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener">Book your Day One${ICONS.arrow}</a></div>`
+          ? `<a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 4px;">Book your Day One →</a>`
           : ''}
       </div>
     `;
   }
 
+  function renderFooter() {
+    const onConfirm = state.currentStep === 6 && state.successData && !state.successData.pending;
+    if (onConfirm) {
+      return ''; // no footer on success/error confirm view
+    }
+
+    let primary = '';
+    let primaryDisabled = false;
+    switch (state.currentStep) {
+      case 1: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-2">Yes, this is my gym →</button>`; break;
+      case 2: primaryDisabled = !state.selectedPlan?.id;
+              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-3" ${primaryDisabled ? 'disabled' : ''}>Continue →</button>`; break;
+      case 3: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-4">Continue →</button>`; break;
+      case 4: primaryDisabled = !state.paymentMethodChoice;
+              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
+      case 5: primary = ''; break;
+    }
+
+    const secondary = state.currentStep > 1 && state.currentStep < 6
+      ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
+      : `<span></span>`;
+
+    return `<div class="wcs-panel-footer">${secondary}${primary || '<span></span>'}</div>`;
+  }
+
   function render() {
-    const stepHtml = ({
-      1: renderStep1, 2: renderStep2, 3: renderStep3,
-      4: renderStep4, 5: renderStep5, 6: renderStep6,
-    }[state.currentStep] || renderStep1)();
-    root.innerHTML = renderProgress() + renderFlash() + stepHtml;
+    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6 }[state.currentStep]) || renderStep1;
+    const flash = state.flashMessage
+      ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
+      : '';
+    root.innerHTML = `
+      <div class="wcs-panel">
+        ${renderPanelHeader()}
+        <div class="wcs-panel-body">
+          ${flash}
+          ${bodyFn()}
+        </div>
+        ${renderFooter()}
+      </div>
+    `;
     state.flashMessage = null;
     attachListeners();
   }
 
-  // -------------------------------------------------------------------------
-  // Events
-  // -------------------------------------------------------------------------
-  function flash(type, text) {
-    state.flashMessage = { type, text };
-  }
-
+  // ----- Events -----------------------------------------------------------
+  function flash(type, text) { state.flashMessage = { type, text }; }
   function attachListeners() {
     root.querySelectorAll('[data-action]').forEach(el => {
-      const action = el.dataset.action;
-      el.addEventListener('click', (e) => handleAction(action, el, e));
+      el.addEventListener('click', (e) => handleAction(el.dataset.action, el, e));
     });
     root.querySelectorAll('input, select, textarea').forEach(el => {
       el.addEventListener('input', handleInputChange);
       el.addEventListener('change', handleInputChange);
     });
   }
-
   function handleInputChange(e) {
     const el = e.target;
     const name = el.name;
@@ -909,103 +865,96 @@
     }
     saveState();
   }
-
   async function handleAction(action, el) {
-    if (action === 'advance-to-2') goto(2);
-    else if (action === 'advance-to-3') goto(3);
-    else if (action === 'back-to-1') goto(1);
-    else if (action === 'back-to-2') goto(2);
-    else if (action === 'back-to-3') goto(3);
-    else if (action === 'back-to-4') goto(4);
-    else if (action === 'select-plan') {
-      const id = el.dataset.planId;
-      const plan = state.config.plans.find(p => p.id === id);
+    if (action === 'back') return goto(state.currentStep - 1);
+    if (action === 'advance-to-2') return goto(2);
+    if (action === 'advance-to-3') return goto(3);
+    if (action === 'select-plan') {
+      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
       if (plan) { state.selectedPlan = plan; render(); saveState(); }
-    } else if (action === 'select-pm') {
+      return;
+    }
+    if (action === 'select-pm') {
       state.paymentMethodChoice = el.dataset.pm;
-      render();
-      saveState();
-    } else if (action === 'advance-to-4') {
+      render(); saveState();
+      return;
+    }
+    if (action === 'advance-to-4') {
       const errors = clientValidateContact();
       state.inlineErrors = errors;
       if (Object.keys(errors).length) { render(); return; }
       try {
         el.disabled = true;
         const elig = await checkEligibility(state.selectedPlan.id, state.contact.birthday);
-        if (!elig.ok) {
-          flash('error', elig.body?.error || 'Could not verify eligibility. Please try again.');
-          render(); return;
-        }
-        if (elig.body.eligible === false) {
-          handleIneligible(elig.body);
-          return;
-        }
+        if (!elig.ok) { flash('error', elig.body?.error || 'Eligibility check failed.'); render(); return; }
+        if (elig.body.eligible === false) { handleIneligible(elig.body); return; }
         goto(4);
-      } finally {
-        el.disabled = false;
-      }
-    } else if (action === 'advance-to-5') {
+      } finally { el.disabled = false; }
+      return;
+    }
+    if (action === 'advance-to-5') {
       try {
         el.disabled = true;
         flash('info', 'Setting up secure payment…');
         render();
         const r = await startSignup();
         if (!r.ok) {
-          const msg = (r.body?.errors || []).join(' ') || r.body?.error || `Failed to start (${r.status})`;
-          flash('error', msg);
+          flash('error', (r.body?.errors || []).join(' ') || r.body?.error || `Failed to start (${r.status})`);
           state.currentStep = 4;
-          render();
-          return;
+          render(); return;
         }
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
         saveState();
         goto(5);
-      } finally {
-        // re-rendered already
-      }
-    } else if (action === 'switch-plan') {
-      const id = el.dataset.planId;
-      const plan = state.config.plans.find(p => p.id === id);
+      } finally {}
+      return;
+    }
+    if (action === 'switch-plan') {
+      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
       if (plan) {
         state.selectedPlan = plan;
         state.inlineErrors = {};
         saveState();
         const elig = await checkEligibility(plan.id, state.contact.birthday);
-        if (elig.body?.eligible === false) {
-          handleIneligible(elig.body);
-        } else {
-          flash('info', `Switched to ${plan.plan_label}.`);
-          render();
-        }
+        if (elig.body?.eligible === false) handleIneligible(elig.body);
+        else { flash('info', `Switched to ${plan.plan_label}.`); render(); }
       }
+      return;
     }
+    if (action === 'back-to-plans') return goto(2);
   }
 
   function handleIneligible(elig) {
     const suggested = (elig.suggested_plans || []).map(p => `
       <div class="wcs-plan-card" data-action="switch-plan" data-plan-id="${p.id}">
         <div class="wcs-plan-row">
-          <div class="wcs-plan-name">${escapeHtml(p.plan_label)}</div>
+          <span class="wcs-plan-name">${escapeHtml(p.plan_label)}</span>
           <div class="wcs-plan-prices">
-            <div class="wcs-plan-today">${money(p.today_amount)}</div>
-            <div class="wcs-plan-monthly">then ${money(p.monthly_amount)}/mo</div>
+            <div><b>${money(p.today_amount)}</b>today</div>
+            <div>then <b style="font-size:11px;">${money(p.monthly_amount)}</b>/mo</div>
           </div>
         </div>
-        <button class="wcs-btn wcs-btn-primary" style="margin-top: 10px;" data-action="switch-plan" data-plan-id="${p.id}">
-          Switch to this plan${ICONS.arrow}
-        </button>
       </div>
     `).join('');
     const phone = state.config.location.phone || state.config.copy?.support_phone || '';
-    root.innerHTML = renderProgress() + `
-      <div class="wcs-card">
-        <div class="wcs-step-label">A different plan fits you</div>
-        <h2>This plan isn't quite right</h2>
-        <div class="wcs-alert wcs-alert-info">${escapeHtml(elig.ineligible_message || 'Please choose a different plan.')}</div>
-        ${suggested || `<p>No other plans fit online. Please call ${escapeHtml(phone || 'us')} and we'll find the right fit.</p>`}
-        <div class="wcs-btn-row">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-2">← Back to plans</button>
+    root.innerHTML = `
+      <div class="wcs-panel">
+        <div class="wcs-panel-header">
+          <div>
+            <div class="wcs-eyebrow">Different plan needed</div>
+            <h1>This plan isn't quite right</h1>
+          </div>
+          <span class="wcs-progress-pill">Step 3 / ${TOTAL_STEPS}</span>
+        </div>
+        <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: ${(3/TOTAL_STEPS)*100}%;"></div></div>
+        <div class="wcs-panel-body">
+          <div class="wcs-alert wcs-alert-info">${escapeHtml(elig.ineligible_message || 'Please choose a different plan.')}</div>
+          ${suggested ? `<div class="wcs-section-label">Plans that fit you</div><div class="wcs-plan-list">${suggested}</div>`
+                      : `<p>No other plans fit online. Please call ${escapeHtml(phone || 'us')} and we'll find the right fit.</p>`}
+        </div>
+        <div class="wcs-panel-footer">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-plans">← Back to plans</button>
           <span></span>
         </div>
       </div>
@@ -1014,20 +963,17 @@
   }
 
   function goto(step) {
+    if (step < 1) step = 1;
     state.currentStep = step;
     state.inlineErrors = {};
     saveState();
     render();
   }
 
-  // -------------------------------------------------------------------------
-  // PayPage postMessage (strict origin check, spec §12.2)
-  // -------------------------------------------------------------------------
+  // ----- PayPage postMessage ----------------------------------------------
   function extractTransaction(data) {
     if (!data) return null;
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data); } catch (_) { return null; }
-    }
+    if (typeof data === 'string') { try { data = JSON.parse(data); } catch (_) { return null; } }
     if (typeof data !== 'object') return null;
     const id = data.transactionId || data.payPageTransactionId
       || data.tokenId || data.token || data.paypageTransactionId || null;
@@ -1037,7 +983,6 @@
     else if (type.includes('card') || type.includes('credit')) paymentType = 'Credit Card';
     return id ? { id, paymentType } : null;
   }
-
   window.addEventListener('message', async (event) => {
     if (event.origin !== PAYPAGE_ORIGIN) return;
     if (state.currentStep < 5) return;
@@ -1057,9 +1002,7 @@
     }
   });
 
-  // -------------------------------------------------------------------------
-  // Boot
-  // -------------------------------------------------------------------------
+  // ----- Boot --------------------------------------------------------------
   function hydrateFromStorage() {
     const stored = loadStoredState();
     if (!stored) return;
@@ -1073,7 +1016,6 @@
     if (stored.selectedPlanId && state.config?.plans) {
       state.selectedPlan = state.config.plans.find(p => p.id === stored.selectedPlanId) || null;
     }
-    // Don't auto-resume into step 5 — PayPage URL is session-bound in ABC.
     state.currentStep = Math.min(stored.currentStep || 1, 4);
   }
 
@@ -1083,13 +1025,9 @@
       hydrateFromStorage();
       render();
     } catch (err) {
-      root.innerHTML = `<div class="wcs-alert wcs-alert-error">
-        We can't load the join flow right now (${escapeHtml(err.message)}).
-        Please try again, or call us.
-      </div>`;
+      root.innerHTML = `<div class="wcs-panel"><div class="wcs-panel-body"><div class="wcs-alert wcs-alert-error">Can't load the join flow right now (${escapeHtml(err.message)}). Please try again, or call us.</div></div></div>`;
     }
   }
-
   init();
 })();
 </script>

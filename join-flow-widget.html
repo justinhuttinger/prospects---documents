@@ -1,0 +1,929 @@
+<!--
+  WCS Online Join — single-file widget for Elementor Custom HTML.
+
+  Usage:
+    <div id="wcs-join-app" data-location="salem"></div>
+    <!-- paste this entire file below -->
+
+  Steps:
+    1. Location confirmation
+    2. Plan selection
+    3. Personal info (+ eligibility check, suggested-plan fallback)
+    4. Payment type
+    5. PayPage iframe (strict postMessage origin check)
+    6. Confirmation (member ID + Day One CTA)
+
+  State lives in sessionStorage so a refresh during the flow doesn't lose
+  progress. Cleared on completion.
+
+  Constraints (spec §12):
+    - No raw card data ever crosses this widget — PayPage iframe handles all
+      payment input and returns only a transaction ID via postMessage.
+    - postMessage origin MUST equal https://apipayservice.abcfinancial.net.
+    - Eligibility is verified server-side too; client check here is UX only.
+-->
+
+<style>
+  /* Scope everything to #wcs-join-app so Elementor/site styles don't leak in. */
+  #wcs-join-app, #wcs-join-app *, #wcs-join-app *::before, #wcs-join-app *::after {
+    box-sizing: border-box;
+  }
+  #wcs-join-app {
+    --wcs-red: #E31837;
+    --wcs-red-dark: #B91426;
+    --wcs-ink: #0F172A;
+    --wcs-ink-soft: #475569;
+    --wcs-line: #E2E8F0;
+    --wcs-bg: #F8FAFC;
+    --wcs-card: #FFFFFF;
+    --wcs-success: #16A34A;
+    --wcs-error: #DC2626;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    color: var(--wcs-ink);
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    line-height: 1.5;
+  }
+  #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3 {
+    font-family: 'Bebas Neue', 'Oswald', Impact, sans-serif;
+    letter-spacing: 0.02em;
+    color: var(--wcs-ink);
+    margin: 0 0 8px;
+  }
+  #wcs-join-app h1 { font-size: 32px; }
+  #wcs-join-app h2 { font-size: 24px; }
+  #wcs-join-app h3 { font-size: 18px; }
+  #wcs-join-app p { margin: 0 0 12px; color: var(--wcs-ink-soft); }
+  #wcs-join-app .wcs-progress {
+    display: flex; gap: 4px; margin-bottom: 20px;
+  }
+  #wcs-join-app .wcs-progress-step {
+    flex: 1; height: 4px; border-radius: 2px; background: var(--wcs-line);
+    transition: background 0.2s;
+  }
+  #wcs-join-app .wcs-progress-step.is-done { background: var(--wcs-red); }
+  #wcs-join-app .wcs-progress-step.is-current { background: var(--wcs-red); }
+  #wcs-join-app .wcs-card {
+    background: var(--wcs-card); border: 1px solid var(--wcs-line);
+    border-radius: 12px; padding: 20px; margin-bottom: 12px;
+  }
+  #wcs-join-app .wcs-step-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--wcs-red); margin-bottom: 8px;
+  }
+  #wcs-join-app .wcs-btn {
+    display: inline-block; padding: 12px 24px; border-radius: 8px;
+    font-weight: 700; font-size: 15px; cursor: pointer; border: none;
+    transition: background 0.15s, transform 0.05s;
+    font-family: inherit;
+  }
+  #wcs-join-app .wcs-btn-primary {
+    background: var(--wcs-red); color: white;
+  }
+  #wcs-join-app .wcs-btn-primary:hover { background: var(--wcs-red-dark); }
+  #wcs-join-app .wcs-btn-primary:disabled { background: #94A3B8; cursor: not-allowed; }
+  #wcs-join-app .wcs-btn-secondary {
+    background: white; color: var(--wcs-ink); border: 1px solid var(--wcs-line);
+  }
+  #wcs-join-app .wcs-btn-secondary:hover { background: var(--wcs-bg); }
+  #wcs-join-app .wcs-btn-row {
+    display: flex; gap: 8px; justify-content: space-between; align-items: center;
+    margin-top: 16px; flex-wrap: wrap;
+  }
+  #wcs-join-app .wcs-field { margin-bottom: 12px; }
+  #wcs-join-app .wcs-field label {
+    display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;
+    color: var(--wcs-ink);
+  }
+  #wcs-join-app .wcs-field input,
+  #wcs-join-app .wcs-field select,
+  #wcs-join-app .wcs-field textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--wcs-line);
+    border-radius: 8px; font-size: 15px; font-family: inherit;
+    background: white; color: var(--wcs-ink);
+  }
+  #wcs-join-app .wcs-field input:focus,
+  #wcs-join-app .wcs-field select:focus {
+    outline: 2px solid var(--wcs-red); outline-offset: -1px;
+  }
+  #wcs-join-app .wcs-field input.is-error,
+  #wcs-join-app .wcs-field select.is-error {
+    border-color: var(--wcs-error);
+  }
+  #wcs-join-app .wcs-field-error {
+    color: var(--wcs-error); font-size: 12px; margin-top: 4px;
+  }
+  #wcs-join-app .wcs-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  #wcs-join-app .wcs-row-3 {
+    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+  }
+  @media (max-width: 520px) {
+    #wcs-join-app .wcs-row, #wcs-join-app .wcs-row-3 { grid-template-columns: 1fr; }
+  }
+  #wcs-join-app .wcs-plan-card {
+    border: 2px solid var(--wcs-line); border-radius: 12px; padding: 16px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 12px; position: relative;
+  }
+  #wcs-join-app .wcs-plan-card:hover { border-color: #94A3B8; }
+  #wcs-join-app .wcs-plan-card.is-selected {
+    border-color: var(--wcs-red); background: #FEF2F2;
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-badge {
+    position: absolute; top: -10px; right: 12px; background: var(--wcs-red);
+    color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-price {
+    font-size: 20px; font-weight: 800; color: var(--wcs-red); margin: 4px 0;
+  }
+  #wcs-join-app .wcs-plan-card .wcs-plan-monthly {
+    font-size: 13px; color: var(--wcs-ink-soft);
+  }
+  #wcs-join-app .wcs-plan-card ul {
+    margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--wcs-ink-soft);
+  }
+  #wcs-join-app .wcs-payment-choice {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;
+  }
+  #wcs-join-app .wcs-payment-card {
+    border: 2px solid var(--wcs-line); border-radius: 12px; padding: 20px;
+    cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s;
+  }
+  #wcs-join-app .wcs-payment-card:hover { border-color: #94A3B8; }
+  #wcs-join-app .wcs-payment-card.is-selected {
+    border-color: var(--wcs-red); background: #FEF2F2;
+  }
+  #wcs-join-app .wcs-payment-card .wcs-icon { font-size: 32px; margin-bottom: 8px; }
+  @media (max-width: 520px) {
+    #wcs-join-app .wcs-payment-choice { grid-template-columns: 1fr; }
+  }
+  #wcs-join-app .wcs-checkbox {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 14px;
+    color: var(--wcs-ink-soft); margin: 8px 0;
+  }
+  #wcs-join-app .wcs-checkbox input { width: 18px; height: 18px; margin-top: 2px; }
+  #wcs-join-app .wcs-alert {
+    padding: 12px 16px; border-radius: 8px; margin-bottom: 12px;
+    font-size: 14px;
+  }
+  #wcs-join-app .wcs-alert-error {
+    background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B;
+  }
+  #wcs-join-app .wcs-alert-info {
+    background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A8A;
+  }
+  #wcs-join-app .wcs-trust {
+    font-size: 13px; color: var(--wcs-ink-soft); text-align: center;
+    padding: 12px; background: var(--wcs-bg); border-radius: 8px;
+  }
+  #wcs-join-app .wcs-paypage-frame {
+    width: 100%; min-height: 540px; border: 1px solid var(--wcs-line);
+    border-radius: 8px; background: white;
+  }
+  #wcs-join-app .wcs-success {
+    text-align: center; padding: 24px 16px;
+  }
+  #wcs-join-app .wcs-success .wcs-checkmark {
+    width: 56px; height: 56px; border-radius: 28px; background: var(--wcs-success);
+    color: white; font-size: 32px; line-height: 56px;
+    display: inline-block; margin-bottom: 12px;
+  }
+  #wcs-join-app .wcs-member-id {
+    background: var(--wcs-bg); padding: 12px; border-radius: 8px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 14px; margin: 12px auto; display: inline-block;
+  }
+  #wcs-join-app .wcs-spinner {
+    display: inline-block; width: 20px; height: 20px; border: 3px solid #E2E8F0;
+    border-top-color: var(--wcs-red); border-radius: 50%;
+    animation: wcs-spin 0.7s linear infinite; vertical-align: middle;
+  }
+  @keyframes wcs-spin { to { transform: rotate(360deg); } }
+  #wcs-join-app .wcs-loading-block {
+    text-align: center; padding: 40px 16px; color: var(--wcs-ink-soft);
+  }
+</style>
+
+<div id="wcs-join-app" data-location="salem">
+  <div class="wcs-loading-block">
+    <span class="wcs-spinner"></span>
+    <p style="margin-top: 12px;">Loading…</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // -------------------------------------------------------------------------
+  // Config
+  // -------------------------------------------------------------------------
+  const API_BASE = (window.WCS_JOIN_API_BASE || 'https://prospects-documents.onrender.com') + '/api/online-join';
+  const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
+  const STORAGE_KEY = 'wcs_join_state_v1';
+  const STORAGE_TTL_MS = 60 * 60 * 1000; // 1 hour — abandoned flows expire
+
+  const root = document.getElementById('wcs-join-app');
+  if (!root) return;
+  const LOCATION_ID = (root.dataset.location || '').trim().toLowerCase();
+  if (!LOCATION_ID) {
+    root.innerHTML = '<div class="wcs-alert wcs-alert-error">Configuration error: data-location attribute is required.</div>';
+    return;
+  }
+
+  // -------------------------------------------------------------------------
+  // State
+  // -------------------------------------------------------------------------
+  const state = {
+    currentStep: 1,
+    config: null,
+    selectedPlan: null,
+    contact: {
+      first_name: '', last_name: '', email: '', cell_phone: '',
+      birthday: '', gender: '',
+      address_line1: '', address_line2: '', city: '', state: 'OR', zip_code: '',
+    },
+    emergencyContact: { first_name: '', last_name: '', phone: '' },
+    marketing: { email: true, sms: true },
+    termsAccepted: false,
+    paymentMethodChoice: null,
+    signupId: null,
+    paypageUrl: null,
+    successData: null,
+    inlineErrors: {},
+    flashMessage: null,
+  };
+
+  function saveState() {
+    try {
+      const snapshot = {
+        ts: Date.now(),
+        currentStep: state.currentStep,
+        selectedPlanId: state.selectedPlan?.id || null,
+        contact: state.contact,
+        emergencyContact: state.emergencyContact,
+        marketing: state.marketing,
+        termsAccepted: state.termsAccepted,
+        paymentMethodChoice: state.paymentMethodChoice,
+        signupId: state.signupId,
+        paypageUrl: state.paypageUrl,
+      };
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    } catch (_) { /* sessionStorage may be unavailable */ }
+  }
+
+  function loadState() {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  function clearState() {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
+
+  // -------------------------------------------------------------------------
+  // Attribution capture
+  // -------------------------------------------------------------------------
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  }
+
+  function captureAttribution() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      fbclid: params.get('fbclid') || readCookie('_fbc') || null,
+      fbp: readCookie('_fbp') || null,
+      utm_source: params.get('utm_source') || null,
+      utm_medium: params.get('utm_medium') || null,
+      utm_campaign: params.get('utm_campaign') || null,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function formatPhoneInput(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 10);
+    if (digits.length < 4) return digits;
+    if (digits.length < 7) return `(${digits.slice(0,3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  }
+
+  function money(n) {
+    const num = Number(n);
+    if (Number.isNaN(num)) return '';
+    return num % 1 === 0 ? `$${num}` : `$${num.toFixed(2)}`;
+  }
+
+  function ageFrom(birthday) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday || '');
+    if (!m) return null;
+    const today = new Date();
+    let age = today.getFullYear() - Number(m[1]);
+    const md = (today.getMonth() + 1) - Number(m[2]);
+    if (md < 0 || (md === 0 && today.getDate() < Number(m[3]))) age -= 1;
+    return age;
+  }
+
+  function clientValidateContact() {
+    const errors = {};
+    const c = state.contact;
+    if (!c.first_name.trim()) errors.first_name = 'First name is required.';
+    if (!c.last_name.trim()) errors.last_name = 'Last name is required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) errors.email = 'A valid email is required.';
+    if (c.cell_phone.replace(/\D/g, '').length !== 10) errors.cell_phone = 'A 10-digit phone is required.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) errors.birthday = 'Birthday is required.';
+    if (!c.address_line1.trim()) errors.address_line1 = 'Street address is required.';
+    if (!c.city.trim()) errors.city = 'City is required.';
+    if (!/^[A-Za-z]{2}$/.test(c.state || '')) errors.state = 'State must be a 2-letter code.';
+    if (!/^\d{5}(-\d{4})?$/.test(c.zip_code)) errors.zip_code = 'ZIP code is required.';
+    const ec = state.emergencyContact;
+    if (!ec.first_name.trim()) errors.ec_first_name = 'Emergency contact first name is required.';
+    if (!ec.last_name.trim()) errors.ec_last_name = 'Emergency contact last name is required.';
+    if (ec.phone.replace(/\D/g, '').length !== 10) errors.ec_phone = 'Emergency contact phone must be 10 digits.';
+    if (!state.termsAccepted) errors.terms = 'You must accept the terms to continue.';
+    return errors;
+  }
+
+  // -------------------------------------------------------------------------
+  // API
+  // -------------------------------------------------------------------------
+  async function api(path, opts) {
+    const res = await fetch(API_BASE + path, opts);
+    let body = null;
+    try { body = await res.json(); } catch (_) {}
+    return { ok: res.ok, status: res.status, body };
+  }
+
+  async function fetchConfig() {
+    const r = await api(`/config/${encodeURIComponent(LOCATION_ID)}`);
+    if (!r.ok) throw new Error(r.body?.error || `Failed to load (${r.status})`);
+    return r.body;
+  }
+
+  async function checkEligibility(planId, birthday) {
+    const r = await api('/eligibility', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId, birthday }),
+    });
+    return { ok: r.ok, status: r.status, body: r.body };
+  }
+
+  async function startSignup() {
+    const r = await api('/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wcs_location_id: LOCATION_ID,
+        plan_id: state.selectedPlan.id,
+        payment_method_choice: state.paymentMethodChoice,
+        contact: state.contact,
+        emergency_contact: state.emergencyContact,
+        marketing: state.marketing,
+        attribution: captureAttribution(),
+      }),
+    });
+    return { ok: r.ok, status: r.status, body: r.body };
+  }
+
+  async function submitAgreement(transactionId, paymentType) {
+    const r = await api('/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        signup_id: state.signupId,
+        paypage_transaction_id: transactionId,
+        paypage_payment_type: paymentType,
+      }),
+    });
+    return { ok: r.ok, status: r.status, body: r.body };
+  }
+
+  // -------------------------------------------------------------------------
+  // Renderer
+  // -------------------------------------------------------------------------
+  function renderProgress() {
+    const total = 6;
+    let html = '<div class="wcs-progress">';
+    for (let i = 1; i <= total; i++) {
+      const cls = i < state.currentStep ? 'is-done' : (i === state.currentStep ? 'is-current' : '');
+      html += `<div class="wcs-progress-step ${cls}"></div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderFlash() {
+    if (!state.flashMessage) return '';
+    const cls = state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info';
+    return `<div class="wcs-alert ${cls}">${escapeHtml(state.flashMessage.text)}</div>`;
+  }
+
+  function renderStep1() {
+    const loc = state.config.location;
+    const addr = [loc.address_line1, loc.city && `${loc.city}, ${loc.state || ''} ${loc.zip || ''}`]
+      .filter(Boolean).join(' · ');
+    return `
+      <div class="wcs-card">
+        <div class="wcs-step-label">Step 1 of 6 — Confirm Location</div>
+        <h1>${escapeHtml(loc.hero_headline || `Join ${loc.display_name}`)}</h1>
+        ${loc.hero_subhead ? `<p>${escapeHtml(loc.hero_subhead)}</p>` : ''}
+        <div style="margin-top: 16px;">
+          <h3>${escapeHtml(loc.display_name)}</h3>
+          ${addr ? `<p>${escapeHtml(addr)}</p>` : ''}
+          ${loc.phone ? `<p>${escapeHtml(loc.phone)}</p>` : ''}
+          ${loc.hours_summary ? `<p><strong>Hours:</strong> ${escapeHtml(loc.hours_summary)}</p>` : ''}
+        </div>
+        <div class="wcs-btn-row">
+          <span></span>
+          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-2">
+            Yes, this is my gym →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderPlanCard(plan, selected) {
+    const featuresHtml = (plan.features || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+    return `
+      <div class="wcs-plan-card ${selected ? 'is-selected' : ''}" data-action="select-plan" data-plan-id="${plan.id}">
+        ${plan.badge ? `<div class="wcs-plan-badge">${escapeHtml(plan.badge)}</div>` : ''}
+        <h3>${escapeHtml(plan.plan_label)}</h3>
+        ${plan.plan_description ? `<p style="margin: 4px 0;">${escapeHtml(plan.plan_description)}</p>` : ''}
+        <div class="wcs-plan-price">${money(plan.today_amount)} today</div>
+        <div class="wcs-plan-monthly">then ${money(plan.monthly_amount)} / month</div>
+        ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}
+      </div>
+    `;
+  }
+
+  function renderStep2() {
+    const plans = state.config.plans || [];
+    if (plans.length === 0) {
+      return `
+        <div class="wcs-card">
+          <div class="wcs-step-label">Step 2 of 6 — Choose Your Plan</div>
+          <div class="wcs-alert wcs-alert-info">No plans are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>
+        </div>
+      `;
+    }
+    const sel = state.selectedPlan?.id;
+    return `
+      <div class="wcs-card">
+        <div class="wcs-step-label">Step 2 of 6 — Choose Your Plan</div>
+        <h2>Pick the plan that fits</h2>
+        ${plans.map(p => renderPlanCard(p, sel === p.id)).join('')}
+        <div class="wcs-btn-row">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-1">← Back</button>
+          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-3" ${sel ? '' : 'disabled'}>
+            Continue →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function fieldHtml({ name, label, type = 'text', value, placeholder, autocomplete, max, error, full }) {
+    return `
+      <div class="wcs-field" ${full ? 'style="grid-column: 1 / -1;"' : ''}>
+        <label for="wcs-f-${name}">${escapeHtml(label)}</label>
+        <input id="wcs-f-${name}" type="${type}" name="${name}" value="${escapeHtml(value || '')}"
+               ${placeholder ? `placeholder="${escapeHtml(placeholder)}"` : ''}
+               ${autocomplete ? `autocomplete="${autocomplete}"` : ''}
+               ${max ? `maxlength="${max}"` : ''}
+               class="${error ? 'is-error' : ''}" />
+        ${error ? `<div class="wcs-field-error">${escapeHtml(error)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderStep3() {
+    const c = state.contact;
+    const ec = state.emergencyContact;
+    const err = state.inlineErrors;
+    return `
+      <div class="wcs-card">
+        <div class="wcs-step-label">Step 3 of 6 — Your Info</div>
+        <h2>Tell us about you</h2>
+        <div class="wcs-row">
+          ${fieldHtml({ name: 'first_name', label: 'First name', value: c.first_name, autocomplete: 'given-name', error: err.first_name })}
+          ${fieldHtml({ name: 'last_name', label: 'Last name', value: c.last_name, autocomplete: 'family-name', error: err.last_name })}
+        </div>
+        <div class="wcs-row">
+          ${fieldHtml({ name: 'email', label: 'Email', type: 'email', value: c.email, autocomplete: 'email', error: err.email })}
+          ${fieldHtml({ name: 'cell_phone', label: 'Cell phone', type: 'tel', value: c.cell_phone, autocomplete: 'tel-national', placeholder: '(555) 555-5555', error: err.cell_phone })}
+        </div>
+        <div class="wcs-row">
+          ${fieldHtml({ name: 'birthday', label: 'Date of birth', type: 'date', value: c.birthday, autocomplete: 'bday', error: err.birthday })}
+          <div class="wcs-field">
+            <label for="wcs-f-gender">Gender</label>
+            <select id="wcs-f-gender" name="gender">
+              <option value="" ${!c.gender ? 'selected' : ''}>—</option>
+              <option value="M" ${c.gender === 'M' ? 'selected' : ''}>Male</option>
+              <option value="F" ${c.gender === 'F' ? 'selected' : ''}>Female</option>
+              <option value="O" ${c.gender === 'O' ? 'selected' : ''}>Other / prefer not to say</option>
+            </select>
+          </div>
+        </div>
+        ${fieldHtml({ name: 'address_line1', label: 'Street address', value: c.address_line1, autocomplete: 'address-line1', error: err.address_line1, full: true })}
+        ${fieldHtml({ name: 'address_line2', label: 'Apt / suite (optional)', value: c.address_line2, autocomplete: 'address-line2', full: true })}
+        <div class="wcs-row-3">
+          ${fieldHtml({ name: 'city', label: 'City', value: c.city, autocomplete: 'address-level2', error: err.city })}
+          ${fieldHtml({ name: 'state', label: 'State', value: c.state, max: 2, autocomplete: 'address-level1', error: err.state })}
+          ${fieldHtml({ name: 'zip_code', label: 'ZIP', value: c.zip_code, autocomplete: 'postal-code', error: err.zip_code })}
+        </div>
+        <h3 style="margin-top: 20px;">Emergency contact</h3>
+        <div class="wcs-row">
+          ${fieldHtml({ name: 'ec_first_name', label: 'First name', value: ec.first_name, error: err.ec_first_name })}
+          ${fieldHtml({ name: 'ec_last_name', label: 'Last name', value: ec.last_name, error: err.ec_last_name })}
+        </div>
+        ${fieldHtml({ name: 'ec_phone', label: 'Phone', type: 'tel', value: ec.phone, placeholder: '(555) 555-5555', error: err.ec_phone, full: true })}
+        <label class="wcs-checkbox">
+          <input type="checkbox" name="marketing_email" ${state.marketing.email ? 'checked' : ''}>
+          <span>Send me promotional emails (you can unsubscribe anytime).</span>
+        </label>
+        <label class="wcs-checkbox">
+          <input type="checkbox" name="marketing_sms" ${state.marketing.sms ? 'checked' : ''}>
+          <span>Send me promotional texts (msg &amp; data rates may apply).</span>
+        </label>
+        <label class="wcs-checkbox">
+          <input type="checkbox" name="terms" ${state.termsAccepted ? 'checked' : ''}>
+          <span>I agree to the
+            ${state.config.copy?.terms_url ? `<a href="${escapeHtml(state.config.copy.terms_url)}" target="_blank" rel="noopener">terms</a>` : 'terms'}
+            and
+            ${state.config.copy?.privacy_url ? `<a href="${escapeHtml(state.config.copy.privacy_url)}" target="_blank" rel="noopener">privacy policy</a>` : 'privacy policy'}.
+          </span>
+        </label>
+        ${err.terms ? `<div class="wcs-field-error">${escapeHtml(err.terms)}</div>` : ''}
+        <div class="wcs-btn-row">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-2">← Back</button>
+          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-4">Continue →</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep4() {
+    const choice = state.paymentMethodChoice;
+    return `
+      <div class="wcs-card">
+        <div class="wcs-step-label">Step 4 of 6 — Payment Method</div>
+        <h2>How would you like to pay?</h2>
+        <p>Choose how you'd like to be charged today and for monthly dues.</p>
+        <div class="wcs-payment-choice">
+          <div class="wcs-payment-card ${choice === 'card' ? 'is-selected' : ''}" data-action="select-pm" data-pm="card">
+            <div class="wcs-icon">💳</div>
+            <h3>Credit / Debit Card</h3>
+            <p style="margin: 4px 0 0;">Visa, Mastercard, AmEx, Discover</p>
+          </div>
+          <div class="wcs-payment-card ${choice === 'ach' ? 'is-selected' : ''}" data-action="select-pm" data-pm="ach">
+            <div class="wcs-icon">🏦</div>
+            <h3>Bank Account (ACH)</h3>
+            <p style="margin: 4px 0 0;">Lower fees, draft from checking</p>
+          </div>
+        </div>
+        <div class="wcs-btn-row">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-3">← Back</button>
+          <button class="wcs-btn wcs-btn-primary" data-action="advance-to-5" ${choice ? '' : 'disabled'}>
+            Continue to payment →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep5() {
+    if (!state.paypageUrl) {
+      return `
+        <div class="wcs-card">
+          <div class="wcs-step-label">Step 5 of 6 — Secure Payment</div>
+          <div class="wcs-loading-block">
+            <span class="wcs-spinner"></span>
+            <p style="margin-top: 12px;">Preparing secure payment…</p>
+          </div>
+        </div>
+      `;
+    }
+    const trust = state.config.copy?.step_5_trust_text ||
+      'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
+    return `
+      <div class="wcs-card">
+        <div class="wcs-step-label">Step 5 of 6 — Secure Payment</div>
+        <h2>Enter your payment details</h2>
+        <iframe class="wcs-paypage-frame" src="${escapeHtml(state.paypageUrl)}" title="Secure payment form"
+                allow="payment" referrerpolicy="strict-origin"></iframe>
+        <div class="wcs-trust" style="margin-top: 12px;">🔒 ${escapeHtml(trust)}</div>
+        <div class="wcs-btn-row">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-4">← Back</button>
+          <span></span>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep6() {
+    if (state.successData?.pending) {
+      return `
+        <div class="wcs-card">
+          <div class="wcs-step-label">Finalizing</div>
+          <div class="wcs-loading-block">
+            <span class="wcs-spinner"></span>
+            <p style="margin-top: 12px;">Activating your membership…</p>
+          </div>
+        </div>
+      `;
+    }
+    if (state.successData?.error) {
+      return `
+        <div class="wcs-card">
+          <div class="wcs-step-label">We hit a snag</div>
+          <div class="wcs-alert wcs-alert-error">
+            ${escapeHtml(state.successData.error)}
+          </div>
+          <p>Please call ${escapeHtml(state.config.location.phone || state.config.copy?.support_phone || 'us')} — we'll get you sorted.</p>
+        </div>
+      `;
+    }
+    const s = state.successData;
+    const heading = state.config.copy?.step_6_welcome_heading || 'Welcome to the WCS family!';
+    const body = state.config.copy?.step_6_welcome_body ||
+      'Your membership is active. Book your free Day One session below to meet your trainer and tour the gym.';
+    return `
+      <div class="wcs-card wcs-success">
+        <div class="wcs-checkmark">✓</div>
+        <h1>${escapeHtml(heading)}</h1>
+        <p>${escapeHtml(body)}</p>
+        ${s.member_id ? `<div class="wcs-member-id"><strong>Member #</strong> ${escapeHtml(s.member_id)}</div>` : ''}
+        ${s.plan_label ? `<p style="margin-top: 12px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` — ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
+        ${s.day_one_booking_url
+          ? `<div style="margin-top: 16px;"><a class="wcs-btn wcs-btn-primary" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener">Book your Day One →</a></div>`
+          : ''}
+      </div>
+    `;
+  }
+
+  function render() {
+    const stepHtml = ({
+      1: renderStep1, 2: renderStep2, 3: renderStep3,
+      4: renderStep4, 5: renderStep5, 6: renderStep6,
+    }[state.currentStep] || renderStep1)();
+    root.innerHTML = renderProgress() + renderFlash() + stepHtml;
+    state.flashMessage = null;
+    attachListeners();
+    if (state.currentStep === 1) window.scrollTo({ top: root.offsetTop - 20, behavior: 'smooth' });
+  }
+
+  // -------------------------------------------------------------------------
+  // Events
+  // -------------------------------------------------------------------------
+  function flash(type, text) {
+    state.flashMessage = { type, text };
+  }
+
+  function attachListeners() {
+    root.querySelectorAll('[data-action]').forEach(el => {
+      const action = el.dataset.action;
+      el.addEventListener('click', (e) => handleAction(action, el, e));
+    });
+    // Inputs
+    root.querySelectorAll('input, select, textarea').forEach(el => {
+      el.addEventListener('input', handleInputChange);
+      el.addEventListener('change', handleInputChange);
+    });
+  }
+
+  function handleInputChange(e) {
+    const el = e.target;
+    const name = el.name;
+    if (!name) return;
+    if (el.type === 'checkbox') {
+      if (name === 'marketing_email') state.marketing.email = el.checked;
+      else if (name === 'marketing_sms') state.marketing.sms = el.checked;
+      else if (name === 'terms') state.termsAccepted = el.checked;
+    } else if (name.startsWith('ec_')) {
+      const k = name.slice(3);
+      state.emergencyContact[k] = name.endsWith('phone') ? formatPhoneInput(el.value) : el.value;
+      if (name.endsWith('phone')) el.value = state.emergencyContact[k];
+    } else if (name in state.contact) {
+      let v = el.value;
+      if (name === 'cell_phone') { v = formatPhoneInput(v); el.value = v; }
+      if (name === 'state') v = v.toUpperCase().slice(0, 2);
+      state.contact[name] = v;
+    }
+    saveState();
+  }
+
+  async function handleAction(action, el) {
+    if (action === 'advance-to-2') goto(2);
+    else if (action === 'advance-to-3') goto(3);
+    else if (action === 'back-to-1') goto(1);
+    else if (action === 'back-to-2') goto(2);
+    else if (action === 'back-to-3') goto(3);
+    else if (action === 'back-to-4') goto(4);
+    else if (action === 'select-plan') {
+      const id = el.dataset.planId;
+      const plan = state.config.plans.find(p => p.id === id);
+      if (plan) {
+        state.selectedPlan = plan;
+        render();
+        saveState();
+      }
+    } else if (action === 'select-pm') {
+      state.paymentMethodChoice = el.dataset.pm;
+      render();
+      saveState();
+    } else if (action === 'advance-to-4') {
+      const errors = clientValidateContact();
+      state.inlineErrors = errors;
+      if (Object.keys(errors).length) { render(); return; }
+      // Server-side eligibility before payment-method step (spec §7.3).
+      try {
+        el.disabled = true;
+        const elig = await checkEligibility(state.selectedPlan.id, state.contact.birthday);
+        if (!elig.ok) {
+          flash('error', elig.body?.error || 'Could not verify eligibility. Please try again.');
+          render();
+          return;
+        }
+        if (elig.body.eligible === false) {
+          handleIneligible(elig.body);
+          return;
+        }
+        goto(4);
+      } finally {
+        el.disabled = false;
+      }
+    } else if (action === 'advance-to-5') {
+      // Call /start to create signup row + PayPage URL.
+      try {
+        el.disabled = true;
+        flash('info', 'Setting up secure payment…');
+        render();
+        const r = await startSignup();
+        if (!r.ok) {
+          const msg = r.body?.errors?.join(' ') || r.body?.error || `Failed to start (${r.status})`;
+          flash('error', msg);
+          state.currentStep = 4;
+          render();
+          return;
+        }
+        state.signupId = r.body.signup_id;
+        state.paypageUrl = r.body.paypage_url;
+        saveState();
+        goto(5);
+      } finally {
+        // already re-rendered
+      }
+    } else if (action === 'switch-plan') {
+      const id = el.dataset.planId;
+      const plan = state.config.plans.find(p => p.id === id);
+      if (plan) {
+        state.selectedPlan = plan;
+        state.inlineErrors = {};
+        saveState();
+        // Re-run eligibility for the new plan.
+        const elig = await checkEligibility(plan.id, state.contact.birthday);
+        if (elig.body?.eligible === false) {
+          handleIneligible(elig.body);
+        } else {
+          flash('info', `Switched to ${plan.plan_label}.`);
+          render();
+        }
+      }
+    }
+  }
+
+  function handleIneligible(elig) {
+    const suggested = (elig.suggested_plans || []).map(p => `
+      <div class="wcs-plan-card" data-action="switch-plan" data-plan-id="${p.id}">
+        <h3>${escapeHtml(p.plan_label)}</h3>
+        <div class="wcs-plan-price">${money(p.today_amount)} today</div>
+        <div class="wcs-plan-monthly">then ${money(p.monthly_amount)} / month</div>
+        <button class="wcs-btn wcs-btn-primary" style="margin-top: 8px;" data-action="switch-plan" data-plan-id="${p.id}">Switch to this plan →</button>
+      </div>
+    `).join('');
+    const phone = state.config.location.phone || state.config.copy?.support_phone || '';
+    root.innerHTML = renderProgress() + `
+      <div class="wcs-card">
+        <div class="wcs-step-label">A different plan fits you</div>
+        <h2>This plan isn't quite right</h2>
+        <div class="wcs-alert wcs-alert-info">${escapeHtml(elig.ineligible_message || 'Please choose a different plan.')}</div>
+        ${suggested || `<p>No other plans fit online. Please call ${escapeHtml(phone || 'us')} and we'll find the right fit.</p>`}
+        <div class="wcs-btn-row">
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-2">← Back to plans</button>
+          <span></span>
+        </div>
+      </div>
+    `;
+    attachListeners();
+  }
+
+  function goto(step) {
+    state.currentStep = step;
+    state.inlineErrors = {};
+    saveState();
+    render();
+  }
+
+  // -------------------------------------------------------------------------
+  // PayPage postMessage handling
+  // -------------------------------------------------------------------------
+  // ABC's PayPage iframe posts the transaction ID when the form submits.
+  // Origin check is non-negotiable (spec §12.2). We accept multiple message
+  // shapes since ABC's exact format is documented loosely — extract whatever
+  // looks like a transaction ID.
+  function extractTransaction(data) {
+    if (!data) return null;
+    if (typeof data === 'string') {
+      // Try parsing as JSON.
+      try { data = JSON.parse(data); } catch (_) { return null; }
+    }
+    if (typeof data !== 'object') return null;
+    const id = data.transactionId || data.payPageTransactionId
+      || data.tokenId || data.token || data.paypageTransactionId || null;
+    const type = (data.paymentType || data.payment_type || '').toLowerCase();
+    let paymentType = state.paymentMethodChoice === 'ach' ? 'Bank Account' : 'Credit Card';
+    if (type.includes('bank') || type.includes('ach') || type.includes('eft')) paymentType = 'Bank Account';
+    else if (type.includes('card') || type.includes('credit')) paymentType = 'Credit Card';
+    return id ? { id, paymentType } : null;
+  }
+
+  window.addEventListener('message', async (event) => {
+    if (event.origin !== PAYPAGE_ORIGIN) return; // strict origin check
+    if (state.currentStep < 5) return;
+    const tx = extractTransaction(event.data);
+    if (!tx) return;
+    state.successData = { pending: true };
+    state.currentStep = 6;
+    render();
+    const r = await submitAgreement(tx.id, tx.paymentType);
+    if (r.ok && r.body?.success) {
+      state.successData = r.body;
+      clearState();
+      render();
+    } else {
+      state.successData = {
+        error: r.body?.error || 'We could not finalize your membership. Our team has been notified.',
+      };
+      render();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Boot
+  // -------------------------------------------------------------------------
+  function hydrateFromStorage() {
+    const stored = loadState();
+    if (!stored) return;
+    if (stored.contact) Object.assign(state.contact, stored.contact);
+    if (stored.emergencyContact) Object.assign(state.emergencyContact, stored.emergencyContact);
+    if (stored.marketing) Object.assign(state.marketing, stored.marketing);
+    state.termsAccepted = !!stored.termsAccepted;
+    state.paymentMethodChoice = stored.paymentMethodChoice || null;
+    state.signupId = stored.signupId || null;
+    state.paypageUrl = stored.paypageUrl || null;
+    if (stored.selectedPlanId && state.config?.plans) {
+      state.selectedPlan = state.config.plans.find(p => p.id === stored.selectedPlanId) || null;
+    }
+    // Don't auto-resume into step 5 — payment must be re-initiated since the
+    // PayPage URL token has a short-lived session inside ABC's iframe.
+    state.currentStep = Math.min(stored.currentStep || 1, 4);
+  }
+
+  async function init() {
+    try {
+      state.config = await fetchConfig();
+      hydrateFromStorage();
+      render();
+    } catch (err) {
+      root.innerHTML = `<div class="wcs-alert wcs-alert-error">
+        We can't load the join flow right now (${escapeHtml(err.message)}).
+        Please try again, or call us.
+      </div>`;
+    }
+  }
+
+  init();
+})();
+</script>

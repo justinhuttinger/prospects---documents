@@ -13,107 +13,115 @@
   palette. Less landing-page, more admin tool.
 -->
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
 <style>
-  /* Scope everything to #wcs-join-app so site styles don't leak in. */
+  /* Scope everything to #wcs-join-app so host site styles don't leak in. */
   #wcs-join-app, #wcs-join-app *, #wcs-join-app *::before, #wcs-join-app *::after {
     box-sizing: border-box;
   }
   #wcs-join-app {
-    /* Tokens — black canvas, light content panel for contrast. */
-    --w-bg: #000000;            /* black page background */
-    --w-bg-soft: #F1F5F9;       /* slate-100 — input bg, soft surface */
-    --w-surface: #FFFFFF;
-    --w-border: #E2E8F0;        /* slate-200 */
-    --w-border-strong: #CBD5E1; /* slate-300 */
-    --w-text: #0F172A;          /* slate-900 */
-    --w-text-muted: #64748B;    /* slate-500 */
-    --w-text-soft: #94A3B8;     /* slate-400 */
-    --w-on-dark: #F8FAFC;       /* light text for use on black canvas */
-    --w-on-dark-muted: #94A3B8;
-    --w-red: #E31837;
-    --w-red-dark: #B91426;
-    --w-red-tint: #FEF2F2;
-    --w-success: #16A34A;
-    --w-error: #DC2626;
-    --w-radius: 12px;
-    --w-radius-sm: 8px;
+    /* Tokens — pulled directly from wcs-staff-portal portal/src/index.css. */
+    --w-canvas: #000000;        /* page background (per user spec) */
+    --w-surface: #ffffff;
+    --w-bg: #f4f5f7;            /* portal --color-bg */
+    --w-text: #1a1a2e;          /* portal --color-text-primary (navy) */
+    --w-text-on-canvas: #ffffff;
+    --w-text-on-canvas-muted: #8b90a5;
+    --w-border: #e2e4e8;        /* portal --color-border */
+    --w-tile-sub: #8b90a5;      /* portal --color-tile-sub */
+    --w-red: #e53e3e;           /* portal --color-wcs-red */
+    --w-red-hover: #c53030;     /* portal --color-wcs-red-hover */
+    --w-red-tint: #fff5f5;
+    --w-success: #16a34a;
+    --w-error: #c53030;
 
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
     color: var(--w-text);
     font-size: 14px;
     line-height: 1.5;
-    padding: 24px 16px;
-    background: var(--w-bg);
+    padding: 48px 16px;
+    background: var(--w-canvas);
     min-height: 100%;
   }
-  /* Inner content container — the actual panel sits inside this. */
   #wcs-join-app .wcs-container {
-    max-width: 640px;
+    max-width: 480px;
     margin: 0 auto;
   }
+
+  /* Brand mark on the black canvas, above the card. Mimics the login screen
+     "logo + Portal title" pattern but with a wordmark since we don't have
+     the WCS image asset hosted alongside the widget yet. */
   #wcs-join-app .wcs-brand {
     text-align: center;
-    color: var(--w-on-dark);
-    margin-bottom: 16px;
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 600;
+    margin-bottom: 24px;
+    color: var(--w-text-on-canvas);
+  }
+  #wcs-join-app .wcs-brand-logo {
+    width: 56px; height: 56px; border-radius: 9999px;
+    background: var(--w-red);
+    color: white;
+    font-weight: 900; font-size: 22px;
+    letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+    border: 2px solid rgba(255,255,255,0.10);
+  }
+  #wcs-join-app .wcs-brand-title {
+    font-size: 24px; font-weight: 900;
+    color: var(--w-text-on-canvas);
+    letter-spacing: -0.01em;
   }
   #wcs-join-app .wcs-brand-sub {
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: 11px;
-    color: var(--w-on-dark-muted);
-    font-weight: 400;
+    font-size: 13px; font-weight: 400;
+    color: var(--w-text-on-canvas-muted);
     margin-top: 4px;
   }
-  /* When the widget is embedded somewhere that's already on a colored page,
-     the host can wrap it in an element with class wcs-join-host and the
-     widget will fill that area with the black canvas. */
-  body.has-wcs-join, html.has-wcs-join { background: #000000; }
+
+  /* Typography — mirrors portal scale. */
   #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3, #wcs-join-app h4 {
     color: var(--w-text);
     margin: 0;
-    font-weight: 600;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.01em;
   }
-  #wcs-join-app h1 { font-size: 17px; }
-  #wcs-join-app h2 { font-size: 15px; }
-  #wcs-join-app h3 { font-size: 13px; }
-  #wcs-join-app p { margin: 0; color: var(--w-text-muted); font-size: 13px; }
+  #wcs-join-app h1 { font-size: 22px; font-weight: 900; }
+  #wcs-join-app h2 { font-size: 18px; font-weight: 800; }
+  #wcs-join-app h3 { font-size: 15px; font-weight: 700; }
+  #wcs-join-app p { margin: 0; color: var(--w-text); font-size: 14px; }
+  #wcs-join-app .wcs-hint { color: var(--w-tile-sub); font-size: 13px; }
 
-  /* The single panel that holds every step. Header / body / footer bands. */
+  /* The card — rounded-2xl like portal login screen */
   #wcs-join-app .wcs-panel {
     background: var(--w-surface);
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius);
+    border-radius: 16px;
     overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.20);
   }
   #wcs-join-app .wcs-panel-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--w-border);
+    padding: 24px 28px 8px;
     background: var(--w-surface);
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  #wcs-join-app .wcs-panel-header .wcs-eyebrow {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--w-text-soft);
-    margin-bottom: 2px;
-  }
-  #wcs-join-app .wcs-panel-header h1 { font-size: 16px; }
-  #wcs-join-app .wcs-progress-pill {
+  #wcs-join-app .wcs-eyebrow {
     font-size: 11px; font-weight: 600;
-    background: var(--w-bg-soft);
-    color: var(--w-text-muted);
-    border-radius: 999px;
-    padding: 3px 10px;
-    white-space: nowrap;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--w-tile-sub);
+    margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #wcs-join-app .wcs-eyebrow .wcs-step-tag {
+    font-size: 11px; font-weight: 600;
+    color: var(--w-tile-sub);
+    letter-spacing: 0.04em;
+    text-transform: none;
   }
   #wcs-join-app .wcs-panel-progress {
-    height: 2px;
-    background: var(--w-bg-soft);
+    height: 3px;
+    background: var(--w-bg);
+    margin: 12px -28px 0;
     overflow: hidden;
   }
   #wcs-join-app .wcs-panel-progress-fill {
@@ -121,60 +129,61 @@
     background: var(--w-red);
     transition: width 0.25s ease;
   }
-  #wcs-join-app .wcs-panel-body { padding: 16px; }
+  #wcs-join-app .wcs-panel-body {
+    padding: 20px 28px 24px;
+  }
   #wcs-join-app .wcs-panel-footer {
-    padding: 10px 16px;
-    border-top: 1px solid var(--w-border);
-    background: var(--w-bg);
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 16px 28px 24px;
+    display: flex; flex-direction: column; gap: 10px;
   }
 
   /* Sections within the body */
-  #wcs-join-app .wcs-section + .wcs-section { margin-top: 16px; }
+  #wcs-join-app .wcs-section + .wcs-section { margin-top: 20px; }
   #wcs-join-app .wcs-section-label {
-    font-size: 10px; font-weight: 600;
+    font-size: 11px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--w-text-soft);
-    margin-bottom: 8px;
+    color: var(--w-tile-sub);
+    margin-bottom: 10px;
   }
 
-  /* Buttons — portal density */
+  /* Buttons — login-screen density: full-width primary, py-3 rounded-lg */
   #wcs-join-app .wcs-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 6px 12px; border-radius: var(--w-radius-sm);
-    font-weight: 600; font-size: 12px;
+    padding: 12px 16px; border-radius: 8px;
+    font-weight: 600; font-size: 14px;
     cursor: pointer; border: 1px solid transparent;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     font-family: inherit; line-height: 1.4;
   }
-  #wcs-join-app .wcs-btn-primary { background: var(--w-red); color: white; }
-  #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red-dark); }
+  #wcs-join-app .wcs-btn-primary {
+    background: var(--w-red); color: white;
+    width: 100%;
+  }
+  #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red-hover); }
   #wcs-join-app .wcs-btn-primary:disabled {
-    background: var(--w-bg-soft); color: var(--w-text-soft); cursor: not-allowed;
+    opacity: 0.5; cursor: not-allowed;
   }
   #wcs-join-app .wcs-btn-secondary {
-    background: var(--w-surface); color: var(--w-text-muted); border-color: var(--w-border);
+    background: var(--w-surface); color: var(--w-text); border-color: var(--w-border);
+    width: 100%;
   }
-  #wcs-join-app .wcs-btn-secondary:hover { background: var(--w-bg-soft); color: var(--w-text); }
-  #wcs-join-app .wcs-btn-cta {
-    padding: 8px 14px; font-size: 12px;
-  }
+  #wcs-join-app .wcs-btn-secondary:hover { background: var(--w-bg); }
 
-  /* Form fields — portal density */
-  #wcs-join-app .wcs-field { margin-bottom: 8px; }
+  /* Form fields — login-screen density: px-4 py-3 with focus ring */
+  #wcs-join-app .wcs-field { margin-bottom: 12px; }
   #wcs-join-app .wcs-field label {
-    display: block; font-size: 11px; font-weight: 500;
-    color: var(--w-text-muted); margin-bottom: 3px;
-    letter-spacing: 0.005em;
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--w-text); margin-bottom: 6px;
   }
   #wcs-join-app .wcs-field input,
   #wcs-join-app .wcs-field select,
   #wcs-join-app .wcs-field textarea {
-    width: 100%; padding: 6px 10px;
+    width: 100%;
+    padding: 12px 14px;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-sm);
-    font-size: 13px; font-family: inherit;
-    background: var(--w-bg-soft);
+    border-radius: 8px;
+    font-size: 14px; font-family: inherit;
+    background: var(--w-bg);
     color: var(--w-text);
     transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
   }
@@ -184,185 +193,185 @@
     outline: none;
     border-color: var(--w-red);
     background: var(--w-surface);
-    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.10);
+    box-shadow: 0 0 0 2px var(--w-red);
   }
   #wcs-join-app .wcs-field input.is-error,
   #wcs-join-app .wcs-field select.is-error {
     border-color: var(--w-error);
   }
   #wcs-join-app .wcs-field-error {
-    color: var(--w-error); font-size: 11px; margin-top: 3px;
+    color: var(--w-error); font-size: 12px; margin-top: 4px;
   }
   #wcs-join-app .wcs-row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   }
   #wcs-join-app .wcs-row-3 {
-    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-row, #wcs-join-app .wcs-row-3 { grid-template-columns: 1fr; }
   }
 
-  /* Plan cards — flat, portal-style list items */
+  /* Plan cards */
   #wcs-join-app .wcs-plan-list {
-    display: flex; flex-direction: column; gap: 6px;
+    display: flex; flex-direction: column; gap: 8px;
   }
   #wcs-join-app .wcs-plan-card {
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-sm);
-    padding: 10px 12px;
+    border-radius: 12px;
+    padding: 14px 16px;
     cursor: pointer;
-    transition: border-color 0.12s, background 0.12s;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
     background: var(--w-surface);
     position: relative;
   }
-  #wcs-join-app .wcs-plan-card:hover { border-color: var(--w-border-strong); background: var(--w-bg); }
+  #wcs-join-app .wcs-plan-card:hover {
+    border-color: var(--w-red);
+    background: var(--w-bg);
+  }
   #wcs-join-app .wcs-plan-card.is-selected {
     border-color: var(--w-red);
     background: var(--w-red-tint);
+    box-shadow: 0 0 0 2px var(--w-red);
   }
   #wcs-join-app .wcs-plan-row {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   }
   #wcs-join-app .wcs-plan-name {
-    font-size: 13px; font-weight: 600; color: var(--w-text);
+    font-size: 15px; font-weight: 700; color: var(--w-text);
   }
   #wcs-join-app .wcs-plan-badge {
     display: inline-block;
     background: var(--w-red); color: white;
-    padding: 1px 6px; border-radius: 10px;
-    font-size: 9px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
-    margin-left: 6px; vertical-align: middle;
+    margin-left: 8px; vertical-align: middle;
   }
   #wcs-join-app .wcs-plan-prices {
-    text-align: right; white-space: nowrap; font-size: 11px;
-    color: var(--w-text-muted);
+    text-align: right; white-space: nowrap; font-size: 12px;
+    color: var(--w-tile-sub);
   }
   #wcs-join-app .wcs-plan-prices b {
-    color: var(--w-text); font-size: 13px; font-weight: 700; margin-right: 2px;
+    color: var(--w-text); font-size: 16px; font-weight: 800;
+    display: block;
   }
   #wcs-join-app .wcs-plan-description {
-    font-size: 12px; color: var(--w-text-muted); margin-top: 3px;
+    font-size: 13px; color: var(--w-tile-sub); margin-top: 6px;
   }
   #wcs-join-app .wcs-plan-card ul {
-    margin: 6px 0 0; padding-left: 14px; font-size: 11px; color: var(--w-text-muted);
+    margin: 8px 0 0; padding-left: 16px; font-size: 13px; color: var(--w-text);
   }
-  #wcs-join-app .wcs-plan-card ul li { margin-bottom: 1px; }
+  #wcs-join-app .wcs-plan-card ul li { margin-bottom: 3px; }
 
-  /* Payment method choice — same flat list style */
+  /* Payment method choice */
   #wcs-join-app .wcs-pm-list {
-    display: flex; flex-direction: column; gap: 6px;
+    display: flex; flex-direction: column; gap: 8px;
   }
   #wcs-join-app .wcs-pm-card {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 14px;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-sm);
-    padding: 10px 12px;
+    border-radius: 12px;
+    padding: 14px 16px;
     cursor: pointer;
-    transition: border-color 0.12s, background 0.12s;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
     background: var(--w-surface);
   }
-  #wcs-join-app .wcs-pm-card:hover { border-color: var(--w-border-strong); background: var(--w-bg); }
+  #wcs-join-app .wcs-pm-card:hover {
+    border-color: var(--w-red);
+    background: var(--w-bg);
+  }
   #wcs-join-app .wcs-pm-card.is-selected {
     border-color: var(--w-red);
     background: var(--w-red-tint);
+    box-shadow: 0 0 0 2px var(--w-red);
   }
   #wcs-join-app .wcs-pm-icon {
-    width: 28px; height: 28px; border-radius: 6px;
-    background: var(--w-bg-soft);
+    width: 36px; height: 36px; border-radius: 9999px;
+    background: var(--w-bg);
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
   #wcs-join-app .wcs-pm-icon svg {
-    width: 14px; height: 14px; color: var(--w-text-muted);
+    width: 18px; height: 18px; color: var(--w-text);
   }
-  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon { background: var(--w-surface); }
-  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon svg { color: var(--w-red); }
+  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon { background: var(--w-red); }
+  #wcs-join-app .wcs-pm-card.is-selected .wcs-pm-icon svg { color: white; }
   #wcs-join-app .wcs-pm-text { flex: 1; min-width: 0; }
-  #wcs-join-app .wcs-pm-name { font-size: 13px; font-weight: 600; color: var(--w-text); }
-  #wcs-join-app .wcs-pm-sub { font-size: 11px; color: var(--w-text-muted); margin-top: 1px; }
+  #wcs-join-app .wcs-pm-name { font-size: 15px; font-weight: 700; color: var(--w-text); }
+  #wcs-join-app .wcs-pm-sub { font-size: 12px; color: var(--w-tile-sub); margin-top: 2px; }
 
   /* Checkboxes */
   #wcs-join-app .wcs-checkbox {
-    display: flex; gap: 8px; align-items: flex-start;
-    font-size: 12px; color: var(--w-text);
-    margin: 6px 0;
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 13px; color: var(--w-text);
+    margin: 8px 0;
     cursor: pointer;
   }
   #wcs-join-app .wcs-checkbox input {
-    width: 14px; height: 14px; margin-top: 1px;
+    width: 16px; height: 16px; margin-top: 2px;
     accent-color: var(--w-red);
     flex-shrink: 0;
   }
-  #wcs-join-app .wcs-checkbox a { color: var(--w-red); text-decoration: underline; }
+  #wcs-join-app .wcs-checkbox a { color: var(--w-red); text-decoration: underline; font-weight: 600; }
 
   /* Alerts */
   #wcs-join-app .wcs-alert {
-    padding: 8px 10px; border-radius: var(--w-radius-sm);
-    margin-bottom: 10px; font-size: 12px;
+    padding: 10px 12px; border-radius: 8px;
+    margin-bottom: 12px; font-size: 13px;
     border: 1px solid;
   }
   #wcs-join-app .wcs-alert-error {
-    background: #FEF2F2; border-color: #FECACA; color: #991B1B;
+    background: #fef2f2; border-color: #fecaca; color: #991b1b;
   }
   #wcs-join-app .wcs-alert-info {
-    background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A;
+    background: var(--w-bg); border-color: var(--w-border); color: var(--w-text);
   }
-
-  /* Step 1 location info table */
-  #wcs-join-app .wcs-info-table {
-    display: grid; grid-template-columns: 100px 1fr; row-gap: 4px;
-    font-size: 12px;
-  }
-  #wcs-join-app .wcs-info-table dt { color: var(--w-text-muted); }
-  #wcs-join-app .wcs-info-table dd { margin: 0; color: var(--w-text); }
 
   /* Step 1 location picker — cards listing every WCS location. */
   #wcs-join-app .wcs-loc-list {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 8px;
-  }
-  @media (max-width: 520px) {
-    #wcs-join-app .wcs-loc-list { grid-template-columns: 1fr; }
   }
   #wcs-join-app .wcs-loc-card {
     position: relative;
+    width: 100%;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-sm);
-    padding: 12px;
+    border-radius: 12px;
+    padding: 14px 16px;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
     background: var(--w-surface);
     text-align: left;
+    font-family: inherit;
   }
   #wcs-join-app .wcs-loc-card:hover {
-    border-color: var(--w-border-strong);
-    background: var(--w-bg-soft);
+    border-color: var(--w-red);
+    background: var(--w-bg);
   }
   #wcs-join-app .wcs-loc-card.is-default {
     border-color: var(--w-red);
-    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.12);
+    box-shadow: 0 0 0 2px var(--w-red);
   }
   #wcs-join-app .wcs-loc-card.is-loading {
     opacity: 0.6;
     pointer-events: none;
   }
   #wcs-join-app .wcs-loc-name {
-    font-size: 13px; font-weight: 600; color: var(--w-text);
+    font-size: 15px; font-weight: 700; color: var(--w-text);
     margin-bottom: 4px;
   }
   #wcs-join-app .wcs-loc-meta {
-    font-size: 11px; color: var(--w-text-muted);
-    line-height: 1.45;
+    font-size: 13px; color: var(--w-tile-sub);
+    line-height: 1.5;
   }
   #wcs-join-app .wcs-loc-meta div { margin-bottom: 2px; }
   #wcs-join-app .wcs-loc-tag {
-    position: absolute; top: 8px; right: 8px;
+    position: absolute; top: 10px; right: 12px;
     background: var(--w-red); color: white;
-    padding: 1px 6px; border-radius: 10px;
-    font-size: 9px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
   }
 
@@ -370,20 +379,21 @@
   #wcs-join-app .wcs-paypage-frame {
     width: 100%; min-height: 520px;
     border: 1px solid var(--w-border);
-    border-radius: var(--w-radius-sm);
+    border-radius: 12px;
     background: var(--w-surface);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   #wcs-join-app .wcs-trust {
-    font-size: 11px; color: var(--w-text-muted);
-    padding: 8px 10px;
-    background: var(--w-bg-soft);
-    border-radius: var(--w-radius-sm);
-    display: flex; gap: 8px; align-items: flex-start;
+    font-size: 12px; color: var(--w-text);
+    padding: 10px 12px;
+    background: var(--w-bg);
+    border-radius: 8px;
+    border: 1px solid var(--w-border);
+    display: flex; gap: 10px; align-items: flex-start;
   }
   #wcs-join-app .wcs-trust svg {
-    flex-shrink: 0; width: 12px; height: 12px;
-    margin-top: 2px; color: var(--w-text-muted);
+    flex-shrink: 0; width: 14px; height: 14px;
+    margin-top: 2px; color: var(--w-red);
   }
 
   /* Step 6 — confirmation */
@@ -391,28 +401,28 @@
     text-align: center; padding: 8px 4px;
   }
   #wcs-join-app .wcs-checkmark {
-    width: 40px; height: 40px; border-radius: 50%;
+    width: 56px; height: 56px; border-radius: 9999px;
     background: var(--w-success); color: white;
     display: inline-flex; align-items: center; justify-content: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
-  #wcs-join-app .wcs-checkmark svg { width: 20px; height: 20px; }
-  #wcs-join-app .wcs-success h1 { font-size: 18px; margin-bottom: 4px; }
+  #wcs-join-app .wcs-checkmark svg { width: 28px; height: 28px; }
+  #wcs-join-app .wcs-success h1 { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
   #wcs-join-app .wcs-member-id {
     display: inline-block;
-    background: var(--w-bg-soft);
-    padding: 6px 12px;
-    border-radius: var(--w-radius-sm);
+    background: var(--w-bg);
+    padding: 8px 16px;
+    border-radius: 8px;
     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-    font-size: 12px;
+    font-size: 13px; font-weight: 600;
     color: var(--w-text);
-    margin: 10px 0;
+    margin: 12px 0;
     border: 1px solid var(--w-border);
   }
 
   /* Loading + spinner */
   #wcs-join-app .wcs-spinner {
-    display: inline-block; width: 14px; height: 14px;
+    display: inline-block; width: 16px; height: 16px;
     border: 2px solid var(--w-border);
     border-top-color: var(--w-red);
     border-radius: 50%;
@@ -421,16 +431,17 @@
   }
   @keyframes wcs-spin { to { transform: rotate(360deg); } }
   #wcs-join-app .wcs-loading-block {
-    text-align: center; padding: 28px 12px;
-    color: var(--w-text-muted); font-size: 12px;
+    text-align: center; padding: 32px 16px;
+    color: var(--w-tile-sub); font-size: 13px;
   }
-  #wcs-join-app .wcs-loading-block p { margin-top: 6px; }
+  #wcs-join-app .wcs-loading-block p { margin-top: 8px; }
 </style>
 
 <div id="wcs-join-app" data-location="">
   <div class="wcs-container">
     <div class="wcs-brand">
-      West Coast Strength
+      <div class="wcs-brand-logo">W</div>
+      <div class="wcs-brand-title">West Coast Strength</div>
       <div class="wcs-brand-sub">Online membership signup</div>
     </div>
     <div class="wcs-panel">
@@ -675,28 +686,20 @@
 
   function renderPanelHeader() {
     if (state.currentStep === 6 && state.successData && !state.successData.pending && !state.successData.error) {
-      return `
-        <div class="wcs-panel-header">
-          <div>
-            <div class="wcs-eyebrow">Online Join</div>
-            <h1>Membership confirmed</h1>
-          </div>
-          ${state.config?.location?.display_name ? `<span class="wcs-progress-pill">${escapeHtml(state.config.location.display_name)}</span>` : ''}
-        </div>
-        <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: 100%;"></div></div>
-      `;
+      // Confirmation step has no header; success body has its own celebratory layout.
+      return `<div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: 100%;"></div></div>`;
     }
     const meta = stepMeta();
     return `
       <div class="wcs-panel-header">
-        <div>
-          <div class="wcs-eyebrow">${escapeHtml(meta.eyebrow)}</div>
-          <h1>${escapeHtml(meta.title)}</h1>
+        <div class="wcs-eyebrow">
+          <span>${escapeHtml(meta.eyebrow)}</span>
+          <span class="wcs-step-tag">Step ${state.currentStep} of ${TOTAL_STEPS}</span>
         </div>
-        <span class="wcs-progress-pill">Step ${state.currentStep} / ${TOTAL_STEPS}</span>
-      </div>
-      <div class="wcs-panel-progress">
-        <div class="wcs-panel-progress-fill" style="width: ${(state.currentStep / TOTAL_STEPS) * 100}%;"></div>
+        <h1>${escapeHtml(meta.title)}</h1>
+        <div class="wcs-panel-progress">
+          <div class="wcs-panel-progress-fill" style="width: ${(state.currentStep / TOTAL_STEPS) * 100}%;"></div>
+        </div>
       </div>
     `;
   }
@@ -914,7 +917,7 @@
         ${s.member_id ? `<div class="wcs-member-id">Member # ${escapeHtml(s.member_id)}</div>` : ''}
         ${s.plan_label ? `<p style="margin: 4px 0 8px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
         ${s.day_one_booking_url
-          ? `<a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 4px;">Book your Day One →</a>`
+          ? `<a class="wcs-btn wcs-btn-primary" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 12px; text-decoration: none;">Book your Day One</a>`
           : ''}
       </div>
     `;
@@ -931,20 +934,21 @@
     switch (state.currentStep) {
       case 1: primary = ''; break; // location cards are themselves the action
       case 2: primaryDisabled = !state.selectedPlan?.id;
-              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-3" ${primaryDisabled ? 'disabled' : ''}>Continue →</button>`; break;
-      case 3: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-4">Continue →</button>`; break;
+              primary = `<button class="wcs-btn wcs-btn-primary" data-action="advance-to-3" ${primaryDisabled ? 'disabled' : ''}>Continue</button>`; break;
+      case 3: primary = `<button class="wcs-btn wcs-btn-primary" data-action="advance-to-4">Continue</button>`; break;
       case 4: primaryDisabled = !state.paymentMethodChoice;
-              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
+              primary = `<button class="wcs-btn wcs-btn-primary" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment</button>`; break;
       case 5: primary = ''; break;
     }
 
     const secondary = state.currentStep > 1 && state.currentStep < 6
-      ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
-      : `<span></span>`;
+      ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">Back</button>`
+      : '';
 
-    // Step 1 has no footer at all when there's nothing to put in it.
+    // Step 1 has no footer at all (cards are themselves the action).
     if (state.currentStep === 1) return '';
-    return `<div class="wcs-panel-footer">${secondary}${primary || '<span></span>'}</div>`;
+    if (!primary && !secondary) return '';
+    return `<div class="wcs-panel-footer">${primary || ''}${secondary || ''}</div>`;
   }
 
   function render() {
@@ -955,8 +959,9 @@
     root.innerHTML = `
       <div class="wcs-container">
         <div class="wcs-brand">
-          West Coast Strength
-          <div class="wcs-brand-sub">Online membership signup${state.config?.location?.display_name ? ' · ' + escapeHtml(state.config.location.display_name) : ''}</div>
+          <div class="wcs-brand-logo">W</div>
+          <div class="wcs-brand-title">West Coast Strength</div>
+          <div class="wcs-brand-sub">${state.config?.location?.display_name ? escapeHtml(state.config.location.display_name) : 'Online membership signup'}</div>
         </div>
         <div class="wcs-panel">
           ${renderPanelHeader()}

@@ -26,6 +26,27 @@ const { getSupabaseAdmin } = require('../lib/supabase');
 const router = express.Router();
 
 // ---------------------------------------------------------------------------
+// GET /api/online-join/locations
+// Returns the list of active locations with public fields only — used by the
+// widget's step 1 location picker. ABC + GHL IDs are stripped server-side.
+// ---------------------------------------------------------------------------
+router.get('/locations', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    const { data, error } = await sb
+      .from('online_join_locations')
+      .select('wcs_location_id, display_name, address_line1, city, state, zip, phone, hours_summary, hero_headline, hero_subhead, day_one_booking_url')
+      .eq('active', true)
+      .order('display_name');
+    if (error) throw error;
+    res.json({ locations: data || [] });
+  } catch (err) {
+    console.error('[online-join-public] /locations error:', err.message);
+    res.status(500).json({ error: 'Failed to load locations' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/online-join/config/:locationId
 // Returns location + active plans + copy. 60s in-memory cache; admin writes
 // invalidate.

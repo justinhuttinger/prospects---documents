@@ -19,8 +19,8 @@
     box-sizing: border-box;
   }
   #wcs-join-app {
-    /* Tokens lifted from the staff portal Tailwind config. */
-    --w-bg: #F8FAFC;            /* slate-50 — page background */
+    /* Tokens — black canvas, light content panel for contrast. */
+    --w-bg: #000000;            /* black page background */
     --w-bg-soft: #F1F5F9;       /* slate-100 — input bg, soft surface */
     --w-surface: #FFFFFF;
     --w-border: #E2E8F0;        /* slate-200 */
@@ -28,6 +28,8 @@
     --w-text: #0F172A;          /* slate-900 */
     --w-text-muted: #64748B;    /* slate-500 */
     --w-text-soft: #94A3B8;     /* slate-400 */
+    --w-on-dark: #F8FAFC;       /* light text for use on black canvas */
+    --w-on-dark-muted: #94A3B8;
     --w-red: #E31837;
     --w-red-dark: #B91426;
     --w-red-tint: #FEF2F2;
@@ -40,12 +42,36 @@
     color: var(--w-text);
     font-size: 14px;
     line-height: 1.5;
+    padding: 24px 16px;
+    background: var(--w-bg);
+    min-height: 100%;
+  }
+  /* Inner content container — the actual panel sits inside this. */
+  #wcs-join-app .wcs-container {
     max-width: 640px;
     margin: 0 auto;
-    padding: 16px;
-    background: var(--w-bg);
-    border-radius: var(--w-radius);
   }
+  #wcs-join-app .wcs-brand {
+    text-align: center;
+    color: var(--w-on-dark);
+    margin-bottom: 16px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  #wcs-join-app .wcs-brand-sub {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 11px;
+    color: var(--w-on-dark-muted);
+    font-weight: 400;
+    margin-top: 4px;
+  }
+  /* When the widget is embedded somewhere that's already on a colored page,
+     the host can wrap it in an element with class wcs-join-host and the
+     widget will fill that area with the black canvas. */
+  body.has-wcs-join, html.has-wcs-join { background: #000000; }
   #wcs-join-app h1, #wcs-join-app h2, #wcs-join-app h3, #wcs-join-app h4 {
     color: var(--w-text);
     margin: 0;
@@ -292,6 +318,54 @@
   #wcs-join-app .wcs-info-table dt { color: var(--w-text-muted); }
   #wcs-join-app .wcs-info-table dd { margin: 0; color: var(--w-text); }
 
+  /* Step 1 location picker — cards listing every WCS location. */
+  #wcs-join-app .wcs-loc-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  @media (max-width: 520px) {
+    #wcs-join-app .wcs-loc-list { grid-template-columns: 1fr; }
+  }
+  #wcs-join-app .wcs-loc-card {
+    position: relative;
+    border: 1px solid var(--w-border);
+    border-radius: var(--w-radius-sm);
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+    background: var(--w-surface);
+    text-align: left;
+  }
+  #wcs-join-app .wcs-loc-card:hover {
+    border-color: var(--w-border-strong);
+    background: var(--w-bg-soft);
+  }
+  #wcs-join-app .wcs-loc-card.is-default {
+    border-color: var(--w-red);
+    box-shadow: 0 0 0 3px rgba(227, 24, 55, 0.12);
+  }
+  #wcs-join-app .wcs-loc-card.is-loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  #wcs-join-app .wcs-loc-name {
+    font-size: 13px; font-weight: 600; color: var(--w-text);
+    margin-bottom: 4px;
+  }
+  #wcs-join-app .wcs-loc-meta {
+    font-size: 11px; color: var(--w-text-muted);
+    line-height: 1.45;
+  }
+  #wcs-join-app .wcs-loc-meta div { margin-bottom: 2px; }
+  #wcs-join-app .wcs-loc-tag {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--w-red); color: white;
+    padding: 1px 6px; border-radius: 10px;
+    font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
   /* Step 5 — PayPage */
   #wcs-join-app .wcs-paypage-frame {
     width: 100%; min-height: 520px;
@@ -353,11 +427,17 @@
   #wcs-join-app .wcs-loading-block p { margin-top: 6px; }
 </style>
 
-<div id="wcs-join-app" data-location="salem">
-  <div class="wcs-panel">
-    <div class="wcs-panel-body wcs-loading-block">
-      <span class="wcs-spinner"></span>
-      <p>Loading…</p>
+<div id="wcs-join-app" data-location="">
+  <div class="wcs-container">
+    <div class="wcs-brand">
+      West Coast Strength
+      <div class="wcs-brand-sub">Online membership signup</div>
+    </div>
+    <div class="wcs-panel">
+      <div class="wcs-panel-body wcs-loading-block">
+        <span class="wcs-spinner"></span>
+        <p>Loading…</p>
+      </div>
     </div>
   </div>
 </div>
@@ -375,7 +455,10 @@
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
 
-  function resolveLocation() {
+  // Default location is now OPTIONAL — when not provided the user picks from
+  // the list on step 1. If data-location or ?location= is set, that becomes
+  // the pre-selected default in the picker.
+  function resolveDefaultLocation() {
     const fromAttr = (root.dataset.location || '').trim().toLowerCase();
     if (fromAttr) return fromAttr;
     try {
@@ -383,19 +466,24 @@
       const fromQuery = (params.get('location') || '').trim().toLowerCase();
       if (fromQuery) return fromQuery;
     } catch (_) {}
-    return 'salem';
+    return null;
   }
-  const LOCATION_ID = resolveLocation();
-  if (!LOCATION_ID) {
-    root.innerHTML = '<div class="wcs-panel"><div class="wcs-panel-body"><div class="wcs-alert wcs-alert-error">Configuration error: location is required.</div></div></div>';
-    return;
-  }
-  const STORAGE_NS_KEY = STORAGE_KEY + ':' + LOCATION_ID;
+  const DEFAULT_LOCATION_ID = resolveDefaultLocation();
+
+  // sessionStorage key is now scoped to "global" since location isn't fixed.
+  // When a location is picked we still namespace per-location for plan/contact
+  // state, so each location's draft stays separate.
+  const GLOBAL_STORAGE_KEY = STORAGE_KEY + ':global';
+  function locationStorageKey(slug) { return STORAGE_KEY + ':' + slug; }
 
   // ----- State ------------------------------------------------------------
   const state = {
     currentStep: 1,
-    config: null,
+    locations: [],          // full active-locations list (loaded once)
+    locationsError: null,
+    currentLocationId: null, // null until user picks (or pre-set)
+    config: null,            // config for currentLocationId (null until picked)
+    locationLoading: false,
     selectedPlan: null,
     contact: {
       first_name: '', last_name: '', email: '', cell_phone: '',
@@ -414,8 +502,9 @@
   };
 
   function saveState() {
+    if (!state.currentLocationId) return; // nothing to save until a location is picked
     try {
-      sessionStorage.setItem(STORAGE_NS_KEY, JSON.stringify({
+      sessionStorage.setItem(locationStorageKey(state.currentLocationId), JSON.stringify({
         ts: Date.now(),
         currentStep: state.currentStep,
         selectedPlanId: state.selectedPlan?.id || null,
@@ -427,22 +516,39 @@
         signupId: state.signupId,
         paypageUrl: state.paypageUrl,
       }));
+      sessionStorage.setItem(GLOBAL_STORAGE_KEY, JSON.stringify({ ts: Date.now(), currentLocationId: state.currentLocationId }));
     } catch (_) {}
   }
-  function loadStoredState() {
+  function loadStoredStateFor(slug) {
     try {
-      const raw = sessionStorage.getItem(STORAGE_NS_KEY);
+      const raw = sessionStorage.getItem(locationStorageKey(slug));
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
-        sessionStorage.removeItem(STORAGE_NS_KEY);
+        sessionStorage.removeItem(locationStorageKey(slug));
+        return null;
+      }
+      return parsed;
+    } catch (_) { return null; }
+  }
+  function loadStoredGlobal() {
+    try {
+      const raw = sessionStorage.getItem(GLOBAL_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
+        sessionStorage.removeItem(GLOBAL_STORAGE_KEY);
         return null;
       }
       return parsed;
     } catch (_) { return null; }
   }
   function clearStoredState() {
-    try { sessionStorage.removeItem(STORAGE_NS_KEY); } catch (_) {}
+    if (!state.currentLocationId) return;
+    try {
+      sessionStorage.removeItem(locationStorageKey(state.currentLocationId));
+      sessionStorage.removeItem(GLOBAL_STORAGE_KEY);
+    } catch (_) {}
   }
 
   // ----- Helpers ----------------------------------------------------------
@@ -503,8 +609,13 @@
     try { body = await res.json(); } catch (_) {}
     return { ok: res.ok, status: res.status, body };
   }
-  async function fetchConfig() {
-    const r = await api(`/config/${encodeURIComponent(LOCATION_ID)}`);
+  async function fetchLocations() {
+    const r = await api('/locations');
+    if (!r.ok) throw new Error(r.body?.error || `Failed to load locations (${r.status})`);
+    return r.body?.locations || [];
+  }
+  async function fetchConfig(slug) {
+    const r = await api(`/config/${encodeURIComponent(slug)}`);
     if (!r.ok) throw new Error(r.body?.error || `Failed to load (${r.status})`);
     return r.body;
   }
@@ -520,7 +631,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        wcs_location_id: LOCATION_ID,
+        wcs_location_id: state.currentLocationId,
         plan_id: state.selectedPlan.id,
         payment_method_choice: state.paymentMethodChoice,
         contact: state.contact,
@@ -553,7 +664,7 @@
   // ----- Step title / eyebrow lookups ------------------------------------
   function stepMeta() {
     return {
-      1: { eyebrow: 'Confirm your gym',   title: state.config.location.hero_headline || `Join ${state.config.location.display_name}` },
+      1: { eyebrow: 'Pick your gym', title: 'Which location are you joining?' },
       2: { eyebrow: 'Choose your plan',   title: 'Pick the plan that fits' },
       3: { eyebrow: 'Your info',          title: 'Tell us about you' },
       4: { eyebrow: 'Payment method',     title: 'How would you like to pay?' },
@@ -564,14 +675,13 @@
 
   function renderPanelHeader() {
     if (state.currentStep === 6 && state.successData && !state.successData.pending && !state.successData.error) {
-      // Confirmation has its own celebratory header inside body
       return `
         <div class="wcs-panel-header">
           <div>
             <div class="wcs-eyebrow">Online Join</div>
             <h1>Membership confirmed</h1>
           </div>
-          <span class="wcs-progress-pill">${escapeHtml(state.config.location.display_name)}</span>
+          ${state.config?.location?.display_name ? `<span class="wcs-progress-pill">${escapeHtml(state.config.location.display_name)}</span>` : ''}
         </div>
         <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: 100%;"></div></div>
       `;
@@ -593,15 +703,35 @@
 
   // ----- Step bodies ------------------------------------------------------
   function renderStep1() {
-    const loc = state.config.location;
+    if (state.locationsError) {
+      return `<div class="wcs-alert wcs-alert-error">We can't load locations right now (${escapeHtml(state.locationsError)}). Please refresh, or call us to enroll.</div>`;
+    }
+    if (state.locations.length === 0) {
+      return `<div class="wcs-loading-block"><span class="wcs-spinner"></span><p>Loading locations…</p></div>`;
+    }
+    const cards = state.locations.map(loc => {
+      const isDefault = DEFAULT_LOCATION_ID && loc.wcs_location_id === DEFAULT_LOCATION_ID;
+      const isLoading = state.locationLoading && state.currentLocationId === loc.wcs_location_id;
+      const addressLine = [loc.address_line1, loc.city].filter(Boolean).join(', ');
+      const cityState = [loc.city, loc.state, loc.zip].filter(Boolean).join(' ');
+      return `
+        <button class="wcs-loc-card ${isDefault ? 'is-default' : ''} ${isLoading ? 'is-loading' : ''}"
+                data-action="choose-location" data-slug="${escapeHtml(loc.wcs_location_id)}"
+                type="button">
+          ${isDefault ? '<span class="wcs-loc-tag">Suggested</span>' : ''}
+          <div class="wcs-loc-name">${escapeHtml(loc.display_name)}</div>
+          <div class="wcs-loc-meta">
+            ${loc.address_line1 ? `<div>${escapeHtml(loc.address_line1)}</div>` : ''}
+            ${cityState ? `<div>${escapeHtml(cityState)}</div>` : ''}
+            ${loc.phone ? `<div>${escapeHtml(loc.phone)}</div>` : ''}
+            ${loc.hours_summary ? `<div style="margin-top:4px; font-style: italic;">${escapeHtml(loc.hours_summary)}</div>` : ''}
+          </div>
+        </button>
+      `;
+    }).join('');
     return `
-      ${loc.hero_subhead ? `<p style="margin-bottom: 12px;">${escapeHtml(loc.hero_subhead)}</p>` : ''}
-      <dl class="wcs-info-table">
-        <dt>Location</dt><dd><strong>${escapeHtml(loc.display_name)}</strong></dd>
-        ${loc.address_line1 ? `<dt>Address</dt><dd>${escapeHtml(loc.address_line1)}${loc.city ? `, ${escapeHtml([loc.city, loc.state, loc.zip].filter(Boolean).join(' '))}` : ''}</dd>` : ''}
-        ${loc.phone ? `<dt>Phone</dt><dd>${escapeHtml(loc.phone)}</dd>` : ''}
-        ${loc.hours_summary ? `<dt>Hours</dt><dd>${escapeHtml(loc.hours_summary)}</dd>` : ''}
-      </dl>
+      <p style="margin-bottom: 12px;">Choose the West Coast Strength location you'd like to join.</p>
+      <div class="wcs-loc-list">${cards}</div>
     `;
   }
 
@@ -799,7 +929,7 @@
     let primary = '';
     let primaryDisabled = false;
     switch (state.currentStep) {
-      case 1: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-2">Yes, this is my gym →</button>`; break;
+      case 1: primary = ''; break; // location cards are themselves the action
       case 2: primaryDisabled = !state.selectedPlan?.id;
               primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-3" ${primaryDisabled ? 'disabled' : ''}>Continue →</button>`; break;
       case 3: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-4">Continue →</button>`; break;
@@ -812,6 +942,8 @@
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
 
+    // Step 1 has no footer at all when there's nothing to put in it.
+    if (state.currentStep === 1) return '';
     return `<div class="wcs-panel-footer">${secondary}${primary || '<span></span>'}</div>`;
   }
 
@@ -821,13 +953,19 @@
       ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
       : '';
     root.innerHTML = `
-      <div class="wcs-panel">
-        ${renderPanelHeader()}
-        <div class="wcs-panel-body">
-          ${flash}
-          ${bodyFn()}
+      <div class="wcs-container">
+        <div class="wcs-brand">
+          West Coast Strength
+          <div class="wcs-brand-sub">Online membership signup${state.config?.location?.display_name ? ' · ' + escapeHtml(state.config.location.display_name) : ''}</div>
         </div>
-        ${renderFooter()}
+        <div class="wcs-panel">
+          ${renderPanelHeader()}
+          <div class="wcs-panel-body">
+            ${flash}
+            ${bodyFn()}
+          </div>
+          ${renderFooter()}
+        </div>
       </div>
     `;
     state.flashMessage = null;
@@ -867,6 +1005,31 @@
   }
   async function handleAction(action, el) {
     if (action === 'back') return goto(state.currentStep - 1);
+    if (action === 'choose-location') {
+      const slug = el.dataset.slug;
+      if (!slug) return;
+      // If they pick the same location they already loaded, just advance.
+      if (state.currentLocationId === slug && state.config) return goto(2);
+      try {
+        state.locationLoading = true;
+        state.currentLocationId = slug;
+        // Re-hydrate per-location draft state if there's any.
+        applyStoredStateFor(slug);
+        render();
+        const cfg = await fetchConfig(slug);
+        state.config = cfg;
+        state.locationLoading = false;
+        saveState();
+        goto(2);
+      } catch (err) {
+        state.locationLoading = false;
+        state.currentLocationId = null;
+        state.config = null;
+        flash('error', err.message || 'Could not load that location.');
+        render();
+      }
+      return;
+    }
     if (action === 'advance-to-2') return goto(2);
     if (action === 'advance-to-3') return goto(3);
     if (action === 'select-plan') {
@@ -1003,8 +1166,21 @@
   });
 
   // ----- Boot --------------------------------------------------------------
-  function hydrateFromStorage() {
-    const stored = loadStoredState();
+  function applyStoredStateFor(slug) {
+    const stored = loadStoredStateFor(slug);
+    // Reset per-location fields to defaults first so previous picks don't bleed.
+    Object.assign(state.contact, {
+      first_name: '', last_name: '', email: '', cell_phone: '',
+      birthday: '', gender: '',
+      address_line1: '', address_line2: '', city: '', state: 'OR', zip_code: '',
+    });
+    Object.assign(state.emergencyContact, { first_name: '', last_name: '', phone: '' });
+    state.marketing = { email: true, sms: true };
+    state.termsAccepted = false;
+    state.paymentMethodChoice = null;
+    state.signupId = null;
+    state.paypageUrl = null;
+    state.selectedPlan = null;
     if (!stored) return;
     if (stored.contact) Object.assign(state.contact, stored.contact);
     if (stored.emergencyContact) Object.assign(state.emergencyContact, stored.emergencyContact);
@@ -1020,13 +1196,40 @@
   }
 
   async function init() {
+    // Load list of locations first (always needed for the step-1 picker).
     try {
-      state.config = await fetchConfig();
-      hydrateFromStorage();
-      render();
+      state.locations = await fetchLocations();
     } catch (err) {
-      root.innerHTML = `<div class="wcs-panel"><div class="wcs-panel-body"><div class="wcs-alert wcs-alert-error">Can't load the join flow right now (${escapeHtml(err.message)}). Please try again, or call us.</div></div></div>`;
+      state.locationsError = err.message;
+      render();
+      return;
     }
+
+    // If the host pre-set a default location (or we have one stored from a
+    // previous session) auto-load that config so the user can resume.
+    const stored = loadStoredGlobal();
+    const resumeSlug = (stored?.currentLocationId) || DEFAULT_LOCATION_ID;
+    const exists = resumeSlug && state.locations.some(l => l.wcs_location_id === resumeSlug);
+    if (exists) {
+      state.currentLocationId = resumeSlug;
+      applyStoredStateFor(resumeSlug);
+      try {
+        state.config = await fetchConfig(resumeSlug);
+        // If they had progress beyond step 1, drop them back at step 2 minimum
+        // so they see the picked location's plans. Don't auto-resume into
+        // PayPage step 5 since it's session-bound.
+        if (state.currentStep < 2) state.currentStep = 1; // stay on chooser
+        render();
+        return;
+      } catch (_) {
+        // Fall through to chooser
+        state.currentLocationId = null;
+        state.config = null;
+      }
+    }
+
+    state.currentStep = 1;
+    render();
   }
   init();
 })();

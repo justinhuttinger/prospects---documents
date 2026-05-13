@@ -8,6 +8,8 @@
 
 const express = require('express');
 const { getSupabaseAdmin } = require('../lib/supabase');
+const { refreshAllLocations } = require('../services/paychex-training/resolve-locations');
+const { PAYCHEX_LOCATIONS } = require('../lib/paychex-locations');
 
 const router = express.Router();
 
@@ -71,14 +73,16 @@ router.get('/records', async (req, res) => {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
+    // Query the joined view so each row carries its resolved location_slug.
     let q = supabase
-      .from('paychex_training_records')
+      .from('paychex_training_records_view')
       .select(
         'id, user_id, user_name, email, hris_id, manager_name, manager_email, ' +
         'title, learnable_id, learnable_type, program_titles, status, required, ' +
         'score, enrollment_date, due_date, completion_date, expiration_date, ' +
         're_enrollment_date, modification_date, account_name, certificate_link, ' +
-        'user_deleted, last_seen_at, last_report_id',
+        'user_deleted, last_seen_at, last_report_id, ' +
+        'location_slug, paychex_worker_id, paychex_display_id, paychex_worker_status',
         { count: 'exact' }
       );
 
@@ -86,6 +90,14 @@ router.get('/records', async (req, res) => {
     if (req.query.required === 'true') q = q.eq('required', true);
     if (req.query.required === 'false') q = q.eq('required', false);
     if (req.query.course) q = q.eq('learnable_id', req.query.course);
+    if (req.query.location) {
+      const loc = String(req.query.location).toLowerCase();
+      if (loc === 'unassigned' || loc === 'none' || loc === 'null') {
+        q = q.is('location_slug', null);
+      } else {
+        q = q.eq('location_slug', loc);
+      }
+    }
     if (req.query.q) {
       const pat = `%${String(req.query.q).replace(/[%_]/g, '')}%`;
       q = q.or(`user_name.ilike.${pat},email.ilike.${pat},title.ilike.${pat}`);
@@ -149,6 +161,61 @@ router.get('/courses', async (req, res) => {
     res.json({ courses });
   } catch (err) {
     console.error('[Paychex Training admin] /courses failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/paychex-training/locations — configured locations + per-location
+// row counts in the latest snapshot, for the UI filter pill row.
+// ---------------------------------------------------------------------------
+router.get('/locations', async (req, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const counts = {};
+    await Promise.all([
+      ...PAYCHEX_LOCATIONS.map(async (loc) => {
+        const { count } = await supabase
+          .from('paychex_training_records_view')
+          .select('id', { count: 'exact', head: true })
+          .eq('location_slug', loc.slug);
+        counts[loc.slug] = count || 0;
+      }),
+      (async () => {
+        const { count } = await supabase
+          .from('paychex_training_records_view')
+          .select('id', { count: 'exact', head: true })
+          .is('location_slug', null);
+        counts.unassigned = count || 0;
+      })(),
+    ]);
+
+    res.json({
+      locations: PAYCHEX_LOCATIONS.map((l) => ({
+        slug: l.slug,
+        name: l.name,
+        record_count: counts[l.slug] || 0,
+      })),
+      unassigned: counts.unassigned || 0,
+    });
+  } catch (err) {
+    console.error('[Paychex Training admin] /locations failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/paychex-training/refresh-locations
+// Re-pulls every Worker for every configured Paychex company and refreshes
+// the (email, location_slug) map. Synchronous — small dataset (~hundreds of
+// workers across 7 companies), takes a few seconds.
+// ---------------------------------------------------------------------------
+router.post('/refresh-locations', async (req, res) => {
+  try {
+    const result = await refreshAllLocations();
+    res.json(result);
+  } catch (err) {
+    console.error('[Paychex Training admin] /refresh-locations failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

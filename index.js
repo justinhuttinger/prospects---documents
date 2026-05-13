@@ -150,6 +150,12 @@ const app = express();
 const click2saveHandler = require('./routes/click2save');
 app.post('/webhook/click2save', express.raw({ type: 'application/json' }), click2saveHandler);
 
+// Paychex Training transcript webhook — must mount BEFORE express.json so the
+// route-local express.raw can capture zip bytes. The router internally guards
+// the raw parser to zip mime-types and falls through to JSON for envelope
+// payloads, which then hit the global express.json below.
+app.use(require('./routes/paychex-training-webhook'));
+
 app.use(express.json({ limit: '15mb' })); // photo payloads can run several MB as base64
 
 // ---------------------------------------------------------------------------
@@ -185,6 +191,18 @@ app.use('/api/admin/online-join', (req, res, next) => {
   next();
 });
 app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
+
+// Paychex Training admin API — same CORS-then-auth pattern as online-join.
+app.use('/api/admin/paychex-training', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use('/api/admin/paychex-training', requireAdmin, require('./routes/paychex-training-admin'));
 
 // Serve the public widget HTML (single source of truth — Elementor copy/paste
 // + portal Preview tab both reference this URL). Iframe-friendly headers; no

@@ -50,17 +50,65 @@ async function downloadFromUrl(url) {
   return Buffer.from(res.data);
 }
 
+// Common field names Paychex Bridge / other LMS webhooks have used for the
+// download URL. We probe these top-level and one level deep before giving up.
+const URL_FIELD_NAMES = [
+  'file_url', 'fileUrl', 'url', 'download_url', 'downloadUrl',
+  'report_url', 'reportUrl', 'export_url', 'exportUrl',
+  'file', 'attachment_url', 'attachmentUrl', 'attachment',
+  'data', 'link', 'href', 'location',
+];
+
+function looksLikeUrl(v) {
+  return typeof v === 'string' && /^https?:\/\//i.test(v);
+}
+
+function findDownloadUrl(body) {
+  if (!body || typeof body !== 'object') return null;
+  // 1) Top-level common field names that are URL-shaped strings.
+  for (const k of URL_FIELD_NAMES) {
+    if (looksLikeUrl(body[k])) return body[k];
+  }
+  // 2) ANY top-level string value that looks like a URL (some senders use
+  //    odd field names like `payload` or `signedUrl`).
+  for (const v of Object.values(body)) {
+    if (looksLikeUrl(v)) return v;
+  }
+  // 3) One level deep — Bridge often nests under `data` / `report` / `attachment`.
+  for (const v of Object.values(body)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const k of URL_FIELD_NAMES) {
+        if (looksLikeUrl(v[k])) return v[k];
+      }
+      for (const vv of Object.values(v)) {
+        if (looksLikeUrl(vv)) return vv;
+      }
+    }
+  }
+  return null;
+}
+
 async function getZipBuffer(req) {
   const ct = (req.get('Content-Type') || '').toLowerCase();
   if (ct.includes('application/json')) {
     // express.json already ran globally for json content-types.
-    const url = req.body?.file_url || req.body?.url;
-    if (!url) throw new Error('JSON webhook body missing file_url');
-    return { buffer: await downloadFromUrl(url), fileName: req.body?.file_name || null };
+    const body = req.body || {};
+    // Log the shape (without values) so we can diagnose unknown envelopes
+    // from Render logs without exposing signed URLs.
+    const keyShape = Object.keys(body).map((k) => `${k}:${typeof body[k]}`).join(',');
+    console.log(`[Paychex Training] JSON envelope keys: ${keyShape}`);
+
+    const url = findDownloadUrl(body);
+    if (!url) {
+      const keys = Object.keys(body).join(', ') || '(empty body)';
+      throw new Error(`JSON webhook body had no URL field. Top-level keys: ${keys}`);
+    }
+    const fileName = body.file_name || body.fileName || body.name || null;
+    return { buffer: await downloadFromUrl(url), fileName };
   }
   // Raw zip path. Mounted below with express.raw — req.body is a Buffer.
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-    throw new Error('Empty webhook body (expected zip bytes)');
+    throw new Error('Empty webhook body (expected zip bytes or JSON envelope)');
   }
   const fileName = req.get('X-File-Name') || null;
   return { buffer: req.body, fileName };
@@ -121,15 +169,23 @@ async function handleWebhook(req, res) {
   }
 }
 
-const rawZipParser = express.raw({
-  type: ['application/zip', 'application/octet-stream', 'application/x-zip-compressed'],
-  limit: '50mb',
-});
+// Body parser switch: Paychex Bridge POSTs JSON; other callers might POST raw
+// zip bytes. The global express.json() in index.js runs AFTER this router
+// (since this is mounted before the global parser so raw bytes survive), so
+// JSON would arrive as an empty body without this route-local switch.
+const jsonParser = express.json({ limit: '50mb' });
+const rawZipParser = express.raw({ type: '*/*', limit: '50mb' });
+
+function bodyParserSwitch(req, res, next) {
+  const ct = (req.get('Content-Type') || '').toLowerCase();
+  if (ct.includes('application/json')) return jsonParser(req, res, next);
+  return rawZipParser(req, res, next);
+}
 
 // Paychex Bridge: token in URL path.
-router.post('/webhooks/paychex-training/:token', rawZipParser, requireSecret, handleWebhook);
+router.post('/webhooks/paychex-training/:token', bodyParserSwitch, requireSecret, handleWebhook);
 
 // Header-based fallback for other callers.
-router.post('/webhooks/paychex-training', rawZipParser, requireSecret, handleWebhook);
+router.post('/webhooks/paychex-training', bodyParserSwitch, requireSecret, handleWebhook);
 
 module.exports = router;

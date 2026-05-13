@@ -88,6 +88,20 @@ function findDownloadUrl(body) {
   return null;
 }
 
+// Decode an `attachment.data` field. Paychex Bridge / Looker-style scheduled
+// deliveries embed the zip inline as base64 (no download URL). Tolerate
+// data-URI prefixes just in case ("data:application/zip;base64,...").
+function decodeAttachmentData(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  const dataUriMatch = raw.match(/^data:[^;]+;base64,(.+)$/);
+  const b64 = dataUriMatch ? dataUriMatch[1] : raw;
+  try {
+    return Buffer.from(b64, 'base64');
+  } catch {
+    return null;
+  }
+}
+
 async function getZipBuffer(req) {
   const ct = (req.get('Content-Type') || '').toLowerCase();
   if (ct.includes('application/json')) {
@@ -98,10 +112,27 @@ async function getZipBuffer(req) {
     const keyShape = Object.keys(body).map((k) => `${k}:${typeof body[k]}`).join(',');
     console.log(`[Paychex Training] JSON envelope keys: ${keyShape}`);
 
+    // Paychex Bridge / Looker-scheduled-delivery shape: file is inline as
+    // base64 under attachment.data, NOT a download URL.
+    const att = body.attachment;
+    if (att && typeof att === 'object' && typeof att.data === 'string') {
+      const buffer = decodeAttachmentData(att.data);
+      if (!buffer || buffer.length === 0) {
+        throw new Error('attachment.data was present but base64 decode produced empty buffer');
+      }
+      const fileName =
+        att.filename || att.name ||
+        (att.extension ? `paychex-${Date.now()}.${att.extension}` : null);
+      console.log(`[Paychex Training] attachment payload: mimetype=${att.mimetype || '?'}, ext=${att.extension || '?'}, decoded=${buffer.length} bytes`);
+      return { buffer, fileName };
+    }
+
+    // Fallback: URL-based envelopes (some senders deliver a download URL
+    // instead of inline bytes — kept for compatibility with non-Bridge callers).
     const url = findDownloadUrl(body);
     if (!url) {
       const keys = Object.keys(body).join(', ') || '(empty body)';
-      throw new Error(`JSON webhook body had no URL field. Top-level keys: ${keys}`);
+      throw new Error(`JSON webhook body had no attachment.data or URL field. Top-level keys: ${keys}`);
     }
     const fileName = body.file_name || body.fileName || body.name || null;
     return { buffer: await downloadFromUrl(url), fileName };

@@ -15,7 +15,10 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Bebas Neue is the free Google-Fonts fallback for Prohibition (tall condensed
+     all-caps). If the host WordPress page already loads Prohibition (via
+     Elementor's font kit), it wins through the CSS cascade. -->
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
   /* Scope everything to #wcs-join-app so host site styles don't leak in. */
@@ -42,7 +45,11 @@
     --w-error: #dc2626;
 
     /* === Type ==================================================== */
-    --w-display: 'Archivo Black', 'Inter', system-ui, -apple-system, sans-serif;
+    /* Prohibition is WCS's brand display font. If the host WordPress
+       page loads it (Elementor font kit), it wins via the cascade.
+       Bebas Neue is the free Google Fonts fallback that captures the
+       same tall-condensed-all-caps energy. */
+    --w-display: 'Prohibition', 'Bebas Neue', 'Anton', 'Archivo Black', 'Impact', sans-serif;
     --w-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --w-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
@@ -64,7 +71,7 @@
   }
 
   #wcs-join-app .wcs-container {
-    max-width: 580px;
+    max-width: 720px;
     margin: 0 auto;
   }
 
@@ -316,66 +323,101 @@
     #wcs-join-app .wcs-row, #wcs-join-app .wcs-row-3 { grid-template-columns: 1fr; }
   }
 
-  /* === Plan cards ================================================= */
+  /* === Plan cards (horizontal grid) =============================== */
   #wcs-join-app .wcs-plan-list {
-    display: flex; flex-direction: column; gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+  @media (max-width: 540px) {
+    #wcs-join-app .wcs-plan-list { grid-template-columns: 1fr; }
   }
   #wcs-join-app .wcs-plan-card {
     border: 1px solid var(--w-border);
     border-radius: 2px;
-    padding: 20px;
+    padding: 22px 20px;
     cursor: pointer;
     background: var(--w-surface);
     position: relative;
+    display: flex; flex-direction: column;
     transition: border-color 0.12s, background 0.12s, transform 0.12s ease-out;
   }
   #wcs-join-app .wcs-plan-card:hover {
     border-color: var(--w-ink);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
   }
   #wcs-join-app .wcs-plan-card.is-selected {
     border-color: var(--w-ink);
     background: #fafaf8;
-    box-shadow: inset 4px 0 0 var(--w-red);
+    box-shadow: inset 0 4px 0 var(--w-red);
   }
+  /* In the horizontal layout .wcs-plan-row becomes the vertical stack
+     (name → prices). Features still come after via the <ul>. */
   #wcs-join-app .wcs-plan-row {
-    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+    display: flex; flex-direction: column; gap: 16px;
   }
   #wcs-join-app .wcs-plan-name {
-    font-family: var(--w-body);
-    font-size: 16px; font-weight: 800;
-    letter-spacing: -0.005em;
+    font-family: var(--w-display);
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    line-height: 1;
     color: var(--w-ink);
     text-transform: uppercase;
+    font-weight: normal;
+    display: block;
+    margin-bottom: 6px;
   }
   #wcs-join-app .wcs-plan-badge {
     display: inline-block;
     background: var(--w-red); color: #fff;
-    padding: 4px 8px; border-radius: 2px;
+    padding: 3px 8px; border-radius: 2px;
     font-size: 9px; font-weight: 800;
     text-transform: uppercase; letter-spacing: 0.18em;
-    margin-left: 8px; vertical-align: middle;
-  }
-  #wcs-join-app .wcs-plan-prices {
-    text-align: right; white-space: nowrap;
-    font-size: 11px; font-weight: 600;
-    letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--w-ink-soft);
-  }
-  #wcs-join-app .wcs-plan-prices b {
-    display: block;
-    color: var(--w-ink);
-    font-family: var(--w-display);
-    font-size: 28px;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-    font-weight: normal;
+    margin-left: 0; margin-top: 4px;
+    vertical-align: middle;
   }
   #wcs-join-app .wcs-plan-description {
     font-size: 13px; color: var(--w-ink-muted);
-    margin-top: 10px;
+    margin-top: 0;
     line-height: 1.55;
+  }
+  /* Two-column price block — TODAY on the left, MONTHLY on the right,
+     both prominent so the cost upfront isn't buried. */
+  #wcs-join-app .wcs-plan-prices {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--w-border);
+    text-align: left; white-space: normal;
+  }
+  #wcs-join-app .wcs-plan-price {
+    display: flex; flex-direction: column;
+    gap: 2px;
+  }
+  #wcs-join-app .wcs-plan-price b {
+    font-family: var(--w-display);
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: -0.005em;
+    color: var(--w-ink);
+    font-weight: normal;
+  }
+  #wcs-join-app .wcs-plan-price span {
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--w-ink-soft);
+  }
+  #wcs-join-app .wcs-plan-price.is-today b { color: var(--w-red); }
+  /* Legacy <b> styles inside .wcs-plan-prices for backwards compat. */
+  #wcs-join-app .wcs-plan-prices > b,
+  #wcs-join-app .wcs-plan-prices > div > b {
+    color: var(--w-ink);
+    font-family: var(--w-display);
+    font-size: 24px;
+    line-height: 1;
+    font-weight: normal;
   }
   #wcs-join-app .wcs-plan-card ul {
     margin: 14px 0 0; padding: 0;
@@ -936,8 +978,14 @@
             ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
           </div>
           <div class="wcs-plan-prices">
-            <div><b>${money(plan.today_amount)}</b>today</div>
-            <div>then <b style="font-size:11px;">${money(plan.monthly_amount)}</b>/mo</div>
+            <div class="wcs-plan-price is-today">
+              <b>${money(plan.today_amount)}</b>
+              <span>Due Today</span>
+            </div>
+            <div class="wcs-plan-price">
+              <b>${money(plan.monthly_amount)}</b>
+              <span>Per Month</span>
+            </div>
           </div>
         </div>
         ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}

@@ -216,6 +216,15 @@ app.get('/widget/online-join', (req, res) => {
   res.sendFile(__dirname + '/join-flow-widget.html');
 });
 
+// Static assets referenced by the widget (background image, etc.). The
+// widget is loaded cross-origin from Elementor, so CORS must be open.
+app.use('/widget-assets', express.static(__dirname + '/widget-assets', {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  },
+}));
+
 // VIP Referrals widget — public POST + employee dropdown source
 app.use(require('./routes/vip-referrals'));
 

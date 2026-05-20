@@ -46,10 +46,12 @@
     font-size: 15px;
     line-height: 1.55;
     padding: 64px 20px;
+    /* User-provided canvas background. Cover-fit so it scales to any
+       viewport; fixed so it doesn't scroll under the panel; fallback
+       to a near-white tone for the brief moment before the image loads. */
     background:
-      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(227, 24, 55, 0.18), transparent 60%),
-      radial-gradient(ellipse 70% 50% at 50% 110%, rgba(255, 255, 255, 0.04), transparent 65%),
-      var(--w-canvas);
+      url('https://prospects-documents.onrender.com/widget-assets/online-join-bg.png') center / cover no-repeat fixed,
+      #f6f6f4;
     min-height: 100%;
   }
   @media (max-width: 640px) {
@@ -64,7 +66,7 @@
   /* === Brand block over the canvas ============================== */
   #wcs-join-app .wcs-brand {
     text-align: center;
-    color: var(--w-on-dark);
+    color: var(--w-ink);
     margin-bottom: 28px;
   }
   #wcs-join-app .wcs-brand-logo {
@@ -81,18 +83,14 @@
     font-size: 18px;
     box-shadow: 0 0 0 6px rgba(227, 24, 55, 0.12);
   }
-  /* New brand block — either a hosted logo image (preferred) or a
-     wordmark fallback. Both sit centered on the dark canvas above the card.
-     The marketing-site badge is black-on-transparent, so we invert it
-     on the dark canvas to make the ink legible (CSS filter invert(1)
-     remaps the black artwork to white). */
+  /* Brand block on the light canvas — black-on-transparent badge reads
+     as-is, no inversion. Wordmark fallback also renders in ink. */
   #wcs-join-app .wcs-brand-image {
     display: inline-block;
     max-width: 180px;
     max-height: 180px;
     width: auto; height: auto;
     object-fit: contain;
-    filter: invert(1);
   }
   #wcs-join-app .wcs-brand-wordmark {
     font-family: var(--w-display);
@@ -100,8 +98,7 @@
     line-height: 1;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--w-on-dark);
-    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    color: var(--w-ink);
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-brand-wordmark { font-size: 32px; }
@@ -113,7 +110,7 @@
     font-size: 26px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--w-on-dark);
+    color: var(--w-ink);
     line-height: 1;
   }
   #wcs-join-app .wcs-brand-sub {
@@ -122,19 +119,19 @@
     font-weight: 500;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--w-on-dark-muted);
+    color: var(--w-ink-muted);
     margin-top: 10px;
   }
 
   /* === The card =================================================== */
   #wcs-join-app .wcs-panel {
     background: var(--w-surface);
+    border: 1px solid var(--w-border);
     border-radius: 4px;
     overflow: hidden;
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 28px 60px -20px rgba(0, 0, 0, 0.55),
-      0 2px 6px rgba(0, 0, 0, 0.25);
+      0 24px 48px -16px rgba(10, 10, 12, 0.18),
+      0 2px 6px rgba(10, 10, 12, 0.06);
     position: relative;
   }
   /* Red top accent strip — running across the card to anchor identity. */
@@ -858,7 +855,7 @@
   }
 
   /* Optional: host page hook to extend the canvas to the whole viewport. */
-  body.has-wcs-join, html.has-wcs-join { background: var(--w-canvas); }
+  body.has-wcs-join, html.has-wcs-join { background: #f6f6f4; }
 </style>
 
 <div id="wcs-join-app" data-location="">

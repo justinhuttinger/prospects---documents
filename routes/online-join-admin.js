@@ -183,7 +183,10 @@ router.post('/plans', async (req, res) => {
   try {
     const sb = getSupabaseAdmin();
     const body = pick(req.body, PLAN_FIELDS);
-    const required = ['wcs_location_id', 'plan_key', 'plan_label', 'today_amount', 'monthly_amount', 'payment_plan_id', 'plan_validation_hash'];
+    // plan_validation_hash is no longer required at create time — /start
+    // fetches it fresh from ABC at signup. Stored value is a fallback only
+    // (see services/online-join/abc-plan-fetch.js).
+    const required = ['wcs_location_id', 'plan_key', 'plan_label', 'today_amount', 'monthly_amount', 'payment_plan_id'];
     const missing = required.filter(k => body[k] == null || body[k] === '');
     if (missing.length) return res.status(400).json({ error: `Required: ${missing.join(', ')}` });
     body.updated_by = req.staff.id;
@@ -377,12 +380,30 @@ router.get('/abc-plans/:clubNumber', async (req, res) => {
 });
 
 router.get('/abc-plans/:clubNumber/:planId', async (req, res) => {
+  // Call both ABC endpoints and merge — `/details` returns pricing + schedules
+  // but no planValidation; the bare `/clubs/plans/{planId}` endpoint returns
+  // the validation hash (see ABC POST Create Agreement docs rev 2025-08-12).
+  const { clubNumber, planId } = req.params;
   try {
-    const r = await axios.get(
-      `${ABC_BASE_URL}/${req.params.clubNumber}/clubs/plans/${req.params.planId}/details`,
-      { headers: abcHeaders(), timeout: 30000 }
-    );
-    res.json(r.data);
+    const [planResp, detailsResp] = await Promise.allSettled([
+      axios.get(`${ABC_BASE_URL}/${clubNumber}/clubs/plans/${planId}`, { headers: abcHeaders(), timeout: 30000 }),
+      axios.get(`${ABC_BASE_URL}/${clubNumber}/clubs/plans/${planId}/details`, { headers: abcHeaders(), timeout: 30000 }),
+    ]);
+    if (planResp.status === 'rejected' && detailsResp.status === 'rejected') {
+      const err = planResp.reason;
+      const status = err.response?.status || 500;
+      return res.status(status).json({ error: err.response?.data || err.message });
+    }
+    const planBody = planResp.status === 'fulfilled' ? planResp.value.data : null;
+    const detailsBody = detailsResp.status === 'fulfilled' ? detailsResp.value.data : null;
+    // Merge plan + details responses; pass through both raw bodies for the
+    // picker's defensive field probing.
+    res.json({
+      ...(detailsBody?.response || detailsBody || {}),
+      ...(planBody?.response || planBody || {}),
+      _plan: planBody,
+      _details: detailsBody,
+    });
   } catch (err) {
     const status = err.response?.status || 500;
     res.status(status).json({ error: err.response?.data || err.message });

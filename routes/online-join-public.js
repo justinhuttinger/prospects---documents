@@ -18,6 +18,7 @@ const {
 } = require('../services/online-join/validators');
 const { buildAgreementPayload, postAgreement, redactPaypageTokens } =
   require('../services/online-join/abc-agreement');
+const { fetchPlanValidationHash } = require('../services/online-join/abc-plan-fetch');
 const { upsertOnlineJoinContact } = require('../services/online-join/ghl-fanout');
 const { sendWelcomeEmail } = require('../services/online-join/sendgrid-fanout');
 const { logSignupError } = require('../services/online-join/error-log');
@@ -163,12 +164,40 @@ router.post('/start', async (req, res) => {
       });
     }
 
+    // Fetch a fresh planValidation hash from ABC (the stored plan-level hash
+    // can be stale — ABC says it rotates daily for plans with dynamic due
+    // dates). Fall back to the stored hash if the fetch fails, so a transient
+    // ABC outage doesn't block signups outright.
+    let planValidationHash = plan.plan_validation_hash || null;
+    try {
+      const { hash } = await fetchPlanValidationHash({
+        clubNumber: location.abc_club_number,
+        paymentPlanId: plan.payment_plan_id,
+      });
+      planValidationHash = hash;
+    } catch (err) {
+      await logSignupError({
+        step: 'start',
+        errorType: 'PLAN_HASH_FETCH_FAILED',
+        errorMessage: err.message,
+        errorPayload: err.abcBody || null,
+      });
+      if (!planValidationHash) {
+        return res.status(502).json({
+          error: 'Could not validate plan with ABC. Please try again or call the club.',
+          code: 'PLAN_HASH_UNAVAILABLE',
+        });
+      }
+      // else: continue with the stored fallback hash.
+    }
+
     // Normalize before insert (digits-only phone, trimmed state).
     const insertRow = {
       status: 'payment_pending',
       wcs_location_id,
       plan_id: plan.id,
       payment_plan_id: plan.payment_plan_id,
+      plan_validation_hash: planValidationHash,
       abc_club_number: location.abc_club_number,
 
       first_name: String(contact.first_name || '').trim(),

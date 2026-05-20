@@ -1954,6 +1954,21 @@
     state.inlineErrors = {};
     saveState();
     render();
+    scrollWidgetToTop();
+  }
+
+  // Scroll the widget back to the top whenever the step changes — without
+  // this, picking a location near the bottom of the step-1 list on mobile
+  // leaves the viewport scrolled past the new step's content. Tries
+  // scrollIntoView first (works inside an iframe-embedded WP page) and
+  // falls back to window.scrollTo for the standalone widget URL.
+  function scrollWidgetToTop() {
+    try {
+      if (root && typeof root.scrollIntoView === 'function') {
+        root.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
+    } catch (_) {}
+    try { window.scrollTo(0, 0); } catch (_) {}
   }
 
   // ----- PayPage postMessage ----------------------------------------------
@@ -1985,6 +2000,7 @@
     state.agreementAcknowledged = false;
     saveState();
     render();
+    scrollWidgetToTop();
   });
 
   async function confirmMembership() {
@@ -2015,10 +2031,12 @@
       state.currentStep = 7;
       clearStoredState();
       render();
+      scrollWidgetToTop();
     } else {
       state.successData = { error: r.body?.error || 'We could not finalize your membership. Our team has been notified.' };
       state.currentStep = 7;
       render();
+      scrollWidgetToTop();
     }
   }
 

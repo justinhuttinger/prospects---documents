@@ -26,6 +26,14 @@ function getAbcHeaders() {
   };
 }
 
+// ABC's POST Create Agreement expects birthday as MM/DD/YYYY (rev 2025-08-12,
+// docs page 5). We store the ISO YYYY-MM-DD form, so convert on the way out.
+function toAbcBirthday(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
+}
+
 function buildAgreementPayload(signup, plan) {
   const paymentTypeIsCard = signup.paypage_payment_type === 'Credit Card';
   // Prefer the hash captured at /start time — it's the value ABC was using
@@ -46,7 +54,7 @@ function buildAgreementPayload(signup, plan) {
       lastName: signup.last_name,
       email: signup.email,
       cellPhone: signup.cell_phone,
-      birthday: signup.birthday,
+      birthday: toAbcBirthday(signup.birthday),
       gender: signup.gender || '',
       agreementAddressInfo: {
         addressLine1: signup.address_line1,

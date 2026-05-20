@@ -57,6 +57,9 @@
   @media (max-width: 640px) {
     #wcs-join-app { padding: 40px 14px; }
   }
+  @media (max-width: 380px) {
+    #wcs-join-app { padding: 28px 10px; font-size: 14px; }
+  }
 
   #wcs-join-app .wcs-container {
     max-width: 720px;
@@ -104,6 +107,11 @@
     #wcs-join-app .wcs-brand-wordmark { font-size: 32px; }
     #wcs-join-app .wcs-brand-image { max-width: 132px; max-height: 132px; }
   }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-brand-wordmark { font-size: 26px; }
+    #wcs-join-app .wcs-brand-image { max-width: 104px; max-height: 104px; }
+    #wcs-join-app .wcs-brand { margin-bottom: 18px; }
+  }
 
   #wcs-join-app .wcs-brand-title {
     font-family: var(--w-display);
@@ -150,6 +158,12 @@
   @media (max-width: 520px) {
     #wcs-join-app .wcs-panel-header { padding: 28px 20px 18px; }
   }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-panel-header { padding: 24px 14px 14px; }
+    #wcs-join-app .wcs-panel-progress { padding: 0 14px 14px; }
+    #wcs-join-app .wcs-panel-body { padding: 12px 14px 20px; }
+    #wcs-join-app .wcs-panel-footer { padding: 14px 14px 18px; }
+  }
   #wcs-join-app .wcs-eyebrow {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px;
@@ -174,6 +188,11 @@
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-panel-header h1 { font-size: 28px; }
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-panel-header h1 { font-size: 22px; }
+    #wcs-join-app .wcs-eyebrow,
+    #wcs-join-app .wcs-step-tag { font-size: 10px; letter-spacing: 0.16em; }
   }
   #wcs-join-app .wcs-panel-header p {
     color: var(--w-ink-muted);
@@ -240,9 +259,9 @@
   /* === Sections =================================================== */
   #wcs-join-app .wcs-section + .wcs-section { margin-top: 26px; }
   #wcs-join-app .wcs-section-label {
-    font-size: 10px; font-weight: 700;
+    font-size: 10px; font-weight: 800;
     letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--w-ink-soft);
+    color: var(--w-ink);
     margin-bottom: 12px;
     display: flex; align-items: center; gap: 10px;
   }
@@ -286,9 +305,9 @@
   /* === Form fields ================================================= */
   #wcs-join-app .wcs-field { margin-bottom: 14px; }
   #wcs-join-app .wcs-field label {
-    display: block; font-size: 10px; font-weight: 700;
+    display: block; font-size: 10px; font-weight: 800;
     letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--w-ink-muted);
+    color: var(--w-ink);
     margin-bottom: 6px;
   }
   #wcs-join-app .wcs-field input,
@@ -342,6 +361,13 @@
   }
   @media (max-width: 540px) {
     #wcs-join-app .wcs-plan-list { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-plan-card { padding: 18px 14px; }
+    #wcs-join-app .wcs-plan-name { font-size: 19px; }
+    #wcs-join-app .wcs-plan-price b { font-size: 19px; }
+    #wcs-join-app .wcs-plan-price.is-today b { font-size: 24px; }
+    #wcs-join-app .wcs-plan-price span { font-size: 9px; letter-spacing: 0.16em; }
   }
   #wcs-join-app .wcs-plan-card {
     border: 1px solid var(--w-border);
@@ -411,9 +437,9 @@
   }
   #wcs-join-app .wcs-plan-price:last-child { border-bottom: 0; }
   #wcs-join-app .wcs-plan-price span {
-    font-size: 10px; font-weight: 700;
+    font-size: 10px; font-weight: 800;
     letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--w-ink-muted);
+    color: var(--w-ink);
   }
   #wcs-join-app .wcs-plan-price b {
     font-family: var(--w-display);
@@ -443,9 +469,9 @@
      of dropped-in. */
   #wcs-join-app .wcs-plan-features-header {
     margin: 18px 0 10px;
-    font-size: 10px; font-weight: 700;
+    font-size: 10px; font-weight: 800;
     letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--w-ink-soft);
+    color: var(--w-ink);
     display: flex; align-items: center; gap: 10px;
   }
   #wcs-join-app .wcs-plan-features-header::after {
@@ -659,9 +685,9 @@
     border-bottom: 1px solid var(--w-border);
   }
   #wcs-join-app .wcs-due-line span {
-    font-size: 11px; font-weight: 700;
+    font-size: 11px; font-weight: 800;
     letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--w-ink-muted);
+    color: var(--w-ink);
   }
   #wcs-join-app .wcs-due-line b {
     font-family: var(--w-display);
@@ -694,6 +720,12 @@
   @media (max-width: 520px) {
     #wcs-join-app .wcs-due-line b { font-size: 22px; }
     #wcs-join-app .wcs-due-line.is-total b { font-size: 28px; }
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-due-breakdown { padding: 16px 14px; }
+    #wcs-join-app .wcs-due-line b { font-size: 18px; }
+    #wcs-join-app .wcs-due-line.is-total b { font-size: 22px; }
+    #wcs-join-app .wcs-due-line span { font-size: 10px; letter-spacing: 0.16em; }
   }
 
   /* Scrollable agreement block. Subtle inner shadow signals scroll. */

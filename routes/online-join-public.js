@@ -368,6 +368,8 @@ router.post('/submit', async (req, res) => {
     // ABC returns HTTP 200 with an embedded error body on validation failures
     // (e.g. {status: {messageCode: "API-MEM-VAL-0111", message: "..."}, result:
     // {memberId: null}}), so we must inspect the body — not just the HTTP code.
+    // The reliable success signal is a populated result.memberId; the
+    // documented success code is API-MEM-MEM-0000 (per ABC error code table).
     const abcData = abcResp.data || {};
     const abcMemberId =
       abcData?.agreement?.memberId ||
@@ -383,9 +385,11 @@ router.post('/submit', async (req, res) => {
     const abcEmbeddedErrorCode = abcData?.status?.messageCode || null;
     const abcEmbeddedErrorMsg = abcData?.status?.message || null;
     const isHttpError = abcResp.status < 200 || abcResp.status >= 300;
-    const isEmbeddedError =
-      (abcEmbeddedErrorCode && abcEmbeddedErrorCode.startsWith('API-')) ||
-      !abcMemberId;
+    // memberId is the primary success signal. Without it, ABC failed —
+    // regardless of what messageCode says. (Don't use startsWith('API-')
+    // alone: ABC's *success* code is API-MEM-MEM-0000, which also starts
+    // with "API-".)
+    const isEmbeddedError = !abcMemberId;
 
     if (isHttpError || isEmbeddedError) {
       const errorType = isHttpError

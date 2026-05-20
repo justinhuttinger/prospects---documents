@@ -95,6 +95,29 @@
     font-size: 18px;
     box-shadow: 0 0 0 6px rgba(227, 24, 55, 0.12);
   }
+  /* New brand block — either a hosted logo image (preferred) or a
+     wordmark fallback. Both sit centered on the dark canvas above the card. */
+  #wcs-join-app .wcs-brand-image {
+    display: inline-block;
+    max-width: 320px;
+    max-height: 88px;
+    width: auto; height: auto;
+    object-fit: contain;
+  }
+  #wcs-join-app .wcs-brand-wordmark {
+    font-family: var(--w-display);
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--w-on-dark);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  }
+  @media (max-width: 520px) {
+    #wcs-join-app .wcs-brand-wordmark { font-size: 32px; }
+    #wcs-join-app .wcs-brand-image { max-height: 64px; }
+  }
+
   #wcs-join-app .wcs-brand-title {
     font-family: var(--w-display);
     font-size: 26px;
@@ -588,7 +611,121 @@
     margin-top: 2px; color: var(--w-red);
   }
 
-  /* === Confirmation (step 6) ====================================== */
+  /* === Step 6 — Review & Sign ===================================== */
+  /* Big amount-due summary card at the top. */
+  #wcs-join-app .wcs-due-card {
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 24px 22px;
+    border: 1px solid var(--w-ink);
+    border-radius: 2px;
+    background: #fafaf8;
+    margin-bottom: 8px;
+  }
+  #wcs-join-app .wcs-due-block { text-align: center; padding: 0 8px; }
+  #wcs-join-app .wcs-due-amount {
+    font-family: var(--w-display);
+    font-size: 40px; line-height: 1;
+    letter-spacing: 0.01em;
+    color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-due-block:first-child .wcs-due-amount { color: var(--w-red); }
+  #wcs-join-app .wcs-due-label {
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--w-ink-soft);
+    margin-top: 8px;
+  }
+  #wcs-join-app .wcs-due-divider {
+    width: 1px; height: 50px;
+    background: var(--w-border);
+  }
+  #wcs-join-app .wcs-due-note {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--w-ink-muted);
+    text-align: center;
+    margin-top: 10px;
+  }
+  @media (max-width: 520px) {
+    #wcs-join-app .wcs-due-amount { font-size: 30px; }
+  }
+
+  /* Scrollable agreement block. Subtle inner shadow signals scroll. */
+  #wcs-join-app .wcs-agreement-scroll {
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 18px 20px;
+    border: 1px solid var(--w-border);
+    border-radius: 2px;
+    background: var(--w-surface);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--w-ink);
+    box-shadow: inset 0 -24px 24px -24px rgba(0,0,0,0.18);
+  }
+  #wcs-join-app .wcs-agreement-section + .wcs-agreement-section { margin-top: 20px; }
+  #wcs-join-app .wcs-agreement-section h4 {
+    font-family: var(--w-display);
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 0 0 8px;
+    color: var(--w-ink);
+    font-weight: normal;
+  }
+  #wcs-join-app .wcs-agreement-section p { margin: 0 0 8px; font-size: 12px; color: var(--w-ink); text-align: justify; }
+  #wcs-join-app .wcs-agreement-section ol {
+    padding-left: 18px; margin: 6px 0 10px;
+  }
+  #wcs-join-app .wcs-agreement-section ol li {
+    margin-bottom: 8px;
+    font-size: 12px;
+    text-align: justify;
+  }
+  #wcs-join-app .wcs-agreement-section .wcs-agreement-note {
+    background: var(--w-surface-soft);
+    border-left: 3px solid var(--w-ink);
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 11px;
+  }
+
+  /* Signature pad. */
+  #wcs-join-app .wcs-sig-pad-wrap {
+    position: relative;
+    border: 1px solid var(--w-ink);
+    border-radius: 2px;
+    background: var(--w-surface);
+    overflow: hidden;
+  }
+  #wcs-join-app .wcs-sig-canvas {
+    display: block;
+    width: 100%;
+    height: 180px;
+    background:
+      linear-gradient(transparent calc(180px - 32px), var(--w-border) calc(180px - 32px), var(--w-border) calc(180px - 31px), transparent calc(180px - 31px));
+    touch-action: none;
+    cursor: crosshair;
+  }
+  #wcs-join-app .wcs-sig-clear {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: transparent;
+    border: 1px solid var(--w-border);
+    border-radius: 2px;
+    color: var(--w-ink-muted);
+    font-family: var(--w-body);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  #wcs-join-app .wcs-sig-clear:hover {
+    color: var(--w-red); border-color: var(--w-red);
+  }
+
+  /* === Confirmation (step 7) ====================================== */
   #wcs-join-app .wcs-success {
     text-align: center;
     padding: 16px 4px 8px;
@@ -648,12 +785,15 @@
   body.has-wcs-join, html.has-wcs-join { background: var(--w-canvas); }
 </style>
 
+<!--
+  To swap the wordmark for a hosted logo image, add data-logo-url to this div:
+    <div id="wcs-join-app" data-location="salem" data-logo-url="https://westcoaststrength.com/wp-content/uploads/wcs-logo.png"></div>
+  When data-logo-url is empty/absent the widget falls back to the wordmark below.
+-->
 <div id="wcs-join-app" data-location="">
   <div class="wcs-container">
     <div class="wcs-brand">
-      <div class="wcs-brand-logo">W</div>
-      <div class="wcs-brand-title">West Coast Strength</div>
-      <div class="wcs-brand-sub">Membership Enrollment</div>
+      <div class="wcs-brand-wordmark">West Coast Strength</div>
     </div>
     <div class="wcs-panel">
       <div class="wcs-panel-body wcs-loading-block">
@@ -672,10 +812,18 @@
   const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
   const STORAGE_KEY = 'wcs_join_state_v1';
   const STORAGE_TTL_MS = 60 * 60 * 1000;
-  const TOTAL_STEPS = 6;
+  const TOTAL_STEPS = 7;
 
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
+
+  // Persistence is intentionally OFF — wipe anything left from older builds
+  // so a refresh always starts from step 1 with empty fields.
+  try {
+    Object.keys(sessionStorage).forEach(k => {
+      if (k.startsWith('wcs_join_state_v1')) sessionStorage.removeItem(k);
+    });
+  } catch (_) {}
 
   // Default location is now OPTIONAL — when not provided the user picks from
   // the list on step 1. If data-location or ?location= is set, that becomes
@@ -721,50 +869,26 @@
     successData: null,
     inlineErrors: {},
     flashMessage: null,
+    // Step 5 -> step 6 hand-off (set when PayPage posts a transaction ID,
+    // consumed by the Confirm Membership button on step 6).
+    paypageTransactionId: null,
+    paypagePaymentType: null,
+    // Step 6 — Review & Sign.
+    signatureDataUrl: null,
+    signatureHasInk: false,
+    typedSignature: '',
+    agreementAcknowledged: false,
+    submittingAgreement: false,
   };
 
-  function saveState() {
-    if (!state.currentLocationId) return; // nothing to save until a location is picked
-    try {
-      sessionStorage.setItem(locationStorageKey(state.currentLocationId), JSON.stringify({
-        ts: Date.now(),
-        currentStep: state.currentStep,
-        selectedPlanId: state.selectedPlan?.id || null,
-        contact: state.contact,
-        emergencyContact: state.emergencyContact,
-        marketing: state.marketing,
-        termsAccepted: state.termsAccepted,
-        paymentMethodChoice: state.paymentMethodChoice,
-        signupId: state.signupId,
-        paypageUrl: state.paypageUrl,
-      }));
-      sessionStorage.setItem(GLOBAL_STORAGE_KEY, JSON.stringify({ ts: Date.now(), currentLocationId: state.currentLocationId }));
-    } catch (_) {}
-  }
-  function loadStoredStateFor(slug) {
-    try {
-      const raw = sessionStorage.getItem(locationStorageKey(slug));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
-        sessionStorage.removeItem(locationStorageKey(slug));
-        return null;
-      }
-      return parsed;
-    } catch (_) { return null; }
-  }
-  function loadStoredGlobal() {
-    try {
-      const raw = sessionStorage.getItem(GLOBAL_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed.ts || Date.now() - parsed.ts > STORAGE_TTL_MS) {
-        sessionStorage.removeItem(GLOBAL_STORAGE_KEY);
-        return null;
-      }
-      return parsed;
-    } catch (_) { return null; }
-  }
+  // Persistence intentionally disabled — per request, a refresh starts the
+  // member over from step 1 with no carryover. The functions stay defined
+  // so existing call-sites compile; they're just no-ops. clearStoredState
+  // still wipes anything left from older builds.
+  function saveState() { /* no-op */ }
+  // Persistence intentionally disabled — always start fresh.
+  function loadStoredStateFor() { return null; }
+  function loadStoredGlobal() { return null; }
   function clearStoredState() {
     if (!state.currentLocationId) return;
     try {
@@ -875,6 +999,126 @@
     });
   }
 
+  // ----- Agreement body HTML (legal text shown on step 6) -----------------
+  // Mirrors services/online-join/agreement-html.js on the server. The signed
+  // PDF that gets uploaded to the member's ABC account uses the same wording.
+  function getAgreementBodyHtml() {
+    return `
+      <section class="wcs-agreement-section">
+        <h4>Request For Preauthorized Payment</h4>
+        <p>I/We hereby request the privilege of paying to ABC Fitness Solutions, LLC ("The Company"), Sherwood, AR 72124, and further authorize the Company to draw items (checks, electronic fund transfers, charge card) for the purpose of paying said payments, including any late fees or service fees, on the account listed above. Subject to the following conditions:</p>
+        <ol>
+          <li>The items outlined in Your Membership Agreement (monthly dues, annual fees, enrollment fees, etc.) shall be drawn on or about the date or dates set forth in the Membership Agreement. By signing below, You authorize the Company to draft via EFT said amounts from the account or card identified herein. The transactions on Your bank, debit, or credit card statement shall constitute receipts for payment on Your account.</li>
+          <li><strong>One-Time Transfers:</strong> When You provide a check as payment, You authorize the Company either to use information from Your check to make a one-time EFT from Your account or to process the payment as a check transaction. When the Company uses information from Your check to make an electronic fund transfer, funds may be withdrawn from Your account as soon as today's date.</li>
+          <li>If the regular payments set forth in the Membership Agreement should vary in amount, You are entitled to notice at least 10 days before each payment of when it will be made and how much it will be. However, by executing this preauthorization, You choose to instead get this notice only when the payment would differ by more than $50.00 from the most recent payment You have made.</li>
+          <li>By executing this Agreement, You acknowledge Your awareness that certain disclosures required by the Electronic Funds Transfer Act and its regulations are available for Your review at the Company's website: www.abcfitness.com under Terms of Service.</li>
+          <li>The privilege of making EFT payments under this arrangement may be revoked by the Company if any item is not paid upon presentation.</li>
+          <li>If this preauthorization payment arrangement is revoked for any reason, this does not release You from Your obligation under Your Membership Agreement.</li>
+          <li>If any payment is not paid upon presentation to Your bank or credit/debit card company for any reason, a service fee will be assessed and drafted. A late fee will be assessed and drafted should any monthly payment become past due.</li>
+          <li>By executing this Agreement, You authorize Club and Club's agents, including its third party payment processing companies ("Club's Agents"), to store the account or card information provided by You on or in relation to this Agreement and/or Your Club Membership Agreement ("Club Agreement"), as well as any other account or card information provided by You through any means to Club or Club's Agents (including information provided in person, online or over the phone) for purposes of making any payment in relation to this Agreement and/or Your Club Agreement (hereinafter, "Payment Information"). Club and/or Club's Agents will use the stored Payment Information to process payment of all dues, fees, taxes, purchases and incidental charges that are due or will become due, including all items on the Payment Schedule, fees identified in Your Club Agreement, membership-related obligations, retail transactions, personal training purchases, group exercise purchases, childcare fees, or other purchases. Club and/or Club's Agents may also use the stored Payment Information to process payments owed in relation to all subsequent Agreements entered between You and Club. The fixed dates or intervals on which transactions will be processed and the transaction amounts (including all associated fees, taxes, and charges) and/or a description of how they will be calculated are more specifically set forth in the Payment Schedule and other terms of Your Club Agreement. If Your Club Agreement will automatically renew at the end of the Term defined therein, the stored Payment Information will be used to process payments owed in relation to the renewal term. This consent to store Payment Information will not expire unless it is expressly revoked. The general cancellation and refund policies provided in Your Club Agreement will apply to this consent. If any changes are made to the terms of this consent, an e-mail notifying You of such changes will be sent to the e-mail address provided by You on the face of Your Club Agreement or, if an e-mail is not provided, notice will be sent to the mailing address provided on Your Club Agreement.</li>
+          <li>This preauthorization payment arrangement shall apply to the following Applicant(s): the member named in the signature block below.</li>
+        </ol>
+        <p class="wcs-agreement-note">The Federal Equal Credit Opportunity Act prohibits creditors from discriminating against credit applicants on the basis of sex or marital status. The agency that administers compliance with the law is the Federal Trade Commission, Equal Credit Opportunity, Washington, D.C. 20580.</p>
+      </section>
+
+      <section class="wcs-agreement-section">
+        <h4>Membership Privileges, Notices, Disclosures &amp; Agreements</h4>
+        <p><strong>DEFAULT AND LATE PAYMENTS:</strong> Should you default on any payment obligation as called for in this agreement, the club will have the right to declare the entire remaining balance due and payable and you agree to pay allowable interest, and all costs of collection, including but not limited to collection agency fees, court costs, and attorney fees. A default occurs when any payment due under this agreement is more than ten days late. <strong>A SERVICE FEE WILL BE CHARGED IMMEDIATELY FOR ANY CHECK, DRAFT, CREDIT CARD, OR ORDER RETURNED FOR INSUFFICIENT FUNDS OR ANY OTHER REASON. SHOULD ANY MONTHLY PAYMENT BECOME MORE THAN TEN DAYS PAST DUE, YOU WILL BE CHARGED A LATE FEE.</strong> If the Member is paying monthly dues by electronic funds transfer (EFT), the club's billing company, ABC Fitness Solutions, LLC, reserves the right to draft via EFT all amounts owed by the member including any and all late fees and service fees. Subject to appropriate State and Federal Law. <strong>NOTE: Members paying monthly dues by EFT are subject to $10.00 per month increase of monthly dues if EFT payment is stopped or changed. This will not affect any other provisions of this agreement.</strong></p>
+        <p>Notwithstanding any other provisions of this Agreement, you understand and agree that the amount of your monthly membership dues is based on current sales tax rates and to the extent such rates should increase during your membership, the club has the right to increase your monthly membership dues by the amount of such increase. If you have requested the privilege of paying your monthly dues by pre-authorized electronic funds transfer, the monthly amount so transferred will be adjusted to reflect any increase in the sales tax rate.</p>
+      </section>
+
+      <section class="wcs-agreement-section">
+        <h4>Renewal Program Options</h4>
+        <p><strong>MONTH TO MONTH AGREEMENT:</strong> The member agrees to make the Scheduled Payments according to the terms set forth by this agreement. This agreement may be cancelled at any time with a 30 day written notice delivered to the club's address, after the first 30 days of membership is completed. The member will be required to make any Scheduled Payments that are due within the 30 day notice to cancel.</p>
+        <p><strong>TERM AGREEMENT AUTOMATIC RENEWAL PROGRAM:</strong> Provided the Member is not in default of this agreement and subject to the terms and conditions hereof, the membership will automatically renew at the rate indicated, on the indicated date. Cancellation of Renewal and/or any additional Payment Schedules set forth by this agreement will require a 30-day written notice delivered to the club's address. The member will be required to make payments that are due within the 30 day notice to cancel. This agreement has an indicated month term obligation that must be fulfilled prior to cancellation in order to avoid any early cancellation fees.</p>
+        <p><strong>PAID IN FULL or NON-RENEWAL:</strong> This is a non-transferable membership that will expire on the term obligation date.</p>
+        <p>An <strong>Annual Facility Fee</strong> of the indicated amount will be billed on the indicated date and each year thereafter.</p>
+        <p><strong>FAMILY ADD ON RATE NOTICE:</strong> I understand that I am joining at a reduced rate as a family add-on to an existing Master Member. I understand that should my "Master" member become inactive during the course of my membership, my monthly dues payments are subject to increase to the current single membership rate.</p>
+        <p class="wcs-agreement-note"><strong>NOTICE:</strong> ANY HOLDER OF THIS AGREEMENT IS SUBJECT TO ALL CLAIMS AND DEFENSES WHICH THE DEBTOR COULD ASSERT AGAINST THE SELLER OF GOODS OR SERVICES OBTAINED PURSUANT HERETO OR WITH THE PROCEEDS HEREOF, RECOVERY HEREUNDER BY THE DEBTOR SHALL NOT EXCEED AMOUNTS PAID BY THE DEBTOR HEREUNDER.</p>
+      </section>
+    `;
+  }
+
+  // ----- Signature pad ----------------------------------------------------
+  let sigCtx = null;
+  let sigDrawing = false;
+  let sigLastPoint = null;
+  function initSignaturePad() {
+    const canvas = document.getElementById('wcs-sig-canvas');
+    if (!canvas) return;
+    // Match canvas internal resolution to its CSS display size for crisp lines.
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0a0a0c';
+    sigCtx = ctx;
+    sigDrawing = false;
+    sigLastPoint = null;
+    // If state.signatureDataUrl already exists (re-render in same step), redraw.
+    if (state.signatureDataUrl) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = state.signatureDataUrl;
+    }
+    function pointFromEvent(e) {
+      const r = canvas.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : e;
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+    function start(e) {
+      e.preventDefault();
+      sigDrawing = true;
+      sigLastPoint = pointFromEvent(e);
+    }
+    function move(e) {
+      if (!sigDrawing) return;
+      e.preventDefault();
+      const p = pointFromEvent(e);
+      ctx.beginPath();
+      ctx.moveTo(sigLastPoint.x, sigLastPoint.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      sigLastPoint = p;
+      if (!state.signatureHasInk) {
+        state.signatureHasInk = true;
+        updateConfirmButton();
+      }
+    }
+    function end() {
+      if (!sigDrawing) return;
+      sigDrawing = false;
+      sigLastPoint = null;
+      state.signatureDataUrl = canvas.toDataURL('image/png');
+    }
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  }
+  function clearSignaturePad() {
+    const canvas = document.getElementById('wcs-sig-canvas');
+    if (!canvas || !sigCtx) return;
+    sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+    state.signatureDataUrl = null;
+    state.signatureHasInk = false;
+    updateConfirmButton();
+  }
+  function updateConfirmButton() {
+    const btn = root.querySelector('[data-action="confirm-membership"]');
+    if (!btn) return;
+    const canSubmit = state.signatureHasInk && state.typedSignature.trim().length >= 2 && state.agreementAcknowledged && !state.submittingAgreement;
+    btn.disabled = !canSubmit;
+  }
+
   // ----- Inline SVG icons -------------------------------------------------
   const ICONS = {
     card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
@@ -891,7 +1135,8 @@
       3: { eyebrow: 'Member Profile', title: 'Tell Us About You' },
       4: { eyebrow: 'Billing',        title: 'How You Pay' },
       5: { eyebrow: 'Secure Payment', title: 'Enter Payment Details' },
-      6: { eyebrow: 'Confirmation',   title: 'Welcome' },
+      6: { eyebrow: 'Final Step',     title: 'Review & Sign' },
+      7: { eyebrow: 'Confirmation',   title: 'Welcome to the Westside' },
     }[state.currentStep] || { eyebrow: '', title: '' };
   }
 
@@ -905,7 +1150,7 @@
   }
 
   function renderPanelHeader() {
-    const isConfirmed = state.currentStep === 6 && state.successData && !state.successData.pending && !state.successData.error;
+    const isConfirmed = state.currentStep === 7 && state.successData && !state.successData.pending && !state.successData.error;
     if (isConfirmed) {
       const loc = state.config?.location?.display_name || 'Online Join';
       return `
@@ -914,7 +1159,7 @@
             <span>${escapeHtml(loc)}</span>
             <span class="wcs-step-tag">Complete</span>
           </div>
-          <h1>Membership Confirmed</h1>
+          <h1>Welcome to the Westside</h1>
         </div>
         <div class="wcs-panel-progress">${renderProgressPills(TOTAL_STEPS + 1)}</div>
       `;
@@ -1124,7 +1369,73 @@
     `;
   }
 
+  // Step 6 — Review & Sign. PayPage has fired and stored the transactionId
+  // on state; here we show what's due today, the full ABC agreement text,
+  // and a signature pad. The Confirm Membership button on this step is
+  // what actually calls /submit (which creates the ABC agreement and
+  // uploads the signed PDF).
   function renderStep6() {
+    const plan = state.selectedPlan || {};
+    const today = money(plan.today_amount);
+    const monthly = money(plan.monthly_amount);
+    const loc = state.config?.location?.display_name || '';
+    const memberName = `${state.contact.first_name || ''} ${state.contact.last_name || ''}`.trim();
+    const canSubmit = state.signatureHasInk && state.typedSignature.trim().length >= 2 && state.agreementAcknowledged && !state.submittingAgreement;
+    return `
+      <div class="wcs-section">
+        <div class="wcs-due-card">
+          <div class="wcs-due-block">
+            <div class="wcs-due-amount">${today}</div>
+            <div class="wcs-due-label">Charged Today</div>
+          </div>
+          <div class="wcs-due-divider"></div>
+          <div class="wcs-due-block">
+            <div class="wcs-due-amount">${monthly}</div>
+            <div class="wcs-due-label">Then Monthly</div>
+          </div>
+        </div>
+        <p class="wcs-due-note">
+          ${escapeHtml(plan.plan_label || 'Membership')}${loc ? ' · ' + escapeHtml(loc) : ''}
+        </p>
+      </div>
+
+      <div class="wcs-section">
+        <div class="wcs-section-label">Membership Agreement</div>
+        <div class="wcs-agreement-scroll" id="wcs-agreement-scroll">
+          ${getAgreementBodyHtml()}
+        </div>
+      </div>
+
+      <div class="wcs-section">
+        <div class="wcs-section-label">Signature</div>
+        <div class="wcs-sig-pad-wrap">
+          <canvas id="wcs-sig-canvas" class="wcs-sig-canvas" width="600" height="180" aria-label="Sign here"></canvas>
+          <button type="button" class="wcs-sig-clear" data-action="clear-signature">Clear</button>
+        </div>
+        <div class="wcs-field" style="margin-top: 12px;">
+          <label for="wcs-typed-sig">Type your full legal name</label>
+          <input id="wcs-typed-sig" type="text" name="typed_signature"
+                 value="${escapeHtml(state.typedSignature || memberName)}"
+                 autocomplete="name"
+                 data-action="type-signature"
+                 placeholder="${escapeHtml(memberName || 'Your full legal name')}" />
+        </div>
+        <label class="wcs-checkbox" style="margin-top: 8px;">
+          <input type="checkbox" data-action="toggle-acknowledge" ${state.agreementAcknowledged ? 'checked' : ''} />
+          <span>I have read, understand, and agree to the terms above, and authorize the recurring billing described in this agreement.</span>
+        </label>
+      </div>
+
+      <button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="confirm-membership"
+              ${canSubmit ? '' : 'disabled'} style="margin-top: 12px;">
+        ${state.submittingAgreement
+          ? '<span class="wcs-spinner" style="margin-right:8px;"></span>Activating Membership…'
+          : 'Confirm Membership'}
+      </button>
+    `;
+  }
+
+  function renderStep7() {
     if (state.successData?.pending) {
       return `
         <div class="wcs-loading-block">
@@ -1141,25 +1452,28 @@
       `;
     }
     const s = state.successData;
-    const heading = state.config.copy?.step_6_welcome_heading || 'Welcome to the WCS family!';
-    const body = state.config.copy?.step_6_welcome_body ||
-      'Your membership is active. Book your free Day One session below to meet your trainer and tour the gym.';
+    const heading = state.config.copy?.step_7_welcome_heading
+      || state.config.copy?.step_6_welcome_heading
+      || 'Welcome to the Westside.';
+    const body = state.config.copy?.step_7_welcome_body
+      || state.config.copy?.step_6_welcome_body
+      || "We're happy you're here. Your membership is active — book your free Day One session below to meet your trainer and tour the gym.";
     return `
       <div class="wcs-success">
         <div class="wcs-checkmark">${ICONS.check}</div>
         <h1>${escapeHtml(heading)}</h1>
-        <p style="margin-top: 4px;">${escapeHtml(body)}</p>
+        <p style="margin-top: 8px;">${escapeHtml(body)}</p>
         ${s.member_id ? `<div class="wcs-member-id">Member # ${escapeHtml(s.member_id)}</div>` : ''}
-        ${s.plan_label ? `<p style="margin: 4px 0 8px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
+        ${s.plan_label ? `<p style="margin: 8px 0 12px;"><strong>${escapeHtml(s.plan_label)}</strong>${s.monthly_amount != null ? ` · ${money(s.monthly_amount)}/mo` : ''}</p>` : ''}
         ${s.day_one_booking_url
-          ? `<a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 4px;">Book your Day One →</a>`
+          ? `<a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 8px;">Book your Day One →</a>`
           : ''}
       </div>
     `;
   }
 
   function renderFooter() {
-    const onConfirm = state.currentStep === 6 && state.successData && !state.successData.pending;
+    const onConfirm = state.currentStep === 7 && state.successData && !state.successData.pending;
     if (onConfirm) {
       return ''; // no footer on success/error confirm view
     }
@@ -1174,28 +1488,37 @@
       case 4: primaryDisabled = !state.paymentMethodChoice;
               primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
       case 5: primary = ''; break;
+      case 6: primary = ''; break; // confirm button lives inside step 6 body
     }
 
-    const secondary = state.currentStep > 1 && state.currentStep < 6
+    const secondary = state.currentStep > 1 && state.currentStep < 7
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
 
-    // Step 1 has no footer at all when there's nothing to put in it.
     if (state.currentStep === 1) return '';
     return `<div class="wcs-panel-footer">${secondary}${primary || '<span></span>'}</div>`;
   }
 
+  // Brand mark — uses the host page's logo URL when provided via
+  //   <div id="wcs-join-app" data-logo-url="https://..."></div>
+  // Otherwise falls back to a Bebas Neue / Prohibition wordmark — still
+  // looks intentional, no broken-image icon.
+  function renderBrandHeader() {
+    const url = (root.dataset.logoUrl || '').trim();
+    if (url) {
+      return `<img src="${escapeHtml(url)}" alt="West Coast Strength" class="wcs-brand-image" />`;
+    }
+    return `<div class="wcs-brand-wordmark">West Coast Strength</div>`;
+  }
+
   function render() {
-    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6 }[state.currentStep]) || renderStep1;
+    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7 }[state.currentStep]) || renderStep1;
     const flash = state.flashMessage
       ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
       : '';
     root.innerHTML = `
       <div class="wcs-container">
-        <div class="wcs-brand">
-          West Coast Strength
-          <div class="wcs-brand-sub">Online membership signup${state.config?.location?.display_name ? ' · ' + escapeHtml(state.config.location.display_name) : ''}</div>
-        </div>
+        <div class="wcs-brand">${renderBrandHeader()}</div>
         <div class="wcs-panel">
           ${renderPanelHeader()}
           <div class="wcs-panel-body">
@@ -1208,6 +1531,7 @@
     `;
     state.flashMessage = null;
     attachListeners();
+    if (state.currentStep === 6) initSignaturePad();
   }
 
   // ----- Events -----------------------------------------------------------
@@ -1223,7 +1547,19 @@
   }
   function handleInputChange(e) {
     const el = e.target;
+    // Step 6 acknowledge checkbox doesn't carry a `name` — match on data-action.
+    if (el.type === 'checkbox' && el.dataset?.action === 'toggle-acknowledge') {
+      state.agreementAcknowledged = el.checked;
+      updateConfirmButton();
+      return;
+    }
     const name = el.name;
+    // Step 6 typed-signature input.
+    if (name === 'typed_signature') {
+      state.typedSignature = el.value;
+      updateConfirmButton();
+      return;
+    }
     if (!name) return;
     if (el.type === 'checkbox') {
       if (name === 'marketing_email') state.marketing.email = el.checked;
@@ -1311,6 +1647,13 @@
       } finally {}
       return;
     }
+    if (action === 'clear-signature') {
+      clearSignaturePad();
+      return;
+    }
+    if (action === 'confirm-membership') {
+      return confirmMembership();
+    }
     if (action === 'switch-plan') {
       const plan = state.config.plans.find(p => p.id === el.dataset.planId);
       if (plan) {
@@ -1389,19 +1732,50 @@
     if (state.currentStep < 5) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;
-    state.successData = { pending: true };
+    // Payment method tokenized successfully. Don't call /submit yet — that
+    // happens only after the member signs in step 6. Stash the transaction
+    // ID and advance.
+    state.paypageTransactionId = tx.id;
+    state.paypagePaymentType = tx.paymentType;
     state.currentStep = 6;
+    saveState();
     render();
-    const r = await submitAgreement(tx.id, tx.paymentType);
+  });
+
+  async function confirmMembership() {
+    if (state.submittingAgreement) return;
+    if (!state.paypageTransactionId) {
+      state.flashMessage = { type: 'error', text: 'Payment session expired. Please reload and try again.' };
+      render();
+      return;
+    }
+    state.submittingAgreement = true;
+    state.successData = { pending: true };
+    render();
+    const r = await api('/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        signup_id: state.signupId,
+        paypage_transaction_id: state.paypageTransactionId,
+        paypage_payment_type: state.paypagePaymentType,
+        signature_data_url: state.signatureDataUrl,
+        typed_signature: state.typedSignature,
+        agreement_acknowledged: state.agreementAcknowledged,
+      }),
+    });
+    state.submittingAgreement = false;
     if (r.ok && r.body?.success) {
       state.successData = r.body;
+      state.currentStep = 7;
       clearStoredState();
       render();
     } else {
       state.successData = { error: r.body?.error || 'We could not finalize your membership. Our team has been notified.' };
+      state.currentStep = 7;
       render();
     }
-  });
+  }
 
   // ----- Boot --------------------------------------------------------------
   function applyStoredStateFor(slug) {

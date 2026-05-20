@@ -335,25 +335,10 @@ router.post('/submit', async (req, res) => {
       payload: abcPayload,
     });
 
-    if (abcResp.status < 200 || abcResp.status >= 300) {
-      // Log full response (PayPage tokens redacted from request payload).
-      await logSignupError({
-        signupId: signup_id,
-        step: 'submit',
-        errorType: `ABC_${abcResp.status}`,
-        errorMessage: typeof abcResp.data === 'string' ? abcResp.data : JSON.stringify(abcResp.data).slice(0, 500),
-        errorPayload: abcResp.data || null,
-        requestPayload: redactPaypageTokens(abcPayload),
-      });
-      await sb.from('online_signups').update({ status: 'failed' }).eq('id', signup_id);
-      return res.status(502).json({
-        success: false,
-        error: 'Membership could not be created. Our team has been notified — please call the club.',
-        code: 'ABC_REJECTED',
-      });
-    }
-
     // 7. Extract member/agreement IDs from ABC response.
+    // ABC returns HTTP 200 with an embedded error body on validation failures
+    // (e.g. {status: {messageCode: "API-MEM-VAL-0111", message: "..."}, result:
+    // {memberId: null}}), so we must inspect the body — not just the HTTP code.
     const abcData = abcResp.data || {};
     const abcMemberId =
       abcData?.agreement?.memberId ||
@@ -363,8 +348,40 @@ router.post('/submit', async (req, res) => {
     const abcAgreementId =
       abcData?.agreement?.agreementId ||
       abcData?.result?.agreementId ||
+      abcData?.result?.agreementNumber ||
       abcData?.agreementId ||
       null;
+    const abcEmbeddedErrorCode = abcData?.status?.messageCode || null;
+    const abcEmbeddedErrorMsg = abcData?.status?.message || null;
+    const isHttpError = abcResp.status < 200 || abcResp.status >= 300;
+    const isEmbeddedError =
+      (abcEmbeddedErrorCode && abcEmbeddedErrorCode.startsWith('API-')) ||
+      !abcMemberId;
+
+    if (isHttpError || isEmbeddedError) {
+      const errorType = isHttpError
+        ? `ABC_${abcResp.status}`
+        : `ABC_${abcEmbeddedErrorCode || 'NO_MEMBER_ID'}`;
+      const errorMessage = abcEmbeddedErrorMsg
+        || (typeof abcData === 'string' ? abcData : JSON.stringify(abcData).slice(0, 500));
+      await logSignupError({
+        signupId: signup_id,
+        step: 'submit',
+        errorType,
+        errorMessage,
+        errorPayload: abcData || null,
+        requestPayload: redactPaypageTokens(abcPayload),
+      });
+      await sb.from('online_signups').update({
+        status: 'failed',
+        abc_response: abcData,
+      }).eq('id', signup_id);
+      return res.status(502).json({
+        success: false,
+        error: 'Membership could not be created. Our team has been notified — please call the club.',
+        code: 'ABC_REJECTED',
+      });
+    }
 
     await sb.from('online_signups').update({
       status: 'agreement_created',

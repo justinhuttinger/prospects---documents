@@ -71,8 +71,9 @@ function buildAgreementPayload(signup, plan) {
       },
     },
 
-    todayBillingInfo: { isTodayBillingSameAsDraft: 'true' },
-
+    // ABC rejects payloads that include BOTH todayBillingInfo/draftBillingInfo
+    // AND payPageBillingInfo (API-MEM-MEM-0094). Online-join only ever uses
+    // PayPage tokens, so we omit the other envelopes entirely.
     payPageBillingInfo: paymentTypeIsCard
       ? {
           payPageDueTodayCreditCard: {

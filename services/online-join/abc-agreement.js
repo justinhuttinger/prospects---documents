@@ -53,6 +53,10 @@ function buildAgreementPayload(signup, plan) {
       firstName: signup.first_name,
       lastName: signup.last_name,
       email: signup.email,
+      // Club 30935 requires homePhone (API-MEM-VAL-0123) — the widget only
+      // collects one phone, so mirror cell_phone into both slots. Most members
+      // don't have a separate landline anyway.
+      homePhone: signup.cell_phone,
       cellPhone: signup.cell_phone,
       birthday: toAbcBirthday(signup.birthday),
       gender: signup.gender || '',

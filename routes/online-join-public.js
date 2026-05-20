@@ -321,7 +321,7 @@ router.post('/submit', async (req, res) => {
     if (signup.status === 'agreement_created') {
       const { data: plan } = await sb
         .from('online_join_plans')
-        .select('plan_label, monthly_amount')
+        .select('plan_label, monthly_amount, today_amount, enrollment_fee')
         .eq('id', signup.plan_id)
         .maybeSingle();
       const { data: location } = await sb
@@ -335,6 +335,8 @@ router.post('/submit', async (req, res) => {
         member_id: signup.abc_member_id,
         plan_label: plan?.plan_label || null,
         monthly_amount: plan?.monthly_amount != null ? Number(plan.monthly_amount) : null,
+        today_amount: plan?.today_amount != null ? Number(plan.today_amount) : null,
+        enrollment_fee: plan?.enrollment_fee != null ? Number(plan.enrollment_fee) : null,
         day_one_booking_url: location?.day_one_booking_url || null,
       });
     }
@@ -570,6 +572,8 @@ router.post('/submit', async (req, res) => {
       member_id: abcMemberId,
       plan_label: plan.plan_label,
       monthly_amount: plan.monthly_amount != null ? Number(plan.monthly_amount) : null,
+      today_amount: plan.today_amount != null ? Number(plan.today_amount) : null,
+      enrollment_fee: plan.enrollment_fee != null ? Number(plan.enrollment_fee) : null,
       day_one_booking_url: location?.day_one_booking_url || null,
     });
   } catch (err) {

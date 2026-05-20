@@ -30,7 +30,7 @@ async function loadPublicConfig(locationId) {
     .from('online_join_plans')
     .select(`
       id, plan_key, plan_label, plan_description, features, badge,
-      today_amount, monthly_amount, display_order,
+      today_amount, monthly_amount, enrollment_fee, display_order,
       today_amount_ach, monthly_amount_ach, payment_plan_id_ach,
       age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
     `)
@@ -76,6 +76,7 @@ async function loadPublicConfig(locationId) {
         badge: p.badge || null,
         today_amount: parseFloat(p.today_amount),
         monthly_amount: parseFloat(p.monthly_amount),
+        enrollment_fee: p.enrollment_fee != null ? parseFloat(p.enrollment_fee) : null,
         today_amount_ach: hasAch && p.today_amount_ach != null ? parseFloat(p.today_amount_ach) : null,
         monthly_amount_ach: hasAch && p.monthly_amount_ach != null ? parseFloat(p.monthly_amount_ach) : null,
         has_ach_variant: hasAch,

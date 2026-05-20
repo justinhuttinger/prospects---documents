@@ -932,6 +932,27 @@
     if (digits.length < 7) return `(${digits.slice(0,3)}) ${digits.slice(3)}`;
     return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
   }
+  // Birthday input: auto-format the digits the member types as MM/DD/YYYY.
+  // We do this so they never have to touch a native date picker (the
+  // mobile UX was unreliable). Stored internally in ISO YYYY-MM-DD for
+  // the server, but displayed and typed as MM/DD/YYYY.
+  function formatBirthdayInput(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+    if (digits.length < 3) return digits;
+    if (digits.length < 5) return `${digits.slice(0,2)}/${digits.slice(2)}`;
+    return `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;
+  }
+  // Convert MM/DD/YYYY → YYYY-MM-DD for server submission. Returns the
+  // ISO string when valid, '' when the input isn't a complete date.
+  function birthdayToIso(displayed) {
+    const m = String(displayed || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return '';
+    const [_, mm, dd, yyyy] = m;
+    // Sanity-check the month/day so 13/45/2000 doesn't slip through.
+    const mi = parseInt(mm, 10), di = parseInt(dd, 10), yi = parseInt(yyyy, 10);
+    if (mi < 1 || mi > 12 || di < 1 || di > 31 || yi < 1900 || yi > 2200) return '';
+    return `${yyyy}-${mm}-${dd}`;
+  }
   function money(n) {
     const num = Number(n);
     if (Number.isNaN(num)) return '';
@@ -944,7 +965,8 @@
     if (!c.last_name.trim()) errors.last_name = 'Required.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) errors.email = 'Invalid email.';
     if (c.cell_phone.replace(/\D/g, '').length !== 10) errors.cell_phone = '10 digits.';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(c.birthday)) errors.birthday = 'Required.';
+    // birthday is displayed/typed as MM/DD/YYYY; valid means it converts to ISO.
+    if (!birthdayToIso(c.birthday)) errors.birthday = 'MM/DD/YYYY required.';
     if (!c.address_line1.trim()) errors.address_line1 = 'Required.';
     if (!c.city.trim()) errors.city = 'Required.';
     if (!/^[A-Za-z]{2}$/.test(c.state || '')) errors.state = '2 letters.';
@@ -982,6 +1004,12 @@
     });
   }
   async function startSignup() {
+    // birthday is held in state as MM/DD/YYYY (display format) — convert
+    // to ISO YYYY-MM-DD here for the server.
+    const contactForServer = {
+      ...state.contact,
+      birthday: birthdayToIso(state.contact.birthday),
+    };
     return api('/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -989,7 +1017,7 @@
         wcs_location_id: state.currentLocationId,
         plan_id: state.selectedPlan.id,
         payment_method_choice: state.paymentMethodChoice,
-        contact: state.contact,
+        contact: contactForServer,
         emergency_contact: state.emergencyContact,
         marketing: state.marketing,
         attribution: captureAttribution(),
@@ -1311,7 +1339,7 @@
           ${fieldHtml({ name: 'cell_phone', label: 'Cell phone', type: 'tel', value: c.cell_phone, autocomplete: 'tel-national', placeholder: '(555) 555-5555', error: err.cell_phone })}
         </div>
         <div class="wcs-row">
-          ${fieldHtml({ name: 'birthday', label: 'Date of birth', type: 'date', value: c.birthday, autocomplete: 'bday', error: err.birthday })}
+          ${fieldHtml({ name: 'birthday', label: 'Date of birth', type: 'text', value: c.birthday, autocomplete: 'bday', placeholder: 'MM/DD/YYYY', max: 10, error: err.birthday })}
           <div class="wcs-field">
             <label for="wcs-f-gender">Gender</label>
             <select id="wcs-f-gender" name="gender">
@@ -1623,7 +1651,8 @@
     } else if (name in state.contact) {
       let v = el.value;
       if (name === 'cell_phone') { v = formatPhoneInput(v); el.value = v; }
-      if (name === 'state') v = v.toUpperCase().slice(0, 2);
+      else if (name === 'birthday') { v = formatBirthdayInput(v); el.value = v; }
+      else if (name === 'state') v = v.toUpperCase().slice(0, 2);
       state.contact[name] = v;
     }
     saveState();
@@ -1673,7 +1702,7 @@
       if (Object.keys(errors).length) { render(); return; }
       try {
         el.disabled = true;
-        const elig = await checkEligibility(state.selectedPlan.id, state.contact.birthday);
+        const elig = await checkEligibility(state.selectedPlan.id, birthdayToIso(state.contact.birthday));
         if (!elig.ok) { flash('error', elig.body?.error || 'Eligibility check failed.'); render(); return; }
         if (elig.body.eligible === false) { handleIneligible(elig.body); return; }
         goto(4);
@@ -1711,7 +1740,7 @@
         state.selectedPlan = plan;
         state.inlineErrors = {};
         saveState();
-        const elig = await checkEligibility(plan.id, state.contact.birthday);
+        const elig = await checkEligibility(plan.id, birthdayToIso(state.contact.birthday));
         if (elig.body?.eligible === false) handleIneligible(elig.body);
         else { flash('info', `Switched to ${plan.plan_label}.`); render(); }
       }

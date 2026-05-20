@@ -441,20 +441,27 @@
     text-align: center;
     padding: 22px 0 16px;
   }
+  /* Wrap is inline-block so the parent .wcs-plan-hero centers it. The
+     $ sign is absolutely positioned to the LEFT of the number — that
+     way the digits themselves are dead-center, and the $ floats next
+     to them without shifting the optical center. */
   #wcs-join-app .wcs-plan-hero-amount {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 4px;
+    display: inline-block;
+    position: relative;
     font-family: var(--w-display);
     line-height: 0.9;
     color: var(--w-ink);
   }
   #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-cur {
+    position: absolute;
+    right: 100%;
+    top: 6px;
+    padding-right: 6px;
     font-size: 28px;
     line-height: 1.1;
-    padding-top: 6px;
   }
   #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-num {
+    display: inline-block;
     font-size: 88px;
     letter-spacing: -0.02em;
   }

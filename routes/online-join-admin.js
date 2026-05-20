@@ -79,7 +79,7 @@ const LOCATION_FIELDS = [
 const PLAN_FIELDS = [
   'wcs_location_id', 'plan_key',
   'plan_label', 'plan_description', 'features', 'badge',
-  'today_amount', 'monthly_amount', 'display_order',
+  'today_amount', 'monthly_amount', 'enrollment_fee', 'display_order',
   'payment_plan_id', 'plan_validation_hash', 'campaign_id', 'sales_person_id',
   // ACH variant (optional; nullable values fall back to CC values in /start).
   'payment_plan_id_ach', 'today_amount_ach', 'monthly_amount_ach',

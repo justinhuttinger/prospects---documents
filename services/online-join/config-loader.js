@@ -31,6 +31,7 @@ async function loadPublicConfig(locationId) {
     .select(`
       id, plan_key, plan_label, plan_description, features, badge,
       today_amount, monthly_amount, display_order,
+      today_amount_ach, monthly_amount_ach, payment_plan_id_ach,
       age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
     `)
     .eq('wcs_location_id', locationId)
@@ -60,18 +61,28 @@ async function loadPublicConfig(locationId) {
       hero_headline: location.hero_headline,
       hero_subhead: location.hero_subhead,
     },
-    plans: (plans || []).map(p => ({
-      id: p.id,
-      plan_key: p.plan_key,
-      plan_label: p.plan_label,
-      plan_description: p.plan_description,
-      features: p.features || [],
-      badge: p.badge || null,
-      today_amount: parseFloat(p.today_amount),
-      monthly_amount: parseFloat(p.monthly_amount),
-      display_order: p.display_order,
-      age_rule: p.age_rule || null,
-    })),
+    plans: (plans || []).map(p => {
+      // Expose ACH amounts when the plan has an ACH variant configured.
+      // The widget reads these to show the savings on the payment-method
+      // step. We never expose the ACH payment_plan_id — that stays
+      // server-side. has_ach_variant is just a boolean flag.
+      const hasAch = !!p.payment_plan_id_ach;
+      return {
+        id: p.id,
+        plan_key: p.plan_key,
+        plan_label: p.plan_label,
+        plan_description: p.plan_description,
+        features: p.features || [],
+        badge: p.badge || null,
+        today_amount: parseFloat(p.today_amount),
+        monthly_amount: parseFloat(p.monthly_amount),
+        today_amount_ach: hasAch && p.today_amount_ach != null ? parseFloat(p.today_amount_ach) : null,
+        monthly_amount_ach: hasAch && p.monthly_amount_ach != null ? parseFloat(p.monthly_amount_ach) : null,
+        has_ach_variant: hasAch,
+        display_order: p.display_order,
+        age_rule: p.age_rule || null,
+      };
+    }),
     copy,
   };
 

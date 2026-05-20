@@ -19,6 +19,7 @@ const {
 const { buildAgreementPayload, postAgreement, redactPaypageTokens } =
   require('../services/online-join/abc-agreement');
 const { fetchPlanValidationHash } = require('../services/online-join/abc-plan-fetch');
+const { resolveEffectivePlan } = require('../services/online-join/plan-variant');
 const { upsertOnlineJoinContact } = require('../services/online-join/ghl-fanout');
 const { renderAndUploadSignedAgreement } = require('../services/online-join/signed-document');
 const { sendWelcomeEmail } = require('../services/online-join/sendgrid-fanout');
@@ -125,21 +126,27 @@ router.post('/start', async (req, res) => {
 
     // Plan must exist, be active, and match the location. Load the server-side
     // ABC fields here too — we snapshot payment_plan_id into the signup row.
-    const { data: plan, error: planErr } = await sb
+    const { data: planRow, error: planErr } = await sb
       .from('online_join_plans')
       .select(`
         id, wcs_location_id, plan_key, plan_label, active,
         payment_plan_id, plan_validation_hash, campaign_id, sales_person_id,
         today_amount, monthly_amount,
+        payment_plan_id_ach, today_amount_ach, monthly_amount_ach,
         age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
       `)
       .eq('id', plan_id)
       .maybeSingle();
     if (planErr) throw new Error(`Plan lookup failed: ${planErr.message}`);
-    if (!plan || !plan.active) return res.status(404).json({ error: 'Plan not found or inactive' });
-    if (plan.wcs_location_id !== wcs_location_id) {
+    if (!planRow || !planRow.active) return res.status(404).json({ error: 'Plan not found or inactive' });
+    if (planRow.wcs_location_id !== wcs_location_id) {
       return res.status(400).json({ error: 'Plan does not belong to this location' });
     }
+    // Resolve CC vs ACH variant based on the member's payment-method choice.
+    // The effective object has payment_plan_id / today_amount / monthly_amount
+    // overwritten with the variant's values, so everything downstream
+    // (hash fetch, agreement payload, signed PDF) reads the right thing.
+    const plan = resolveEffectivePlan(planRow, payment_method_choice);
 
     // Location → abc_club_number, used both for the signup row and routing.
     const { data: location, error: locErr } = await sb
@@ -358,14 +365,17 @@ router.post('/submit', async (req, res) => {
       .eq('id', signup_id);
     if (updErr) throw new Error(`Update signup failed: ${updErr.message}`);
 
-    // 5. Load plan (server-side ABC IDs needed for payload).
-    const { data: plan, error: planErr } = await sb
+    // 5. Load plan + resolve CC/ACH variant from the signup's recorded
+    //    payment-method choice. Everything downstream reads the resolved
+    //    object so it picks up the right paymentPlanId + amounts.
+    const { data: planRow, error: planErr } = await sb
       .from('online_join_plans')
       .select('*')
       .eq('id', signup.plan_id)
       .maybeSingle();
     if (planErr) throw new Error(`Plan lookup failed: ${planErr.message}`);
-    if (!plan) throw new Error('Plan not found');
+    if (!planRow) throw new Error('Plan not found');
+    const plan = resolveEffectivePlan(planRow, signup.payment_method_choice);
 
     // 6. Build + POST ABC agreement.
     const inMemSignup = {

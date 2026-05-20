@@ -28,10 +28,15 @@ function getAbcHeaders() {
 
 function buildAgreementPayload(signup, plan) {
   const paymentTypeIsCard = signup.paypage_payment_type === 'Credit Card';
+  // Prefer the hash captured at /start time — it's the value ABC was using
+  // when the user picked the plan, so it matches what they agreed to. The
+  // plan-level hash is a fallback for signup rows from before this column
+  // was added (or if /start's ABC fetch failed and we wrote nothing).
+  const planValidationHash = signup.plan_validation_hash || plan.plan_validation_hash;
 
   const payload = {
     paymentPlanId: plan.payment_plan_id,
-    planValidationHash: plan.plan_validation_hash,
+    planValidationHash,
     activePresale: 'false',
     sendAgreementEmail: 'true',
     macAddress: 'WEB',

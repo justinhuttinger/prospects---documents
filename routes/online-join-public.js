@@ -20,6 +20,7 @@ const { buildAgreementPayload, postAgreement, redactPaypageTokens } =
   require('../services/online-join/abc-agreement');
 const { fetchPlanValidationHash } = require('../services/online-join/abc-plan-fetch');
 const { upsertOnlineJoinContact } = require('../services/online-join/ghl-fanout');
+const { renderAndUploadSignedAgreement } = require('../services/online-join/signed-document');
 const { sendWelcomeEmail } = require('../services/online-join/sendgrid-fanout');
 const { logSignupError } = require('../services/online-join/error-log');
 const { getSupabaseAdmin } = require('../lib/supabase');
@@ -280,7 +281,17 @@ router.post('/start', async (req, res) => {
 //          OR { success: false, error, code }
 // ---------------------------------------------------------------------------
 router.post('/submit', async (req, res) => {
-  const { signup_id, paypage_transaction_id, paypage_payment_type } = req.body || {};
+  const {
+    signup_id,
+    paypage_transaction_id,
+    paypage_payment_type,
+    // Step 6 (Review & Sign) — all optional for now so the endpoint stays
+    // backwards-compatible with older widget builds, but the new widget
+    // always sends them.
+    signature_data_url,
+    typed_signature,
+    agreement_acknowledged,
+  } = req.body || {};
   const sb = getSupabaseAdmin();
 
   if (!signup_id) return res.status(400).json({ error: 'signup_id is required' });
@@ -329,7 +340,10 @@ router.post('/submit', async (req, res) => {
       });
     }
 
-    // 4. Record PayPage token + payment type before posting to ABC.
+    // 4. Record PayPage token + payment type + acknowledgment metadata
+    //    before posting to ABC. We don't persist the signature image itself
+    //    (privacy + storage) — it lives only long enough to render the PDF.
+    const signedAt = agreement_acknowledged ? new Date().toISOString() : null;
     const { error: updErr } = await sb
       .from('online_signups')
       .update({
@@ -338,6 +352,8 @@ router.post('/submit', async (req, res) => {
         paypage_payment_type,
         status: 'submitted_to_abc',
         payment_at: new Date().toISOString(),
+        signed_at: signedAt,
+        typed_signature: typed_signature || null,
       })
       .eq('id', signup_id);
     if (updErr) throw new Error(`Update signup failed: ${updErr.message}`);
@@ -416,6 +432,13 @@ router.post('/submit', async (req, res) => {
       });
     }
 
+    const completedSignup = {
+      ...inMemSignup,
+      status: 'agreement_created',
+      abc_member_id: abcMemberId,
+      abc_agreement_id: abcAgreementId,
+      abc_response: abcData,
+    };
     await sb.from('online_signups').update({
       status: 'agreement_created',
       abc_member_id: abcMemberId,
@@ -426,6 +449,46 @@ router.post('/submit', async (req, res) => {
     }).eq('id', signup_id);
 
     // 8. Fan-out (non-fatal — failures log to online_signup_errors).
+    // Signed-PDF upload to ABC member documents.
+    if (signature_data_url) {
+      try {
+        const { data: loc } = await sb
+          .from('online_join_locations')
+          .select('*')
+          .eq('wcs_location_id', signup.wcs_location_id)
+          .maybeSingle();
+        const docResult = await renderAndUploadSignedAgreement({
+          signup: completedSignup,
+          plan,
+          location: loc,
+          signatureDataUrl: signature_data_url,
+          typedSignature: typed_signature,
+          signedAt: signedAt || new Date().toISOString(),
+        });
+        if (docResult.ok) {
+          await sb.from('online_signups').update({
+            signed_document_uploaded: true,
+            signed_document_id: docResult.documentId || null,
+          }).eq('id', signup_id);
+        } else {
+          await logSignupError({
+            signupId: signup_id,
+            step: 'fanout',
+            errorType: `SIGNED_DOC_${(docResult.step || 'UPLOAD').toUpperCase()}`,
+            errorMessage: docResult.error || 'signed-pdf upload failed',
+            errorPayload: docResult.data || null,
+          });
+        }
+      } catch (err) {
+        await logSignupError({
+          signupId: signup_id,
+          step: 'fanout',
+          errorType: 'SIGNED_DOC_THREW',
+          errorMessage: err.message,
+        });
+      }
+    }
+
     // GHL upsert.
     try {
       const ghlResult = await upsertOnlineJoinContact({

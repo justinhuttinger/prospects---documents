@@ -5,16 +5,17 @@
  * embeds it in an iframe and listens for postMessage events containing the
  * transaction ID. See spec §4.3 and §13 (ABC integration questions).
  *
- * URL shape (from ABC docs):
- *   https://apipayservice.abcfinancial.net/paypage/<ppsId>?accountTypes=card
- *   https://apipayservice.abcfinancial.net/paypage/<ppsId>?accountTypes=eft
+ * URL shape (confirmed by ABC 2026-05-20 via the ppsId delivery email):
+ *   https://apipayservice.abcfinancial.net/ABC-API-CollectBillingPayPage.jsp?ppsId=<ppsId>
  *
- * `ppsId` comes from ABC and is the same across clubs (set via env). The
- * accountTypes filter restricts the form to card-only or ACH-only based on
- * the user's earlier choice in step 4.
+ * `ppsId` comes from ABC and is the same across clubs (set via env).
+ * accountTypes restricts the form to card-only (`card`) or ACH-only (`eft`)
+ * based on the user's earlier choice in step 4. referenceId is echoed back
+ * in postMessage events so the widget can correlate them with state.
  */
 
 const PAYPAGE_HOST = process.env.ABC_PAYPAGE_HOST || 'https://apipayservice.abcfinancial.net';
+const PAYPAGE_PATH = '/ABC-API-CollectBillingPayPage.jsp';
 
 function buildPayPageUrl({ paymentMethodChoice, signupId }) {
   const ppsId = process.env.ABC_PPS_ID;
@@ -27,12 +28,11 @@ function buildPayPageUrl({ paymentMethodChoice, signupId }) {
 
   const accountType = paymentMethodChoice === 'ach' ? 'eft' : 'card';
   const params = new URLSearchParams({
+    ppsId,
     accountTypes: accountType,
-    // signupId is echoed back in postMessage events from ABC's iframe so the
-    // widget can correlate them with state. Not consumed server-side.
     referenceId: signupId,
   });
-  return `${PAYPAGE_HOST}/paypage/${ppsId}?${params.toString()}`;
+  return `${PAYPAGE_HOST}${PAYPAGE_PATH}?${params.toString()}`;
 }
 
 module.exports = { buildPayPageUrl };

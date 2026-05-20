@@ -45,7 +45,7 @@
     color: var(--w-ink);
     font-size: 15px;
     line-height: 1.55;
-    padding: 64px 20px;
+    padding: 40px 20px;
     /* User-provided canvas background. Cover-fit so it scales to any
        viewport; fixed so it doesn't scroll under the panel; fallback
        to a near-white tone for the brief moment before the image loads. */
@@ -55,10 +55,10 @@
     min-height: 100%;
   }
   @media (max-width: 640px) {
-    #wcs-join-app { padding: 40px 14px; }
+    #wcs-join-app { padding: 24px 14px; }
   }
   @media (max-width: 380px) {
-    #wcs-join-app { padding: 28px 10px; font-size: 14px; }
+    #wcs-join-app { padding: 16px 10px; font-size: 14px; }
   }
 
   #wcs-join-app .wcs-container {
@@ -154,6 +154,25 @@
   #wcs-join-app .wcs-panel-header {
     padding: 36px 32px 24px;
     background: var(--w-surface);
+  }
+  /* Step 1 only — embed the WCS badge inline with the step header so
+     members get a brand moment on entry without inflating every step. */
+  #wcs-join-app .wcs-panel-header--with-logo {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  #wcs-join-app .wcs-panel-header--with-logo .wcs-panel-header-text {
+    flex: 1; min-width: 0;
+  }
+  #wcs-join-app .wcs-step1-logo {
+    flex-shrink: 0;
+    width: 78px; height: 78px;
+    object-fit: contain;
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-panel-header--with-logo { gap: 14px; }
+    #wcs-join-app .wcs-step1-logo { width: 62px; height: 62px; }
   }
   @media (max-width: 520px) {
     #wcs-join-app .wcs-panel-header { padding: 28px 20px 18px; }
@@ -362,106 +381,97 @@
   @media (max-width: 540px) {
     #wcs-join-app .wcs-plan-list { grid-template-columns: 1fr; }
   }
-  @media (max-width: 380px) {
-    #wcs-join-app .wcs-plan-card { padding: 18px 14px; }
-    #wcs-join-app .wcs-plan-name { font-size: 19px; }
-    #wcs-join-app .wcs-plan-price b { font-size: 19px; }
-    #wcs-join-app .wcs-plan-price.is-today b { font-size: 24px; }
-    #wcs-join-app .wcs-plan-price span { font-size: 9px; letter-spacing: 0.16em; }
-  }
   #wcs-join-app .wcs-plan-card {
-    border: 1px solid var(--w-border);
+    border: 1px solid var(--w-ink);
     border-radius: 2px;
-    padding: 22px 20px;
-    cursor: pointer;
     background: var(--w-surface);
     position: relative;
     display: flex; flex-direction: column;
-    transition: border-color 0.12s, background 0.12s, transform 0.12s ease-out;
+    overflow: hidden;
+    transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
   }
   #wcs-join-app .wcs-plan-card:hover {
-    border-color: var(--w-ink);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px -10px rgba(10, 10, 12, 0.22);
   }
   #wcs-join-app .wcs-plan-card.is-selected {
-    border-color: var(--w-ink);
-    background: #fafaf8;
-    box-shadow: inset 0 4px 0 var(--w-red);
+    box-shadow: 0 0 0 2px var(--w-red), 0 12px 28px -10px rgba(227, 24, 55, 0.25);
   }
-  /* In the horizontal layout .wcs-plan-row becomes the vertical stack
-     (name → prices). Features still come after via the <ul>. */
-  #wcs-join-app .wcs-plan-row {
-    display: flex; flex-direction: column; gap: 16px;
-  }
-  #wcs-join-app .wcs-plan-name {
+  /* Black header bar with the plan name in white. */
+  #wcs-join-app .wcs-plan-card-header {
+    background: var(--w-ink);
+    color: #fff;
+    text-align: center;
+    padding: 16px 18px;
     font-family: var(--w-display);
     font-size: 22px;
-    letter-spacing: 0.02em;
-    line-height: 1;
-    color: var(--w-ink);
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    font-weight: normal;
-    display: block;
-    margin-bottom: 6px;
+    line-height: 1;
+    position: relative;
+  }
+  #wcs-join-app .wcs-plan-card-body {
+    padding: 4px 22px 22px;
+    display: flex; flex-direction: column;
+    flex: 1;
   }
   #wcs-join-app .wcs-plan-badge {
-    display: inline-block;
+    position: absolute; top: 12px; right: 12px;
     background: var(--w-red); color: #fff;
     padding: 3px 8px; border-radius: 2px;
     font-size: 9px; font-weight: 800;
     text-transform: uppercase; letter-spacing: 0.18em;
-    margin-left: 0; margin-top: 4px;
-    vertical-align: middle;
   }
   #wcs-join-app .wcs-plan-description {
-    font-size: 13px; color: var(--w-ink-muted);
-    margin-top: 0;
+    font-size: 13px; color: var(--w-ink);
     line-height: 1.55;
+    text-align: center;
+    margin-top: 4px;
   }
-  /* Itemized price block — three rows: Enrollment Fee / Monthly Dues /
-     Total Due Today. Reads like an invoice line-item summary. The
-     "Total Due Today" row gets visual weight (slightly larger figure,
-     red ink) so members can't miss what's coming off their card today. */
-  #wcs-join-app .wcs-plan-prices {
-    display: flex; flex-direction: column;
-    gap: 0;
-    padding: 14px 0 0;
-    border-top: 1px solid var(--w-border);
-    text-align: left; white-space: normal;
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-plan-card-header { font-size: 18px; padding: 14px 14px; }
+    #wcs-join-app .wcs-plan-card-body { padding: 4px 14px 16px; }
   }
-  #wcs-join-app .wcs-plan-price {
-    display: flex; align-items: baseline; justify-content: space-between;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--w-border);
+  /* Marketing-style price hero — large monthly figure centered, with a
+     small "$" prefix and "Per Month" + "$X ENROLLMENT" subtext stacked
+     below. Plays the role of the old itemized block but reads like a
+     pricing brochure. Total-due-today figure moves to step 6, where the
+     itemized confirmation lives. */
+  #wcs-join-app .wcs-plan-hero {
+    text-align: center;
+    padding: 22px 0 16px;
   }
-  #wcs-join-app .wcs-plan-price:last-child { border-bottom: 0; }
-  #wcs-join-app .wcs-plan-price span {
-    font-size: 10px; font-weight: 800;
+  #wcs-join-app .wcs-plan-hero-amount {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 4px;
+    font-family: var(--w-display);
+    line-height: 0.9;
+    color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-cur {
+    font-size: 28px;
+    line-height: 1.1;
+    padding-top: 6px;
+  }
+  #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-num {
+    font-size: 88px;
+    letter-spacing: -0.02em;
+  }
+  #wcs-join-app .wcs-plan-hero-period {
+    font-size: 13px; font-weight: 600;
+    color: var(--w-ink);
+    margin-top: 6px;
+  }
+  #wcs-join-app .wcs-plan-hero-enroll {
+    font-size: 12px; font-weight: 800;
     letter-spacing: 0.22em; text-transform: uppercase;
     color: var(--w-ink);
+    margin-top: 4px;
   }
-  #wcs-join-app .wcs-plan-price b {
-    font-family: var(--w-display);
-    font-size: 22px;
-    line-height: 1;
-    letter-spacing: -0.005em;
-    color: var(--w-ink);
-    font-weight: normal;
-  }
-  #wcs-join-app .wcs-plan-price.is-today {
-    margin-top: 6px;
-    padding-top: 14px;
-    border-top: 2px solid var(--w-ink);
-    border-bottom: 0;
-  }
-  #wcs-join-app .wcs-plan-price.is-today b {
-    color: var(--w-red);
-    font-size: 28px;
-  }
-  #wcs-join-app .wcs-plan-price.is-today span {
-    color: var(--w-ink);
-    font-weight: 800;
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-num { font-size: 68px; }
+    #wcs-join-app .wcs-plan-hero-amount .wcs-plan-hero-cur { font-size: 22px; padding-top: 4px; }
   }
 
   /* "What's included" amenities list — cleaner, more breathable, with
@@ -478,32 +488,49 @@
     content: '';
     flex: 1; height: 1px; background: var(--w-border);
   }
+  /* Features list — centered rows separated by hairline rules. Each
+     item has an outline-circle check icon (inline SVG) to its left. */
   #wcs-join-app .wcs-plan-card ul {
     margin: 0; padding: 0;
     list-style: none;
-    display: flex; flex-direction: column; gap: 10px;
+    display: flex; flex-direction: column;
+    border-top: 1px solid var(--w-border);
   }
   #wcs-join-app .wcs-plan-card ul li {
-    position: relative;
-    padding-left: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 14px;
     font-size: 13px; color: var(--w-ink);
-    line-height: 1.5;
+    line-height: 1.4;
+    text-align: center;
+    border-bottom: 1px solid var(--w-border);
   }
-  #wcs-join-app .wcs-plan-card ul li::before {
-    content: '';
-    position: absolute; left: 0; top: 4px;
-    width: 16px; height: 16px;
-    border-radius: 50%;
+  #wcs-join-app .wcs-plan-card ul li:last-child { border-bottom: 0; }
+  #wcs-join-app .wcs-plan-check {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    color: var(--w-ink);
+  }
+
+  /* Sign-up CTA at the bottom of each plan card. Clicking selects the
+     plan AND advances to step 3 in one tap. */
+  #wcs-join-app .wcs-plan-card-cta {
+    margin-top: auto;
     background: var(--w-red);
+    color: #fff;
+    border: 0;
+    width: 100%;
+    padding: 16px 18px;
+    font-family: var(--w-body);
+    font-weight: 800; font-size: 13px;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
   }
-  #wcs-join-app .wcs-plan-card ul li::after {
-    content: '';
-    position: absolute; left: 4px; top: 8px;
-    width: 8px; height: 4px;
-    border-left: 1.5px solid #fff;
-    border-bottom: 1.5px solid #fff;
-    transform: rotate(-45deg);
-  }
+  #wcs-join-app .wcs-plan-card-cta:hover { background: var(--w-red-dark); }
+  #wcs-join-app .wcs-plan-card-cta:active { transform: translateY(1px); }
 
   /* === Payment method choice ====================================== */
   #wcs-join-app .wcs-pm-list {
@@ -892,9 +919,6 @@
 
 <div id="wcs-join-app" data-location="">
   <div class="wcs-container">
-    <div class="wcs-brand">
-      <img src="https://westcoaststrength.com/wp-content/uploads/2023/02/Untitled-design-26-1024x1024.png" alt="West Coast Strength" class="wcs-brand-image" />
-    </div>
     <div class="wcs-panel">
       <div class="wcs-panel-body wcs-loading-block">
         <span class="wcs-spinner"></span>
@@ -1320,16 +1344,29 @@
     }
     const meta = stepMeta();
     const stepLabel = `${String(state.currentStep).padStart(2, '0')} / ${String(TOTAL_STEPS).padStart(2, '0')}`;
+    // Step 1 gets the WCS badge inline with the title — it's the member's
+    // entry point so it earns a brand moment. Every other step keeps a
+    // clean text-only header so the card doesn't get scroll-heavy.
+    const logoHtml = state.currentStep === 1
+      ? `<img src="${escapeHtml(getLogoUrl())}" alt="West Coast Strength" class="wcs-step1-logo" />`
+      : '';
     return `
-      <div class="wcs-panel-header">
-        <div class="wcs-eyebrow">
-          <span>${escapeHtml(meta.eyebrow)}</span>
-          <span class="wcs-step-tag">${stepLabel}</span>
+      <div class="wcs-panel-header ${state.currentStep === 1 ? 'wcs-panel-header--with-logo' : ''}">
+        ${logoHtml}
+        <div class="wcs-panel-header-text">
+          <div class="wcs-eyebrow">
+            <span>${escapeHtml(meta.eyebrow)}</span>
+            <span class="wcs-step-tag">${stepLabel}</span>
+          </div>
+          <h1>${escapeHtml(meta.title)}</h1>
         </div>
-        <h1>${escapeHtml(meta.title)}</h1>
       </div>
       <div class="wcs-panel-progress">${renderProgressPills(state.currentStep)}</div>
     `;
+  }
+
+  function getLogoUrl() {
+    return (root.dataset.logoUrl || DEFAULT_LOGO_URL).trim();
   }
 
   // ----- Step bodies ------------------------------------------------------
@@ -1367,27 +1404,39 @@
   }
 
   function renderPlanItem(plan, selected) {
-    const featuresHtml = (plan.features || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+    // Carbon-style plan card: black header bar with plan name in white,
+    // big monthly price hero ("$55" / "Per Month" / "$40 ENROLLMENT"),
+    // hairline-separated centered feature rows with outline-circle checks,
+    // and a per-card red "SIGN UP NOW" CTA that selects AND advances.
+    const featuresHtml = (plan.features || [])
+      .map(f => `<li><svg class="wcs-plan-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><polyline points="6 10 9 13 14 7"/></svg><span>${escapeHtml(f)}</span></li>`)
+      .join('');
+    // Split monthly amount into integer + decimal so we can render "$55"
+    // big with a tiny .00 (or hide the decimal entirely if it's whole).
+    const monthly = Number(plan.monthly_amount) || 0;
+    const monthlyWhole = Math.floor(monthly);
+    const monthlyCents = Math.round((monthly - monthlyWhole) * 100);
     return `
-      <div class="wcs-plan-card ${selected ? 'is-selected' : ''}" data-action="select-plan" data-plan-id="${plan.id}">
-        <div class="wcs-plan-row">
-          <div style="min-width:0;">
-            <span class="wcs-plan-name">${escapeHtml(plan.plan_label)}</span>
-            ${plan.badge ? `<span class="wcs-plan-badge">${escapeHtml(plan.badge)}</span>` : ''}
-            ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
-          </div>
-          <div class="wcs-plan-prices">
-            ${plan.enrollment_fee != null && plan.enrollment_fee > 0
-              ? `<div class="wcs-plan-price"><span>Enrollment Fee</span><b>${money(plan.enrollment_fee)}</b></div>`
-              : ''}
-            <div class="wcs-plan-price"><span>Monthly Dues</span><b>${money(plan.monthly_amount)}</b></div>
-            <div class="wcs-plan-price is-today"><span>Total Due Today</span><b>${money(plan.today_amount)}</b></div>
-          </div>
+      <div class="wcs-plan-card ${selected ? 'is-selected' : ''}">
+        <div class="wcs-plan-card-header">
+          ${escapeHtml(plan.plan_label)}
+          ${plan.badge ? `<span class="wcs-plan-badge">${escapeHtml(plan.badge)}</span>` : ''}
         </div>
-        ${featuresHtml ? `
-          <div class="wcs-plan-features-header">What's Included</div>
-          <ul>${featuresHtml}</ul>
-        ` : ''}
+        <div class="wcs-plan-card-body">
+          ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
+          <div class="wcs-plan-hero">
+            <div class="wcs-plan-hero-amount">
+              <span class="wcs-plan-hero-cur">$</span>
+              <span class="wcs-plan-hero-num">${monthlyWhole}${monthlyCents ? `<small style="font-size:0.5em;letter-spacing:0;">.${String(monthlyCents).padStart(2, '0')}</small>` : ''}</span>
+            </div>
+            <div class="wcs-plan-hero-period">Per Month</div>
+            ${plan.enrollment_fee != null && plan.enrollment_fee > 0
+              ? `<div class="wcs-plan-hero-enroll">${money(plan.enrollment_fee)} Enrollment</div>`
+              : ''}
+          </div>
+          ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}
+          <button class="wcs-plan-card-cta" data-action="signup-plan" data-plan-id="${plan.id}">Sign Up Now</button>
+        </div>
       </div>
     `;
   }
@@ -1660,8 +1709,7 @@
     let primaryDisabled = false;
     switch (state.currentStep) {
       case 1: primary = ''; break; // location cards are themselves the action
-      case 2: primaryDisabled = !state.selectedPlan?.id;
-              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-3" ${primaryDisabled ? 'disabled' : ''}>Continue →</button>`; break;
+      case 2: primary = ''; break; // per-card Sign Up Now is the action
       case 3: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-4">Continue →</button>`; break;
       case 4: primaryDisabled = !state.paymentMethodChoice;
               primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
@@ -1677,17 +1725,10 @@
     return `<div class="wcs-panel-footer">${secondary}${primary || '<span></span>'}</div>`;
   }
 
-  // Brand mark — defaults to the WCS circular badge hosted on the marketing
-  // site. Host pages can override by setting data-logo-url="..." on the
-  // host element.
+  // WCS badge — rendered inline with the step-1 panel header by
+  // renderPanelHeader. Host pages can override the URL via
+  // data-logo-url="..." on the host element.
   const DEFAULT_LOGO_URL = 'https://westcoaststrength.com/wp-content/uploads/2023/02/Untitled-design-26-1024x1024.png';
-  function renderBrandHeader() {
-    const url = (root.dataset.logoUrl || DEFAULT_LOGO_URL).trim();
-    if (url) {
-      return `<img src="${escapeHtml(url)}" alt="West Coast Strength" class="wcs-brand-image" />`;
-    }
-    return `<div class="wcs-brand-wordmark">West Coast Strength</div>`;
-  }
 
   function render() {
     const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7 }[state.currentStep]) || renderStep1;
@@ -1696,7 +1737,6 @@
       : '';
     root.innerHTML = `
       <div class="wcs-container">
-        <div class="wcs-brand">${renderBrandHeader()}</div>
         <div class="wcs-panel">
           ${renderPanelHeader()}
           <div class="wcs-panel-body">
@@ -1791,6 +1831,18 @@
     if (action === 'select-plan') {
       const plan = state.config.plans.find(p => p.id === el.dataset.planId);
       if (plan) { state.selectedPlan = plan; render(); saveState(); }
+      return;
+    }
+    if (action === 'signup-plan') {
+      // Per-card "Sign Up Now" — pick the plan and advance to step 3 in
+      // one tap. No eligibility check yet (that happens on the step 3
+      // -> step 4 transition where we have the member's birthday).
+      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
+      if (plan) {
+        state.selectedPlan = plan;
+        saveState();
+        goto(3);
+      }
       return;
     }
     if (action === 'select-pm') {

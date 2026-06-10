@@ -99,4 +99,92 @@ async function upsertOnlineJoinContact({ signup, plan, abcMemberId, abcAgreement
   }
 }
 
-module.exports = { upsertOnlineJoinContact };
+/**
+ * Upsert a GHL contact for an ABANDONED checkout — fired from /start the moment
+ * we have the member's contact info, before they reach PayPage. Tagged
+ * `abandoned check out` so staff/automation can follow up if they never finish.
+ * On a successful /submit we remove that tag (see removeContactTag) and the
+ * sale/member upsert takes over.
+ *
+ * Same upsert-by-email+phone semantics as the sale path, so a member who later
+ * completes resolves to the same GHL contact.
+ *
+ * Returns { ok: true, contactId } on success; { ok: false, error, ... } on failure.
+ */
+async function upsertAbandonedLead({ signup }) {
+  const club = clubByNumber(signup.abc_club_number);
+  if (!club) {
+    return { ok: false, error: `No GHL config for club ${signup.abc_club_number}` };
+  }
+  if (!club.ghlApiKey || !club.ghlLocationId) {
+    return { ok: false, error: `Missing ghlApiKey/ghlLocationId for club ${club.clubName}` };
+  }
+
+  const body = {
+    locationId: club.ghlLocationId,
+    firstName: signup.first_name || '',
+    lastName: signup.last_name || '',
+    name: `${signup.first_name || ''} ${signup.last_name || ''}`.trim(),
+    email: signup.email || undefined,
+    phone: signup.cell_phone ? e164(signup.cell_phone) : undefined,
+    address1: signup.address_line1 || undefined,
+    city: signup.city || undefined,
+    state: signup.state || undefined,
+    postalCode: signup.zip_code || undefined,
+    country: 'US',
+    dateOfBirth: signup.birthday || undefined,
+    source: 'Online Join',
+    tags: ['abandoned check out', 'online-join'],
+  };
+
+  try {
+    const resp = await axios.post(`${GHL_BASE_URL}/contacts/upsert`, body, {
+      headers: {
+        Authorization: `Bearer ${club.ghlApiKey}`,
+        'Content-Type': 'application/json',
+        Version: GHL_API_VERSION,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
+    if (resp.status >= 200 && resp.status < 300) {
+      const contactId = resp.data?.contact?.id || resp.data?.id || null;
+      return { ok: true, contactId, status: resp.status };
+    }
+    return { ok: false, error: `GHL upsert ${resp.status}`, status: resp.status, data: resp.data };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Remove one or more tags from a GHL contact. Used on /submit success to drop
+ * the `abandoned check out` tag once the member actually completes. Non-fatal —
+ * the caller logs failures and never blocks the user response.
+ */
+async function removeContactTag(clubNumber, contactId, tags) {
+  if (!contactId) return { ok: false, error: 'no contactId' };
+  const club = clubByNumber(clubNumber);
+  if (!club || !club.ghlApiKey) {
+    return { ok: false, error: `No GHL config/key for club ${clubNumber}` };
+  }
+  const tagList = Array.isArray(tags) ? tags : [tags];
+  try {
+    const resp = await axios.delete(`${GHL_BASE_URL}/contacts/${contactId}/tags`, {
+      headers: {
+        Authorization: `Bearer ${club.ghlApiKey}`,
+        'Content-Type': 'application/json',
+        Version: GHL_API_VERSION,
+      },
+      data: { tags: tagList },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
+    if (resp.status >= 200 && resp.status < 300) return { ok: true, status: resp.status };
+    return { ok: false, error: `GHL tag-remove ${resp.status}`, status: resp.status, data: resp.data };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+module.exports = { upsertOnlineJoinContact, upsertAbandonedLead, removeContactTag };

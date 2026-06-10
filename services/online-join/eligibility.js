@@ -46,18 +46,23 @@ async function evaluateEligibility({ planId, birthday }) {
 
   const sb = getSupabaseAdmin();
 
+  // v2: the age rule lives on the membership type; we still honor a plan-level
+  // rule as a fallback for any legacy row that set one directly.
   const { data: plan, error: planErr } = await sb
     .from('online_join_plans')
     .select(`
       id, wcs_location_id, plan_key, plan_label, active,
-      age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
+      age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message ),
+      membership_type:membership_type_id (
+        age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
+      )
     `)
     .eq('id', planId)
     .maybeSingle();
   if (planErr) throw new Error(`Plan lookup failed: ${planErr.message}`);
   if (!plan || !plan.active) throw Object.assign(new Error('Plan not found or inactive'), { status: 404 });
 
-  const rule = plan.age_rule;
+  const rule = plan.membership_type?.age_rule || plan.age_rule;
   if (ageMatchesRule(age, rule)) return { eligible: true };
 
   // Ineligible — gather other active plans at this location whose rule the user passes.
@@ -65,7 +70,8 @@ async function evaluateEligibility({ planId, birthday }) {
     .from('online_join_plans')
     .select(`
       id, plan_key, plan_label, today_amount, monthly_amount, display_order,
-      age_rule:age_rule_id ( min_age, max_age )
+      age_rule:age_rule_id ( min_age, max_age ),
+      membership_type:membership_type_id ( age_rule:age_rule_id ( min_age, max_age ) )
     `)
     .eq('wcs_location_id', plan.wcs_location_id)
     .eq('active', true)
@@ -73,7 +79,7 @@ async function evaluateEligibility({ planId, birthday }) {
     .order('display_order');
 
   const suggested = (peers || [])
-    .filter(p => ageMatchesRule(age, p.age_rule))
+    .filter(p => ageMatchesRule(age, p.membership_type?.age_rule || p.age_rule))
     .map(p => ({
       id: p.id,
       plan_key: p.plan_key,

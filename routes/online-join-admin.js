@@ -83,10 +83,20 @@ const PLAN_FIELDS = [
   'payment_plan_id', 'plan_validation_hash', 'campaign_id', 'sales_person_id',
   // ACH variant (optional; nullable values fall back to CC values in /start).
   'payment_plan_id_ach', 'today_amount_ach', 'monthly_amount_ach',
+  // v2: a plan is a child of a membership type and carries a term.
+  'membership_type_id', 'term',
   'age_rule_id', 'active',
 ];
 
 const AGE_RULE_FIELDS = ['name', 'min_age', 'max_age', 'ineligible_message', 'active'];
+
+const TYPE_FIELDS = [
+  'wcs_location_id', 'type_key',
+  'type_label', 'description', 'features', 'badge',
+  'age_rule_id', 'display_order',
+  'promo_code', 'promo_starts_at', 'promo_ends_at',
+  'active',
+];
 
 // ---------------------------------------------------------------------------
 // Locations
@@ -163,6 +173,7 @@ router.get('/plans', async (req, res) => {
       .select('*, age_rule:age_rule_id ( id, name, min_age, max_age )')
       .order('wcs_location_id').order('display_order').order('plan_label');
     if (req.query.location) q = q.eq('wcs_location_id', req.query.location);
+    if (req.query.type) q = q.eq('membership_type_id', req.query.type);
     const { data, error } = await q;
     if (error) throw error;
     res.json({ plans: data || [] });
@@ -225,6 +236,101 @@ router.delete('/plans/:id', async (req, res) => {
     cache.invalidate(data.wcs_location_id);
     res.json({ plan: data });
   } catch (err) { handleError(res, err, 'DELETE /plans/:id'); }
+});
+
+// ---------------------------------------------------------------------------
+// Membership types (v2) — the "Single / Family / Youth" layer that owns
+// amenities + eligibility. Each type has up to two child plans (1yr / m2m).
+// ---------------------------------------------------------------------------
+router.get('/types', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    let q = sb.from('online_join_membership_types')
+      .select('*, age_rule:age_rule_id ( id, name, min_age, max_age )')
+      .order('wcs_location_id').order('display_order').order('type_label');
+    if (req.query.location) q = q.eq('wcs_location_id', req.query.location);
+    const { data, error } = await q;
+    if (error) throw error;
+    const types = data || [];
+    // Attach a lightweight child-plan summary so the admin list can show which
+    // terms (1yr / m2m) are set up per type without an N+1 of detail calls.
+    if (types.length) {
+      const ids = types.map(t => t.id);
+      const { data: childPlans } = await sb.from('online_join_plans')
+        .select('id, membership_type_id, term, today_amount, monthly_amount, active')
+        .in('membership_type_id', ids);
+      const byType = new Map();
+      for (const p of childPlans || []) {
+        if (!byType.has(p.membership_type_id)) byType.set(p.membership_type_id, []);
+        byType.get(p.membership_type_id).push(p);
+      }
+      types.forEach(t => { t.plans = byType.get(t.id) || []; });
+    }
+    res.json({ types });
+  } catch (err) { handleError(res, err, 'GET /types'); }
+});
+
+router.get('/types/:id', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    const { data: type, error } = await sb.from('online_join_membership_types')
+      .select('*, age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )')
+      .eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!type) return res.status(404).json({ error: 'Membership type not found' });
+    // Child plans (both terms) for convenience in the editor.
+    const { data: plans } = await sb.from('online_join_plans')
+      .select('*').eq('membership_type_id', req.params.id).order('term');
+    res.json({ type, plans: plans || [] });
+  } catch (err) { handleError(res, err, 'GET /types/:id'); }
+});
+
+router.post('/types', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    const body = pick(req.body, TYPE_FIELDS);
+    const required = ['wcs_location_id', 'type_key', 'type_label'];
+    const missing = required.filter(k => body[k] == null || body[k] === '');
+    if (missing.length) return res.status(400).json({ error: `Required: ${missing.join(', ')}` });
+    body.updated_by = req.staff.id;
+    body.updated_at = new Date().toISOString();
+    const { data, error } = await sb.from('online_join_membership_types').insert(body).select().single();
+    if (error) throw error;
+    cache.invalidate(body.wcs_location_id);
+    res.status(201).json({ type: data });
+  } catch (err) { handleError(res, err, 'POST /types'); }
+});
+
+router.patch('/types/:id', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    // type_key + location are immutable on existing rows (unique constraint).
+    const { type_key, wcs_location_id, ...rest } = pick(req.body, TYPE_FIELDS);
+    const body = rest;
+    body.updated_by = req.staff.id;
+    body.updated_at = new Date().toISOString();
+    const { data, error } = await sb.from('online_join_membership_types')
+      .update(body).eq('id', req.params.id).select().maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Membership type not found' });
+    cache.invalidate(data.wcs_location_id);
+    res.json({ type: data });
+  } catch (err) { handleError(res, err, 'PATCH /types/:id'); }
+});
+
+router.delete('/types/:id', async (req, res) => {
+  try {
+    const sb = getSupabaseAdmin();
+    // Soft-delete; child plans stay but the type (and thus its plans) drop out
+    // of the public config once inactive.
+    const { data, error } = await sb.from('online_join_membership_types')
+      .update({ active: false, updated_by: req.staff.id, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id).select().maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Membership type not found' });
+    cache.invalidate(data.wcs_location_id);
+    res.json({ type: data });
+  } catch (err) { handleError(res, err, 'DELETE /types/:id'); }
 });
 
 // ---------------------------------------------------------------------------

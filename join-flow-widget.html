@@ -507,12 +507,12 @@
   #wcs-join-app .wcs-plan-card ul li {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 10px;
     padding: 12px 14px;
     font-size: 13px; color: var(--w-ink);
     line-height: 1.4;
-    text-align: center;
+    text-align: left;
     border-bottom: 1px solid var(--w-border);
   }
   #wcs-join-app .wcs-plan-card ul li:last-child { border-bottom: 0; }
@@ -539,6 +539,59 @@
   }
   #wcs-join-app .wcs-plan-card-cta:hover { background: var(--w-red-dark); }
   #wcs-join-app .wcs-plan-card-cta:active { transform: translateY(1px); }
+
+  /* === Type step: per-term Card-vs-Bank price compare ================= */
+  /* Shown on each membership-type card so the member sees both payment
+     prices (and the ACH discount) before drilling into the term step. */
+  #wcs-join-app .wcs-type-pricing {
+    margin: 16px 0 4px;
+    border-top: 1px solid var(--w-border);
+  }
+  #wcs-join-app .wcs-type-price-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px;
+    padding: 11px 2px;
+    border-bottom: 1px solid var(--w-border);
+  }
+  #wcs-join-app .wcs-type-price-row:last-child { border-bottom: 0; }
+  #wcs-join-app .wcs-tpr-term {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--w-ink);
+    white-space: nowrap;
+  }
+  #wcs-join-app .wcs-tpr-price {
+    font-size: 13px; color: var(--w-ink);
+    text-align: right; line-height: 1.4;
+  }
+  #wcs-join-app .wcs-tpr-price .wcs-tpr-bank { color: var(--w-red); font-weight: 700; }
+
+  /* "Limited Time" auto-badge for promo types — same chrome as the plan
+     badge but uses the ink color so it reads distinct from a marketing badge. */
+  #wcs-join-app .wcs-limited-badge {
+    position: absolute; top: 12px; left: 12px;
+    background: #fff; color: var(--w-red);
+    border: 1px solid var(--w-red);
+    padding: 3px 8px; border-radius: 2px;
+    font-size: 9px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.16em;
+  }
+
+  /* === Term step: enrollment-fee line under the price hero =========== */
+  #wcs-join-app .wcs-term-dual {
+    text-align: center;
+    font-size: 13px; color: var(--w-ink);
+    margin-top: 2px;
+  }
+  #wcs-join-app .wcs-term-dual .wcs-tpr-bank { color: var(--w-red); font-weight: 700; }
+  #wcs-join-app .wcs-term-enroll {
+    text-align: center;
+    font-size: 12px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--w-ink);
+    margin-top: 10px;
+  }
+  #wcs-join-app .wcs-term-enroll.is-none { color: #1a7f37; }
 
   /* === Payment method choice ====================================== */
   #wcs-join-app .wcs-pm-list {
@@ -944,7 +997,7 @@
   const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
   const STORAGE_KEY = 'wcs_join_state_v1';
   const STORAGE_TTL_MS = 60 * 60 * 1000;
-  const TOTAL_STEPS = 7;
+  const TOTAL_STEPS = 8;
 
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
@@ -972,6 +1025,17 @@
   }
   const DEFAULT_LOCATION_ID = resolveDefaultLocation();
 
+  // Optional promo code from the URL (?promo=CODE). Forwarded to /config so the
+  // server reveals limited-time promo membership types within their window.
+  function resolvePromoCode() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const p = (params.get('promo') || '').trim();
+      return p || null;
+    } catch (_) { return null; }
+  }
+  const PROMO_CODE = resolvePromoCode();
+
   // sessionStorage key is now scoped to "global" since location isn't fixed.
   // When a location is picked we still namespace per-location for plan/contact
   // state, so each location's draft stays separate.
@@ -986,7 +1050,8 @@
     currentLocationId: null, // null until user picks (or pre-set)
     config: null,            // config for currentLocationId (null until picked)
     locationLoading: false,
-    selectedPlan: null,
+    selectedType: null,      // step 2 — chosen membership type (from config.types)
+    selectedPlan: null,      // step 3 — chosen term, shaped as a plan for downstream code
     contact: {
       first_name: '', last_name: '', email: '', cell_phone: '',
       birthday: '', gender: '',
@@ -1116,7 +1181,8 @@
     return r.body?.locations || [];
   }
   async function fetchConfig(slug) {
-    const r = await api(`/config/${encodeURIComponent(slug)}`);
+    const qs = PROMO_CODE ? `?promo=${encodeURIComponent(PROMO_CODE)}` : '';
+    const r = await api(`/config/${encodeURIComponent(slug)}${qs}`);
     if (!r.ok) throw new Error(r.body?.error || `Failed to load (${r.status})`);
     return r.body;
   }
@@ -1317,12 +1383,13 @@
   function stepMeta() {
     return {
       1: { eyebrow: 'Location',       title: 'Choose Your Gym' },
-      2: { eyebrow: 'Membership',     title: 'Pick Your Plan' },
-      3: { eyebrow: 'Member Profile', title: 'Tell Us About You' },
-      4: { eyebrow: 'Billing',        title: 'How You Pay' },
-      5: { eyebrow: 'Secure Payment', title: 'Enter Payment Details' },
-      6: { eyebrow: 'Final Step',     title: 'Review & Sign' },
-      7: { eyebrow: 'Confirmation',   title: 'Welcome to the Westside' },
+      2: { eyebrow: 'Membership',     title: 'Choose Your Membership' },
+      3: { eyebrow: 'Commitment',     title: 'Pick Your Term' },
+      4: { eyebrow: 'Member Profile', title: 'Tell Us About You' },
+      5: { eyebrow: 'Billing',        title: 'How You Pay' },
+      6: { eyebrow: 'Secure Payment', title: 'Enter Payment Details' },
+      7: { eyebrow: 'Final Step',     title: 'Review & Sign' },
+      8: { eyebrow: 'Confirmation',   title: 'Welcome to the Westside' },
     }[state.currentStep] || { eyebrow: '', title: '' };
   }
 
@@ -1336,7 +1403,7 @@
   }
 
   function renderPanelHeader() {
-    const isConfirmed = state.currentStep === 7 && state.successData && !state.successData.pending && !state.successData.error;
+    const isConfirmed = state.currentStep === 8 && state.successData && !state.successData.pending && !state.successData.error;
     if (isConfirmed) {
       const loc = state.config?.location?.display_name || 'Online Join';
       return `
@@ -1411,51 +1478,123 @@
     `;
   }
 
-  function renderPlanItem(plan, selected) {
-    // Carbon-style plan card: black header bar with plan name in white,
-    // big monthly price hero ("$55" / "Per Month" / "$40 ENROLLMENT"),
-    // hairline-separated centered feature rows with outline-circle checks,
-    // and a per-card red "SIGN UP NOW" CTA that selects AND advances.
-    const featuresHtml = (plan.features || [])
+  // ----- Type / term helpers ---------------------------------------------
+  function termLabel(t) {
+    return t === '1yr' ? '1-Year' : t === 'm2m' ? 'Month-to-Month' : (t || 'Membership');
+  }
+  // Card-vs-Bank monthly price line for a term. Shows both so the member can
+  // see the ACH discount at a glance; bank price only when an ACH variant
+  // exists for that term.
+  function dualPriceHtml(term) {
+    const cc = Number(term?.cc?.monthly);
+    const ach = Number(term?.ach?.monthly);
+    const ccStr = Number.isFinite(cc) ? `${money(cc)}/mo card` : '';
+    const achStr = term?.has_ach_variant && Number.isFinite(ach)
+      ? ` · <span class="wcs-tpr-bank">${money(ach)}/mo bank</span>`
+      : '';
+    return `${ccStr}${achStr}`;
+  }
+  // Shape a config term (under a type) into the plan-like object the rest of
+  // the flow expects (pay step, review step, /start payload all read these).
+  function planFromTerm(type, term) {
+    return {
+      id: term.plan_id,
+      plan_label: `${type.type_label} · ${termLabel(term.term)}`,
+      term: term.term,
+      has_ach_variant: !!term.has_ach_variant,
+      enrollment_fee: term.enrollment_fee,
+      today_amount: term.cc?.today,
+      monthly_amount: term.cc?.monthly,
+      today_amount_ach: term.ach ? term.ach.today : null,
+      monthly_amount_ach: term.ach ? term.ach.monthly : null,
+    };
+  }
+  function findTermByPlanId(planId) {
+    for (const type of (state.config?.types || [])) {
+      for (const term of (type.terms || [])) {
+        if (term.plan_id === planId) return { type, term };
+      }
+    }
+    return null;
+  }
+
+  // Step 2 — membership type cards. Each shows left-aligned amenities and a
+  // per-term Card-vs-Bank price compare block, then drills into the term step.
+  function renderTypeCard(type) {
+    const featuresHtml = (type.features || [])
       .map(f => `<li><svg class="wcs-plan-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><polyline points="6 10 9 13 14 7"/></svg><span>${escapeHtml(f)}</span></li>`)
       .join('');
-    // Split monthly amount into integer + decimal so we can render "$55"
-    // big with a tiny .00 (or hide the decimal entirely if it's whole).
-    const monthly = Number(plan.monthly_amount) || 0;
-    const monthlyWhole = Math.floor(monthly);
-    const monthlyCents = Math.round((monthly - monthlyWhole) * 100);
+    const pricing = (type.terms || []).map(t => `
+      <div class="wcs-type-price-row">
+        <span class="wcs-tpr-term">${escapeHtml(termLabel(t.term))}</span>
+        <span class="wcs-tpr-price">${dualPriceHtml(t)}</span>
+      </div>`).join('');
     return `
-      <div class="wcs-plan-card ${selected ? 'is-selected' : ''}">
+      <div class="wcs-plan-card">
         <div class="wcs-plan-card-header">
-          ${escapeHtml(plan.plan_label)}
-          ${plan.badge ? `<span class="wcs-plan-badge">${escapeHtml(plan.badge)}</span>` : ''}
+          ${escapeHtml(type.type_label)}
+          ${type.is_promo ? '<span class="wcs-limited-badge">Limited Time</span>' : ''}
+          ${type.badge ? `<span class="wcs-plan-badge">${escapeHtml(type.badge)}</span>` : ''}
         </div>
         <div class="wcs-plan-card-body">
-          ${plan.plan_description ? `<div class="wcs-plan-description">${escapeHtml(plan.plan_description)}</div>` : ''}
-          <div class="wcs-plan-hero">
-            <div class="wcs-plan-hero-amount">
-              <span class="wcs-plan-hero-cur">$</span>
-              <span class="wcs-plan-hero-num">${monthlyWhole}${monthlyCents ? `<small style="font-size:0.5em;letter-spacing:0;">.${String(monthlyCents).padStart(2, '0')}</small>` : ''}</span>
-            </div>
-            <div class="wcs-plan-hero-period">Per Month</div>
-            ${plan.enrollment_fee != null && plan.enrollment_fee > 0
-              ? `<div class="wcs-plan-hero-enroll">${money(plan.enrollment_fee)} Enrollment</div>`
-              : ''}
-          </div>
-          ${featuresHtml ? `<ul>${featuresHtml}</ul>` : ''}
-          <button class="wcs-plan-card-cta" data-action="signup-plan" data-plan-id="${plan.id}">Sign Up Now</button>
+          ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
+          ${featuresHtml ? `<div class="wcs-plan-features-header">What's Included</div><ul>${featuresHtml}</ul>` : ''}
+          ${pricing ? `<div class="wcs-type-pricing">${pricing}</div>` : ''}
+          <button class="wcs-plan-card-cta" data-action="choose-type" data-type-id="${escapeHtml(type.id)}">Select →</button>
         </div>
       </div>
     `;
   }
 
   function renderStep2() {
-    const plans = state.config.plans || [];
-    if (plans.length === 0) {
-      return `<div class="wcs-alert wcs-alert-info">No plans are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>`;
+    const types = state.config.types || [];
+    if (types.length === 0) {
+      return `<div class="wcs-alert wcs-alert-info">No memberships are available online yet. Please call ${escapeHtml(state.config.location.phone || 'us')} to enroll.</div>`;
     }
-    const sel = state.selectedPlan?.id;
-    return `<div class="wcs-plan-list">${plans.map(p => renderPlanItem(p, sel === p.id)).join('')}</div>`;
+    return `<div class="wcs-plan-list">${types.map(renderTypeCard).join('')}</div>`;
+  }
+
+  // Step 3 — term cards (1-Year vs Month-to-Month) for the chosen type.
+  function renderTermCard(type, term) {
+    const monthly = Number(term?.cc?.monthly) || 0;
+    const monthlyWhole = Math.floor(monthly);
+    const monthlyCents = Math.round((monthly - monthlyWhole) * 100);
+    const hasEnroll = term.enrollment_fee != null && Number(term.enrollment_fee) > 0;
+    const bank = term.has_ach_variant && term.ach && Number.isFinite(Number(term.ach.monthly))
+      ? ` · <span class="wcs-tpr-bank">${money(term.ach.monthly)}/mo bank</span>`
+      : '';
+    return `
+      <div class="wcs-plan-card">
+        <div class="wcs-plan-card-header">${escapeHtml(termLabel(term.term))}</div>
+        <div class="wcs-plan-card-body">
+          <div class="wcs-plan-hero">
+            <div class="wcs-plan-hero-amount">
+              <span class="wcs-plan-hero-cur">$</span>
+              <span class="wcs-plan-hero-num">${monthlyWhole}${monthlyCents ? `<small style="font-size:0.5em;letter-spacing:0;">.${String(monthlyCents).padStart(2, '0')}</small>` : ''}</span>
+            </div>
+            <div class="wcs-plan-hero-period">Per Month (card)</div>
+            <div class="wcs-term-dual">${money(monthly)}/mo card${bank}</div>
+          </div>
+          <div class="wcs-term-enroll ${hasEnroll ? '' : 'is-none'}">
+            ${hasEnroll ? `${money(term.enrollment_fee)} Enrollment Fee` : 'No Enrollment Fee'}
+          </div>
+          <button class="wcs-plan-card-cta" data-action="choose-term" data-plan-id="${escapeHtml(term.plan_id)}" style="margin-top:18px;">Continue →</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep3() {
+    const type = state.selectedType;
+    if (!type) return `<div class="wcs-alert wcs-alert-info">Please choose a membership first.</div>`;
+    const terms = type.terms || [];
+    if (terms.length === 0) {
+      return `<div class="wcs-alert wcs-alert-info">No terms available for this membership. Please call ${escapeHtml(state.config.location.phone || 'us')}.</div>`;
+    }
+    return `
+      <p style="margin-bottom: 12px;">Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership.</p>
+      <div class="wcs-plan-list">${terms.map(t => renderTermCard(type, t)).join('')}</div>
+    `;
   }
 
   function fieldHtml({ name, label, type = 'text', value, placeholder, autocomplete, max, error, full }) {
@@ -1472,7 +1611,7 @@
     `;
   }
 
-  function renderStep3() {
+  function renderStep4() {
     const c = state.contact;
     const ec = state.emergencyContact;
     const err = state.inlineErrors;
@@ -1532,7 +1671,7 @@
     `;
   }
 
-  function renderStep4() {
+  function renderStep5() {
     const choice = state.paymentMethodChoice;
     const plan = state.selectedPlan || {};
     // ACH savings line — only shown when the chosen plan has a configured
@@ -1565,7 +1704,7 @@
     `;
   }
 
-  function renderStep5() {
+  function renderStep6() {
     if (!state.paypageUrl) {
       return `
         <div class="wcs-loading-block">
@@ -1587,7 +1726,7 @@
   // and a signature pad. The Confirm Membership button on this step is
   // what actually calls /submit (which creates the ABC agreement and
   // uploads the signed PDF).
-  function renderStep6() {
+  function renderStep7() {
     const plan = state.selectedPlan || {};
     // CC/ACH variant: if the member picked ACH AND this plan has an ACH
     // variant configured, show the ACH amounts. Otherwise show CC amounts.
@@ -1656,7 +1795,7 @@
     `;
   }
 
-  function renderStep7() {
+  function renderStep8() {
     if (state.successData?.pending) {
       return `
         <div class="wcs-loading-block">
@@ -1708,7 +1847,7 @@
   }
 
   function renderFooter() {
-    const onConfirm = state.currentStep === 7 && state.successData && !state.successData.pending;
+    const onConfirm = state.currentStep === 8 && state.successData && !state.successData.pending;
     if (onConfirm) {
       return ''; // no footer on success/error confirm view
     }
@@ -1717,15 +1856,16 @@
     let primaryDisabled = false;
     switch (state.currentStep) {
       case 1: primary = ''; break; // location cards are themselves the action
-      case 2: primary = ''; break; // per-card Sign Up Now is the action
-      case 3: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-4">Continue →</button>`; break;
-      case 4: primaryDisabled = !state.paymentMethodChoice;
-              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
-      case 5: primary = ''; break;
-      case 6: primary = ''; break; // confirm button lives inside step 6 body
+      case 2: primary = ''; break; // per-card "Select" advances to the term step
+      case 3: primary = ''; break; // per-card "Continue" picks the term + advances
+      case 4: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5">Continue →</button>`; break;
+      case 5: primaryDisabled = !state.paymentMethodChoice;
+              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-6" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
+      case 6: primary = ''; break;
+      case 7: primary = ''; break; // confirm button lives inside the review step body
     }
 
-    const secondary = state.currentStep > 1 && state.currentStep < 7
+    const secondary = state.currentStep > 1 && state.currentStep < 8
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
 
@@ -1739,7 +1879,7 @@
   const DEFAULT_LOGO_URL = 'https://westcoaststrength.com/wp-content/uploads/2023/02/Untitled-design-26-1024x1024.png';
 
   function render() {
-    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7 }[state.currentStep]) || renderStep1;
+    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7, 8: renderStep8 }[state.currentStep]) || renderStep1;
     const flash = state.flashMessage
       ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
       : '';
@@ -1757,7 +1897,7 @@
     `;
     state.flashMessage = null;
     attachListeners();
-    if (state.currentStep === 6) {
+    if (state.currentStep === 7) {
       initSignaturePad();
       initAgreementScrollGate();
     }
@@ -1834,22 +1974,28 @@
       }
       return;
     }
-    if (action === 'advance-to-2') return goto(2);
-    if (action === 'advance-to-3') return goto(3);
-    if (action === 'select-plan') {
-      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
-      if (plan) { state.selectedPlan = plan; render(); saveState(); }
-      return;
-    }
-    if (action === 'signup-plan') {
-      // Per-card "Sign Up Now" — pick the plan and advance to step 3 in
-      // one tap. No eligibility check yet (that happens on the step 3
-      // -> step 4 transition where we have the member's birthday).
-      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
-      if (plan) {
-        state.selectedPlan = plan;
+    if (action === 'choose-type') {
+      // Step 2 — pick a membership type and drill into its terms.
+      const type = (state.config.types || []).find(t => t.id === el.dataset.typeId);
+      if (type) {
+        state.selectedType = type;
+        // Drop a stale term selection if it doesn't belong to this type.
+        if (state.selectedPlan && !(type.terms || []).some(t => t.plan_id === state.selectedPlan.id)) {
+          state.selectedPlan = null;
+        }
         saveState();
         goto(3);
+      }
+      return;
+    }
+    if (action === 'choose-term') {
+      // Step 3 — pick a term; shape it into the plan object downstream wants.
+      const found = findTermByPlanId(el.dataset.planId);
+      if (found) {
+        state.selectedType = found.type;
+        state.selectedPlan = planFromTerm(found.type, found.term);
+        saveState();
+        goto(4);
       }
       return;
     }
@@ -1858,20 +2004,23 @@
       render(); saveState();
       return;
     }
-    if (action === 'advance-to-4') {
+    if (action === 'advance-to-5') {
+      // Contact step → validate + server-side eligibility, then payment method.
       const errors = clientValidateContact();
       state.inlineErrors = errors;
       if (Object.keys(errors).length) { render(); return; }
+      if (!state.selectedPlan) { flash('error', 'Please choose a membership and term first.'); goto(2); return; }
       try {
         el.disabled = true;
         const elig = await checkEligibility(state.selectedPlan.id, birthdayToIso(state.contact.birthday));
         if (!elig.ok) { flash('error', elig.body?.error || 'Eligibility check failed.'); render(); return; }
         if (elig.body.eligible === false) { handleIneligible(elig.body); return; }
-        goto(4);
+        goto(5);
       } finally { el.disabled = false; }
       return;
     }
-    if (action === 'advance-to-5') {
+    if (action === 'advance-to-6') {
+      // Payment-method step → create signup row + PayPage URL, then the iframe.
       try {
         el.disabled = true;
         flash('info', 'Setting up secure payment…');
@@ -1879,13 +2028,13 @@
         const r = await startSignup();
         if (!r.ok) {
           flash('error', (r.body?.errors || []).join(' ') || r.body?.error || `Failed to start (${r.status})`);
-          state.currentStep = 4;
+          state.currentStep = 5;
           render(); return;
         }
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
         saveState();
-        goto(5);
+        goto(6);
       } finally {}
       return;
     }
@@ -1896,29 +2045,33 @@
     if (action === 'confirm-membership') {
       return confirmMembership();
     }
-    if (action === 'switch-plan') {
-      const plan = state.config.plans.find(p => p.id === el.dataset.planId);
-      if (plan) {
-        state.selectedPlan = plan;
+    if (action === 'pick-suggested') {
+      // From the ineligible view — server already vetted this plan's age rule,
+      // so just select it and return to the contact step.
+      const found = findTermByPlanId(el.dataset.planId);
+      if (found) {
+        state.selectedType = found.type;
+        state.selectedPlan = planFromTerm(found.type, found.term);
         state.inlineErrors = {};
         saveState();
-        const elig = await checkEligibility(plan.id, birthdayToIso(state.contact.birthday));
-        if (elig.body?.eligible === false) handleIneligible(elig.body);
-        else { flash('info', `Switched to ${plan.plan_label}.`); render(); }
+        flash('info', `Switched to ${found.type.type_label}.`);
+        goto(4);
+      } else {
+        goto(2);
       }
       return;
     }
-    if (action === 'back-to-plans') return goto(2);
+    if (action === 'back-to-types') return goto(2);
   }
 
   function handleIneligible(elig) {
     const suggested = (elig.suggested_plans || []).map(p => `
-      <div class="wcs-plan-card" data-action="switch-plan" data-plan-id="${p.id}">
-        <div class="wcs-plan-row">
-          <span class="wcs-plan-name">${escapeHtml(p.plan_label)}</span>
-          <div class="wcs-plan-prices">
-            <div><b>${money(p.today_amount)}</b>today</div>
-            <div>then <b style="font-size:11px;">${money(p.monthly_amount)}</b>/mo</div>
+      <div class="wcs-plan-card" data-action="pick-suggested" data-plan-id="${p.id}" style="cursor:pointer;">
+        <div class="wcs-plan-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;">
+          <span class="wcs-plan-name" style="font-weight:700;">${escapeHtml(p.plan_label)}</span>
+          <div class="wcs-plan-prices" style="text-align:right;font-size:12px;">
+            <div><b>${money(p.today_amount)}</b> today</div>
+            <div>then <b>${money(p.monthly_amount)}</b>/mo</div>
           </div>
         </div>
       </div>
@@ -1928,19 +2081,19 @@
       <div class="wcs-panel">
         <div class="wcs-panel-header">
           <div>
-            <div class="wcs-eyebrow">Different plan needed</div>
-            <h1>This plan isn't quite right</h1>
+            <div class="wcs-eyebrow">Different membership needed</div>
+            <h1>This membership isn't quite right</h1>
           </div>
-          <span class="wcs-progress-pill">Step 3 / ${TOTAL_STEPS}</span>
+          <span class="wcs-progress-pill">Step 4 / ${TOTAL_STEPS}</span>
         </div>
-        <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: ${(3/TOTAL_STEPS)*100}%;"></div></div>
+        <div class="wcs-panel-progress"><div class="wcs-panel-progress-fill" style="width: ${(4/TOTAL_STEPS)*100}%;"></div></div>
         <div class="wcs-panel-body">
-          <div class="wcs-alert wcs-alert-info">${escapeHtml(elig.ineligible_message || 'Please choose a different plan.')}</div>
-          ${suggested ? `<div class="wcs-section-label">Plans that fit you</div><div class="wcs-plan-list">${suggested}</div>`
-                      : `<p>No other plans fit online. Please call ${escapeHtml(phone || 'us')} and we'll find the right fit.</p>`}
+          <div class="wcs-alert wcs-alert-info">${escapeHtml(elig.ineligible_message || 'Please choose a different membership.')}</div>
+          ${suggested ? `<div class="wcs-section-label">Memberships that fit you</div><div class="wcs-plan-list">${suggested}</div>`
+                      : `<p>No other memberships fit online. Please call ${escapeHtml(phone || 'us')} and we'll find the right fit.</p>`}
         </div>
         <div class="wcs-panel-footer">
-          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-plans">← Back to plans</button>
+          <button class="wcs-btn wcs-btn-secondary" data-action="back-to-types">← Back to memberships</button>
           <span></span>
         </div>
       </div>
@@ -1986,16 +2139,16 @@
   }
   window.addEventListener('message', async (event) => {
     if (event.origin !== PAYPAGE_ORIGIN) return;
-    if (state.currentStep < 5) return;
+    if (state.currentStep < 6) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;
     // Payment method tokenized successfully. Don't call /submit yet — that
-    // happens only after the member signs in step 6. Stash the transaction
-    // ID and advance.
+    // happens only after the member signs in the review step. Stash the
+    // transaction ID and advance.
     state.paypageTransactionId = tx.id;
     state.paypagePaymentType = tx.paymentType;
-    state.currentStep = 6;
-    // Reset the scroll-to-bottom gate every time we land on step 6.
+    state.currentStep = 7;
+    // Reset the scroll-to-bottom gate every time we land on the review step.
     state.agreementScrolledToBottom = false;
     state.agreementAcknowledged = false;
     saveState();
@@ -2028,13 +2181,13 @@
     state.submittingAgreement = false;
     if (r.ok && r.body?.success) {
       state.successData = r.body;
-      state.currentStep = 7;
+      state.currentStep = 8;
       clearStoredState();
       render();
       scrollWidgetToTop();
     } else {
       state.successData = { error: r.body?.error || 'We could not finalize your membership. Our team has been notified.' };
-      state.currentStep = 7;
+      state.currentStep = 8;
       render();
       scrollWidgetToTop();
     }
@@ -2055,6 +2208,7 @@
     state.paymentMethodChoice = null;
     state.signupId = null;
     state.paypageUrl = null;
+    state.selectedType = null;
     state.selectedPlan = null;
     if (!stored) return;
     if (stored.contact) Object.assign(state.contact, stored.contact);
@@ -2064,8 +2218,12 @@
     state.paymentMethodChoice = stored.paymentMethodChoice || null;
     state.signupId = stored.signupId || null;
     state.paypageUrl = stored.paypageUrl || null;
-    if (stored.selectedPlanId && state.config?.plans) {
-      state.selectedPlan = state.config.plans.find(p => p.id === stored.selectedPlanId) || null;
+    if (stored.selectedPlanId && state.config?.types) {
+      const found = findTermByPlanId(stored.selectedPlanId);
+      if (found) {
+        state.selectedType = found.type;
+        state.selectedPlan = planFromTerm(found.type, found.term);
+      }
     }
     state.currentStep = Math.min(stored.currentStep || 1, 4);
   }

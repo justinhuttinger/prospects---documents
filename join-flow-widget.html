@@ -2607,10 +2607,10 @@
       applyStoredStateFor(resumeSlug);
       try {
         state.config = await fetchConfig(resumeSlug);
-        // If they had progress beyond step 1, drop them back at step 2 minimum
-        // so they see the picked location's plans. Don't auto-resume into
-        // PayPage step 5 since it's session-bound.
-        if (state.currentStep < 2) state.currentStep = 1; // stay on chooser
+        // When the host hard-codes a location (?location=slug or
+        // data-location), skip the picker entirely and start at the membership
+        // step. Without an explicit location we stay on the chooser.
+        state.currentStep = DEFAULT_LOCATION_ID ? 2 : 1;
         render();
         return;
       } catch (_) {

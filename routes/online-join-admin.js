@@ -304,8 +304,10 @@ router.post('/types', async (req, res) => {
 router.patch('/types/:id', async (req, res) => {
   try {
     const sb = getSupabaseAdmin();
-    // type_key + location are immutable on existing rows (unique constraint).
-    const { type_key, wcs_location_id, ...rest } = pick(req.body, TYPE_FIELDS);
+    // Location is immutable; type_key (slug) may be changed. The
+    // (wcs_location_id, type_key) unique constraint still guards against
+    // collisions — a dupe slug surfaces as a DB error to the client.
+    const { wcs_location_id, ...rest } = pick(req.body, TYPE_FIELDS);
     const body = rest;
     body.updated_by = req.staff.id;
     body.updated_at = new Date().toISOString();

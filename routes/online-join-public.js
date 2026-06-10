@@ -295,12 +295,24 @@ router.post('/start', async (req, res) => {
       });
     }
 
-    let paypageUrl;
+    // EFT card-today hybrid: ABC can't draft a due-today from a bank account, so
+    // when an ACH member has money due today we collect TODAY on a card and
+    // RECURRING on the bank — two PayPage passes. (Card members and $0-today bank
+    // members stay single-pass.)
+    const dueToday = Number(plan.today_amount) || 0;
+    const hybrid = payment_method_choice === 'ach' && dueToday > 0;
+
+    let paypageUrl, paypageUrlToday = null;
     try {
+      // Recurring/draft method: bank for ACH, card for card.
       paypageUrl = buildPayPageUrl({
         paymentMethodChoice: payment_method_choice,
         signupId: inserted.id,
       });
+      // Hybrid: a second pass collects the card used for today's charge.
+      if (hybrid) {
+        paypageUrlToday = buildPayPageUrl({ paymentMethodChoice: 'card', signupId: inserted.id });
+      }
     } catch (err) {
       await logSignupError({
         signupId: inserted.id,
@@ -314,7 +326,12 @@ router.post('/start', async (req, res) => {
       });
     }
 
-    res.json({ signup_id: inserted.id, paypage_url: paypageUrl });
+    res.json({
+      signup_id: inserted.id,
+      paypage_url: paypageUrl,            // recurring/draft pass (bank for ACH)
+      hybrid,
+      paypage_url_today: paypageUrlToday, // card pass for today's charge (hybrid only)
+    });
   } catch (err) {
     console.error('[online-join-public] /start error:', err.message);
     await logSignupError({
@@ -330,28 +347,45 @@ router.post('/start', async (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /api/online-join/submit
 // Receives PayPage transaction ID, posts ABC agreement, fans out.
-// Body: { signup_id, paypage_transaction_id, paypage_payment_type }
+// Body (single-pass): { signup_id, paypage_transaction_id, paypage_payment_type, ... }
+// Body (hybrid):      { signup_id, today_transaction_id, today_payment_type,
+//                       draft_transaction_id, draft_payment_type, ... }
 // Returns: { success, member_id, day_one_booking_url, plan_label, monthly_amount }
 //          OR { success: false, error, code }
 // ---------------------------------------------------------------------------
 router.post('/submit', async (req, res) => {
   const {
     signup_id,
+    // Single-pass (card-only or $0-today bank): one token + method.
     paypage_transaction_id,
     paypage_payment_type,
-    // Step 6 (Review & Sign) — all optional for now so the endpoint stays
-    // backwards-compatible with older widget builds, but the new widget
-    // always sends them.
+    // Two-pass EFT card-today hybrid: explicit today (card) + draft (bank) legs.
+    today_transaction_id,
+    today_payment_type,
+    draft_transaction_id,
+    draft_payment_type,
+    // Review & Sign.
     signature_data_url,
     typed_signature,
     agreement_acknowledged,
   } = req.body || {};
   const sb = getSupabaseAdmin();
 
+  // Normalize the two billing legs. Single-pass sends only paypage_transaction_id
+  // (used for both legs); the hybrid sends today_* (card) + draft_* (bank).
+  const todayTxn = today_transaction_id || paypage_transaction_id || null;
+  const todayType = today_payment_type || paypage_payment_type || null;
+  const draftTxn = draft_transaction_id || paypage_transaction_id || null;
+  const draftType = draft_payment_type || paypage_payment_type || null;
+  const VALID_TYPES = ['Credit Card', 'Bank Account'];
+
   if (!signup_id) return res.status(400).json({ error: 'signup_id is required' });
-  if (!paypage_transaction_id) return res.status(400).json({ error: 'paypage_transaction_id is required' });
-  if (paypage_payment_type !== 'Credit Card' && paypage_payment_type !== 'Bank Account') {
-    return res.status(400).json({ error: 'paypage_payment_type must be "Credit Card" or "Bank Account"' });
+  if (!draftTxn) return res.status(400).json({ error: 'A PayPage transaction id is required' });
+  if (draftType && !VALID_TYPES.includes(draftType)) {
+    return res.status(400).json({ error: 'draft payment type must be "Credit Card" or "Bank Account"' });
+  }
+  if (todayTxn && todayType && !VALID_TYPES.includes(todayType)) {
+    return res.status(400).json({ error: 'today payment type must be "Credit Card" or "Bank Account"' });
   }
 
   try {
@@ -403,9 +437,10 @@ router.post('/submit', async (req, res) => {
     const { error: updErr } = await sb
       .from('online_signups')
       .update({
-        paypage_today_transaction_id: paypage_transaction_id,
-        paypage_draft_transaction_id: paypage_transaction_id,
-        paypage_payment_type,
+        paypage_today_transaction_id: todayTxn,
+        paypage_draft_transaction_id: draftTxn,
+        paypage_payment_type: todayType,
+        paypage_draft_payment_type: draftType,
         status: 'submitted_to_abc',
         payment_at: new Date().toISOString(),
         signed_at: signedAt,
@@ -429,9 +464,10 @@ router.post('/submit', async (req, res) => {
     // 6. Build + POST ABC agreement.
     const inMemSignup = {
       ...signup,
-      paypage_today_transaction_id: paypage_transaction_id,
-      paypage_draft_transaction_id: paypage_transaction_id,
-      paypage_payment_type,
+      paypage_today_transaction_id: todayTxn,
+      paypage_draft_transaction_id: draftTxn,
+      paypage_payment_type: todayType,
+      paypage_draft_payment_type: draftType,
     };
     const abcPayload = buildAgreementPayload(inMemSignup, plan);
     // Diagnostics: persist exactly what we send ABC (PayPage tokens redacted) so

@@ -857,6 +857,16 @@
   }
 
   /* === PayPage iframe (step 5) ==================================== */
+  #wcs-join-app .wcs-pay-subhead {
+    margin-bottom: 12px;
+  }
+  #wcs-join-app .wcs-pay-subhead-tag {
+    display: inline-block;
+    background: var(--w-ink); color: #fff;
+    padding: 7px 12px; border-radius: 2px;
+    font-size: 12px; font-weight: 800;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
   #wcs-join-app .wcs-paypage-frame {
     width: 100%; min-height: 560px;
     border: 1px solid var(--w-border);
@@ -1190,6 +1200,13 @@
     paymentMethodChoice: null,
     signupId: null,
     paypageUrl: null,
+    // EFT card-today hybrid: two PayPage passes (card for today, bank for
+    // recurring). hybridPhase tracks which pass is showing.
+    hybrid: false,
+    paypageUrlToday: null,
+    hybridPhase: null,          // 'today' | 'draft'
+    paypageCardTodayId: null,
+    paypageBankDraftId: null,
     successData: null,
     inlineErrors: {},
     flashMessage: null,
@@ -1998,7 +2015,20 @@
   }
 
   function renderStep7() {
-    if (!state.paypageUrl) {
+    // For the EFT card-today hybrid the member tokenizes two methods in two
+    // passes; pick the right iframe + a clear header for the current pass.
+    let url = state.paypageUrl;
+    let header = '';
+    if (state.hybrid) {
+      if (state.hybridPhase === 'today') {
+        url = state.paypageUrlToday;
+        header = "Step 1 of 2 — card for today's payment";
+      } else {
+        url = state.paypageUrl;
+        header = 'Step 2 of 2 — bank account for monthly dues';
+      }
+    }
+    if (!url) {
       return `
         <div class="wcs-loading-block">
           <span class="wcs-spinner"></span>
@@ -2009,7 +2039,8 @@
     const trust = state.config.copy?.step_5_trust_text ||
       'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
     return `
-      <iframe class="wcs-paypage-frame" src="${escapeHtml(state.paypageUrl)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe>
+      ${header ? `<div class="wcs-pay-subhead"><span class="wcs-pay-subhead-tag">${escapeHtml(header)}</span></div>` : ''}
+      <iframe class="wcs-paypage-frame" src="${escapeHtml(url)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe>
       <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
     `;
   }
@@ -2391,6 +2422,12 @@
         }
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
+        // EFT card-today hybrid: a second pass collects the card for today.
+        state.hybrid = !!r.body.hybrid;
+        state.paypageUrlToday = r.body.paypage_url_today || null;
+        state.hybridPhase = state.hybrid ? 'today' : null;
+        state.paypageCardTodayId = null;
+        state.paypageBankDraftId = null;
         saveState();
         goto(7);
       } finally {}
@@ -2496,16 +2533,7 @@
     else if (type.includes('card') || type.includes('credit')) paymentType = 'Credit Card';
     return id ? { id, paymentType } : null;
   }
-  window.addEventListener('message', async (event) => {
-    if (event.origin !== PAYPAGE_ORIGIN) return;
-    if (state.currentStep < 7) return;
-    const tx = extractTransaction(event.data);
-    if (!tx) return;
-    // Payment method tokenized successfully. Don't call /submit yet — that
-    // happens only after the member signs in the review step. Stash the
-    // transaction ID and advance.
-    state.paypageTransactionId = tx.id;
-    state.paypagePaymentType = tx.paymentType;
+  function advanceToReview() {
     state.currentStep = 8;
     // Reset the scroll-to-bottom gate every time we land on the review step.
     state.agreementScrolledToBottom = false;
@@ -2513,11 +2541,42 @@
     saveState();
     render();
     scrollWidgetToTop();
+  }
+  window.addEventListener('message', async (event) => {
+    if (event.origin !== PAYPAGE_ORIGIN) return;
+    if (state.currentStep < 7) return;
+    const tx = extractTransaction(event.data);
+    if (!tx) return;
+    // Don't call /submit yet — that happens after the member signs (step 8).
+    if (state.hybrid) {
+      if (state.hybridPhase === 'today') {
+        // Card tokenized for today's charge — move to the bank (recurring) pass.
+        state.paypageCardTodayId = tx.id;
+        state.hybridPhase = 'draft';
+        saveState();
+        render();           // re-render step 7 with the bank iframe + new header
+        scrollWidgetToTop();
+        return;
+      }
+      // Bank tokenized for recurring — both legs captured, go review.
+      state.paypageBankDraftId = tx.id;
+      saveState();
+      advanceToReview();
+      return;
+    }
+    // Single-pass (card-only or $0-today bank).
+    state.paypageTransactionId = tx.id;
+    state.paypagePaymentType = tx.paymentType;
+    saveState();
+    advanceToReview();
   });
 
   async function confirmMembership() {
     if (state.submittingAgreement) return;
-    if (!state.paypageTransactionId) {
+    const haveTokens = state.hybrid
+      ? (state.paypageCardTodayId && state.paypageBankDraftId)
+      : state.paypageTransactionId;
+    if (!haveTokens) {
       state.flashMessage = { type: 'error', text: 'Payment session expired. Please reload and try again.' };
       render();
       return;
@@ -2525,17 +2584,26 @@
     state.submittingAgreement = true;
     state.successData = { pending: true };
     render();
+    const submitBody = state.hybrid
+      ? {
+          signup_id: state.signupId,
+          today_transaction_id: state.paypageCardTodayId,
+          today_payment_type: 'Credit Card',
+          draft_transaction_id: state.paypageBankDraftId,
+          draft_payment_type: 'Bank Account',
+        }
+      : {
+          signup_id: state.signupId,
+          paypage_transaction_id: state.paypageTransactionId,
+          paypage_payment_type: state.paypagePaymentType,
+        };
+    submitBody.signature_data_url = state.signatureDataUrl;
+    submitBody.typed_signature = state.typedSignature;
+    submitBody.agreement_acknowledged = state.agreementAcknowledged;
     const r = await api('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        signup_id: state.signupId,
-        paypage_transaction_id: state.paypageTransactionId,
-        paypage_payment_type: state.paypagePaymentType,
-        signature_data_url: state.signatureDataUrl,
-        typed_signature: state.typedSignature,
-        agreement_acknowledged: state.agreementAcknowledged,
-      }),
+      body: JSON.stringify(submitBody),
     });
     state.submittingAgreement = false;
     if (r.ok && r.body?.success) {

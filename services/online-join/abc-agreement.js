@@ -113,6 +113,16 @@ function buildAgreementPayload(signup, plan) {
     },
   };
 
+  // EFT/ACH: the PayPage only yields a recurring draft (bank) token — there's no
+  // payPageDueTodayBankAccount. When a down payment is due, ABC requires a
+  // today-billing instruction (API-MEM-MEM-0021), so we direct today's charge to
+  // the same bank account via isTodayBillingSameAsDraft. (Card uses
+  // payPageDueTodayCreditCard instead and must NOT include todayBillingInfo —
+  // that combo trips API-MEM-MEM-0094.)
+  if (!paymentTypeIsCard) {
+    payload.todayBillingInfo = { isTodayBillingSameAsDraft: 'true' };
+  }
+
   // Household / secondary members (family plans). They ride on the same
   // agreement; the size-matched paymentPlanId already carries the combined dues.
   // Address is inherited from the primary. DOB is sent ISO (per ABC's example).

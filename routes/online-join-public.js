@@ -434,6 +434,14 @@ router.post('/submit', async (req, res) => {
       paypage_payment_type,
     };
     const abcPayload = buildAgreementPayload(inMemSignup, plan);
+    // Diagnostics: persist exactly what we send ABC (PayPage tokens redacted) so
+    // we can audit the billing envelope after the fact — e.g. confirm an EFT
+    // signup sent only payPageDraftBankAccount and no today-charge field.
+    try {
+      await sb.from('online_signups')
+        .update({ abc_request: redactPaypageTokens(abcPayload) })
+        .eq('id', signup_id);
+    } catch (_) { /* non-fatal diagnostic */ }
     const abcResp = await postAgreement({
       clubNumber: signup.abc_club_number,
       payload: abcPayload,

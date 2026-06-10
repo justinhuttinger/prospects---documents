@@ -44,9 +44,29 @@ function validatePaymentMethod(choice) {
   return [];
 }
 
+// Household / secondary members (family plans). Each needs name, ISO birthday,
+// email, and a 10-digit phone. Address is inherited from the primary, so it's
+// not validated here. `arr` may be empty/undefined (non-family signups).
+function validateSecondaryMembers(arr) {
+  if (arr == null) return [];
+  if (!Array.isArray(arr)) return ['Household members must be a list.'];
+  const errors = [];
+  arr.forEach((m, i) => {
+    const n = i + 1;
+    const who = `Household member ${n}`;
+    if (!isPresent(m?.first_name)) errors.push(`${who}: first name is required.`);
+    if (!isPresent(m?.last_name)) errors.push(`${who}: last name is required.`);
+    if (!EMAIL_RE.test(String(m?.email || ''))) errors.push(`${who}: a valid email is required.`);
+    if (digitsOnly(m?.cell_phone).length < 10) errors.push(`${who}: a 10-digit phone is required.`);
+    if (!DATE_RE.test(String(m?.birthday || ''))) errors.push(`${who}: birthday must be YYYY-MM-DD.`);
+  });
+  return errors;
+}
+
 module.exports = {
   digitsOnly,
   validateContact,
   validateEmergencyContact,
   validatePaymentMethod,
+  validateSecondaryMembers,
 };

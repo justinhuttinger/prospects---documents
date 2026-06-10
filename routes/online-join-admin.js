@@ -85,6 +85,8 @@ const PLAN_FIELDS = [
   'payment_plan_id_ach', 'today_amount_ach', 'monthly_amount_ach',
   // v2: a plan is a child of a membership type and carries a term.
   'membership_type_id', 'term',
+  // Family: total people this plan covers (1 normal, 3 family base, 4+ tiers).
+  'max_members',
   'age_rule_id', 'active',
 ];
 
@@ -95,6 +97,7 @@ const TYPE_FIELDS = [
   'type_label', 'description', 'features', 'badge',
   'age_rule_id', 'display_order',
   'promo_code', 'promo_starts_at', 'promo_ends_at',
+  'allow_secondary_members',
   'active',
 ];
 

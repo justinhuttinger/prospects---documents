@@ -841,12 +841,12 @@
   }
   #wcs-join-app .wcs-loc-name {
     font-family: var(--w-display);
-    font-size: 18px;
+    font-size: 26px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     color: var(--w-ink);
-    margin-bottom: 6px;
-    line-height: 1.1;
+    margin-bottom: 8px;
+    line-height: 1.05;
   }
   #wcs-join-app .wcs-loc-meta {
     font-size: 12px; color: var(--w-ink-muted);
@@ -1798,13 +1798,17 @@
     const enroll = Number(term.enrollment_fee);
     const hasEnroll = Number.isFinite(enroll) && enroll > 0;
     const monthly = Number(term?.cc?.monthly);
+    const ach = term.has_ach_variant && Number.isFinite(Number(term?.ach?.monthly)) ? Number(term.ach.monthly) : null;
+    const monthlyNote = Number.isFinite(monthly)
+      ? `then ${money(monthly)}/mo${ach != null ? ` <span class="wcs-tpr-bank">· ${money(ach)}/mo ACH</span>` : ''}`
+      : '';
     return `
       <div class="wcs-plan-card">
         <div class="wcs-plan-card-header">${escapeHtml(termLabel(term.term))}</div>
         <div class="wcs-plan-card-body">
           <div class="wcs-term-enroll-hero ${hasEnroll ? '' : 'is-none'}">${hasEnroll ? money(enroll) : '$0'}</div>
           <div class="wcs-term-enroll-label">${hasEnroll ? 'Enrollment Fee' : 'No Enrollment Fee'}</div>
-          ${Number.isFinite(monthly) ? `<div class="wcs-term-monthly-note">then ${money(monthly)}/mo</div>` : ''}
+          ${monthlyNote ? `<div class="wcs-term-monthly-note">${monthlyNote}</div>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-term" data-plan-id="${escapeHtml(term.plan_id)}" style="margin-top:18px;">Continue →</button>
         </div>
       </div>

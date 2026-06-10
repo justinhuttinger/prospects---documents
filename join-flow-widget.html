@@ -1928,14 +1928,19 @@
   // adds name / DOB / email / phone (address inherited from the primary). The
   // monthly total auto-updates from the size-matched tier as members change.
   function renderStep5() {
-    syncSelectedPlanToHousehold();
     const tiers = currentTiers();                   // sorted ascending by capacity
     const baseTier = tiers[0] || null;
     const baseCap = baseTier?.max_members || 1;      // people at the base price
+    const members = state.secondaryMembers;
+    // Family memberships require at least (baseCap - 1) household members (e.g.
+    // base covers 3 → you + 2) — pre-show those slots so nobody can pay for a
+    // family plan with just themselves.
+    const minSec = isFamilyType() ? Math.max(0, baseCap - 1) : 0;
+    while (members.length < minSec) members.push({ first_name: '', last_name: '', birthday: '', email: '', cell_phone: '' });
+    syncSelectedPlanToHousehold();
     const basePrice = Number(baseTier?.cc?.monthly);
     const includedExtra = Math.max(0, baseCap - 1);
     const maxSec = maxSecondaries();
-    const members = state.secondaryMembers;
     const err = state.inlineErrors;
     const total = 1 + members.length;
     // Monthly for a given household size (smallest tier that fits).
@@ -1952,7 +1957,7 @@
       <div class="wcs-household-member">
         <div class="wcs-household-member-head">
           <span>Member ${i + 1}</span>
-          <button type="button" class="wcs-household-remove" data-action="remove-secondary" data-index="${i}">Remove</button>
+          ${members.length > minSec ? `<button type="button" class="wcs-household-remove" data-action="remove-secondary" data-index="${i}">Remove</button>` : ''}
         </div>
         <div class="wcs-row">
           ${fieldHtml({ name: `sec-${i}-first_name`, label: 'First name', value: m.first_name, placeholder: 'Alex', error: err[`sec_${i}_first_name`] })}
@@ -1980,6 +1985,7 @@
     breakdown += `<div class="wcs-due-line is-total"><span>Monthly total</span><b>${Number.isFinite(currentPrice) ? money(currentPrice) + '/mo' : '—'}</b></div>`;
     return `
       <p style="margin-bottom: 6px;">Your membership includes <b>you${includedExtra ? ` + up to ${includedExtra} household member${includedExtra === 1 ? '' : 's'}` : ''}</b> at the base price${Number.isFinite(basePrice) ? ` of ${money(basePrice)}/mo` : ''}.${perAdd != null && perAdd > 0 ? ` Each additional member is <b>+${money(perAdd)}/mo</b>.` : ''}</p>
+      ${minSec > 0 ? `<p class="wcs-household-note" style="margin-bottom: 6px;"><b>A family membership requires at least ${minSec} household member${minSec === 1 ? '' : 's'}</b> (you + ${minSec}).</p>` : ''}
       <p class="wcs-household-note" style="margin-bottom: 14px;">Household members share your address. Add their name, date of birth, email, and phone.</p>
       ${rows || '<p class="wcs-household-empty">No household members added yet.</p>'}
       ${canAdd
@@ -2413,6 +2419,13 @@
       return;
     }
     if (action === 'continue-from-household') {
+      // Family memberships must include the minimum household members.
+      const baseCap = currentTiers()[0]?.max_members || 1;
+      const minSec = isFamilyType() ? Math.max(0, baseCap - 1) : 0;
+      if (state.secondaryMembers.length < minSec) {
+        flash('error', `Please add at least ${minSec} household member${minSec === 1 ? '' : 's'} for a family membership.`);
+        render(); return;
+      }
       const errors = clientValidateSecondary();
       state.inlineErrors = errors;
       if (Object.keys(errors).length) { render(); return; }

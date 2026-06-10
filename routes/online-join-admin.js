@@ -87,6 +87,8 @@ const PLAN_FIELDS = [
   'membership_type_id', 'term',
   // Family: total people this plan covers (1 normal, 3 family base, 4+ tiers).
   'max_members',
+  // Plan-level promo: hidden from normal browse, shown only via ?promo=<code>.
+  'promo_code', 'promo_starts_at', 'promo_ends_at',
   'age_rule_id', 'active',
 ];
 

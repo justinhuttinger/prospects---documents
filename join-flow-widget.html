@@ -1698,6 +1698,23 @@
     return null;
   }
 
+  // ----- Promo helpers ---------------------------------------------------
+  // A plan-level promo (config.promo) skips type selection and shows just the
+  // promo plan(s): one plan goes direct, two terms become a term choice.
+  function isPromoMode() {
+    return !!(state.config && state.config.promo && (state.config.promo.terms || []).length);
+  }
+  // Set up promo mode (called after config loads). Returns true if a promo is
+  // active for the current location.
+  function applyPromoIfAny() {
+    if (!isPromoMode()) return false;
+    state.selectedType = state.config.promo;
+    state.selectedTerm = null;
+    state.secondaryMembers = [];
+    state.selectedPlan = null;
+    return true;
+  }
+
   // ----- Family / household helpers --------------------------------------
   function isFamilyType() {
     return !!state.selectedType?.allow_secondary_members;
@@ -1825,8 +1842,15 @@
     }
     const cxLabel = state.config.copy?.cancellation_rules_label || 'Cancellation policy';
     const hasCx = !!(state.config.copy?.cancellation_rules_body || '').trim();
+    // Promo mode: header reflects the offer. One plan reads as "here's your
+    // offer"; multiple terms read as a term choice.
+    const intro = isPromoMode()
+      ? (terms.length > 1
+          ? `Special offer — choose your term for the <b>${escapeHtml(type.type_label)}</b> membership.`
+          : `Your offer — the <b>${escapeHtml(type.type_label)}</b> membership.`)
+      : `Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership. Same monthly dues — the only difference is the enrollment fee.`;
     return `
-      <p style="margin-bottom: 12px;">Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership. Same monthly dues — the only difference is the enrollment fee.</p>
+      <p style="margin-bottom: 12px;">${intro}</p>
       <div class="wcs-plan-list">${terms.map(t => renderTermCard(type, t)).join('')}</div>
       ${hasCx ? `<p class="wcs-cancellation-note"><a href="#" data-action="show-cancellation">${escapeHtml(cxLabel)}</a></p>` : ''}
     `;
@@ -2213,9 +2237,12 @@
       case 8: primary = ''; break; // confirm button lives inside the review step body
     }
 
-    // When a location is hard-coded (?location= / data-location) the picker is
-    // skipped, so the first reachable step is 2 — don't offer Back from there.
-    const minStep = DEFAULT_LOCATION_ID ? 2 : 1;
+    // First reachable step (don't offer Back from there): a plan-promo skips
+    // type → entry is the term/offer step (3); a hard-coded location skips the
+    // picker → entry is the type step (2); otherwise the picker (1).
+    const minStep = isPromoMode()
+      ? (DEFAULT_LOCATION_ID ? 3 : 1)
+      : (DEFAULT_LOCATION_ID ? 2 : 1);
     const secondary = state.currentStep > minStep && state.currentStep < 9
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
@@ -2335,6 +2362,9 @@
   }
   async function handleAction(action, el, e) {
     if (action === 'back') {
+      // Promo mode skips the type grid: from the offer step (3) go back to the
+      // location picker (or nowhere if the location is hard-coded).
+      if (isPromoMode() && state.currentStep === 3) return DEFAULT_LOCATION_ID ? undefined : goto(1);
       // Non-family flows skip the household step (5): pay(6) → back → contact(4).
       if (state.currentStep === 6 && !isFamilyType()) return goto(4);
       return goto(state.currentStep - 1);
@@ -2355,7 +2385,7 @@
       const slug = el.dataset.slug;
       if (!slug) return;
       // If they pick the same location they already loaded, just advance.
-      if (state.currentLocationId === slug && state.config) return goto(2);
+      if (state.currentLocationId === slug && state.config) return goto(applyPromoIfAny() ? 3 : 2);
       try {
         state.locationLoading = true;
         state.currentLocationId = slug;
@@ -2366,7 +2396,8 @@
         state.config = cfg;
         state.locationLoading = false;
         saveState();
-        goto(2);
+        // A plan-level promo skips type selection and goes straight to the offer.
+        goto(applyPromoIfAny() ? 3 : 2);
       } catch (err) {
         state.locationLoading = false;
         state.currentLocationId = null;
@@ -2732,7 +2763,7 @@
         // When the host hard-codes a location (?location=slug or
         // data-location), skip the picker entirely and start at the membership
         // step. Without an explicit location we stay on the chooser.
-        state.currentStep = DEFAULT_LOCATION_ID ? 2 : 1;
+        state.currentStep = applyPromoIfAny() ? 3 : (DEFAULT_LOCATION_ID ? 2 : 1);
         render();
         return;
       } catch (_) {

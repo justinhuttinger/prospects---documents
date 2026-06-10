@@ -102,6 +102,28 @@ function buildAgreementPayload(signup, plan) {
     },
   };
 
+  // Household / secondary members (family plans). They ride on the same
+  // agreement; the size-matched paymentPlanId already carries the combined dues.
+  // Address is inherited from the primary. DOB is sent ISO (per ABC's example).
+  const secondaries = Array.isArray(signup.secondary_members) ? signup.secondary_members : [];
+  if (secondaries.length) {
+    payload.secondaryMembers = {
+      secondaryMemberInfo: secondaries.map((m) => ({
+        secondaryFirstName: m.first_name || '',
+        secondaryLastName: m.last_name || '',
+        secondaryDateOfBirth: m.birthday || '',
+        secondaryEmail: m.email || '',
+        secondaryMobilePhone: m.cell_phone || '',
+        secondaryHomePhone: m.cell_phone || '',
+        secondaryMailingAddress: 'true',
+        secondaryCity: signup.city || '',
+        secondaryState: signup.state || '',
+        secondaryPostalCode: signup.zip_code || '',
+        secondaryCountry: 'US',
+      })),
+    };
+  }
+
   if (plan.campaign_id) payload.campaignId = plan.campaign_id;
   if (plan.sales_person_id) payload.salesPersonId = plan.sales_person_id;
 

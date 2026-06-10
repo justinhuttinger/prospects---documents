@@ -54,7 +54,7 @@ async function loadPublicConfig(locationId, promo = null) {
     .from('online_join_membership_types')
     .select(`
       id, type_key, type_label, description, features, badge, display_order,
-      promo_code, promo_starts_at, promo_ends_at,
+      promo_code, promo_starts_at, promo_ends_at, allow_secondary_members,
       age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
     `)
     .eq('wcs_location_id', locationId)
@@ -67,7 +67,7 @@ async function loadPublicConfig(locationId, promo = null) {
   const { data: plans, error: plansErr } = await sb
     .from('online_join_plans')
     .select(`
-      id, membership_type_id, term, enrollment_fee, display_order,
+      id, membership_type_id, term, enrollment_fee, display_order, max_members,
       today_amount, monthly_amount,
       today_amount_ach, monthly_amount_ach, payment_plan_id_ach
     `)
@@ -82,16 +82,18 @@ async function loadPublicConfig(locationId, promo = null) {
   if (copyErr) throw new Error(`Copy lookup failed: ${copyErr.message}`);
   const copy = Object.fromEntries((copyRows || []).map(r => [r.copy_key, r.copy_value]));
 
-  // Group plans by type, shaping each into a public "term" object. ACH amounts
-  // only surface when the plan has an ACH variant configured; the ACH
-  // payment_plan_id itself never crosses the wire (has_ach_variant is the flag).
-  const termsByType = new Map();
+  // Group plans by (type, term) into household-size TIERS. A normal term has a
+  // single tier (max_members = 1). A family term has multiple tiers — base
+  // covers up to 3 people, extra tiers for 4+. The widget auto-selects the
+  // smallest tier that fits the household. ACH amounts only surface when an ACH
+  // variant is configured; the ACH payment_plan_id never crosses the wire.
+  const tiersByType = new Map(); // type_id -> Map<term, tier[]>
   for (const p of plans || []) {
     if (!p.membership_type_id || !p.term) continue; // unassigned plan — skip
     const hasAch = !!p.payment_plan_id_ach;
-    const term = {
+    const tier = {
       plan_id: p.id,
-      term: p.term,
+      max_members: p.max_members || 1,
       enrollment_fee: num(p.enrollment_fee),
       cc: { today: num(p.today_amount), monthly: num(p.monthly_amount) },
       ach: hasAch
@@ -103,23 +105,36 @@ async function loadPublicConfig(locationId, promo = null) {
       has_ach_variant: hasAch,
       display_order: p.display_order,
     };
-    if (!termsByType.has(p.membership_type_id)) termsByType.set(p.membership_type_id, []);
-    termsByType.get(p.membership_type_id).push(term);
+    if (!tiersByType.has(p.membership_type_id)) tiersByType.set(p.membership_type_id, new Map());
+    const byTerm = tiersByType.get(p.membership_type_id);
+    if (!byTerm.has(p.term)) byTerm.set(p.term, []);
+    byTerm.get(p.term).push(tier);
   }
 
-  // Sort each type's terms: 1-Year first, then M2M, then anything else.
+  // Sort terms: 1-Year first, then M2M, then anything else.
   const TERM_ORDER = { '1yr': 0, 'm2m': 1 };
   const nowMs = Date.parse(new Date().toISOString());
 
   const publicTypes = (types || [])
     .filter(t => promoVisible(t, promo, nowMs))
     .map(t => {
-      const terms = (termsByType.get(t.id) || []).sort((a, b) => {
-        const ao = TERM_ORDER[a.term] ?? 9;
-        const bo = TERM_ORDER[b.term] ?? 9;
-        if (ao !== bo) return ao - bo;
-        return (a.display_order || 0) - (b.display_order || 0);
-      });
+      const byTerm = tiersByType.get(t.id) || new Map();
+      const terms = [...byTerm.entries()].map(([termKey, tiers]) => {
+        // Sort tiers by household capacity; the lowest tier is the base, whose
+        // fields drive the type/term cards (cheapest "starting at" price).
+        tiers.sort((a, b) => (a.max_members - b.max_members) || ((a.display_order || 0) - (b.display_order || 0)));
+        const base = tiers[0];
+        return {
+          term: termKey,
+          plan_id: base.plan_id,
+          enrollment_fee: base.enrollment_fee,
+          cc: base.cc,
+          ach: base.ach,
+          has_ach_variant: base.has_ach_variant,
+          max_members: base.max_members,
+          tiers, // full tier list for the household step's auto-pricing
+        };
+      }).sort((a, b) => (TERM_ORDER[a.term] ?? 9) - (TERM_ORDER[b.term] ?? 9));
       return {
         id: t.id,
         type_key: t.type_key,
@@ -128,6 +143,7 @@ async function loadPublicConfig(locationId, promo = null) {
         features: t.features || [],
         badge: t.badge || null,
         is_promo: !!t.promo_code,
+        allow_secondary_members: !!t.allow_secondary_members,
         age_rule: t.age_rule || null,
         terms,
       };

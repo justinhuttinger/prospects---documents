@@ -15,6 +15,7 @@ const {
   validateContact,
   validateEmergencyContact,
   validatePaymentMethod,
+  validateSecondaryMembers,
 } = require('../services/online-join/validators');
 const { buildAgreementPayload, postAgreement, redactPaypageTokens } =
   require('../services/online-join/abc-agreement');
@@ -111,6 +112,7 @@ router.post('/start', async (req, res) => {
       payment_method_choice,
       contact = {},
       emergency_contact = {},
+      secondary_members = [],
       marketing = {},
       attribution = {},
     } = body;
@@ -123,6 +125,7 @@ router.post('/start', async (req, res) => {
       ...validatePaymentMethod(payment_method_choice),
       ...validateContact(contact),
       ...validateEmergencyContact(emergency_contact),
+      ...validateSecondaryMembers(secondary_members),
     ];
     if (errors.length) return res.status(400).json({ error: 'Validation failed', errors });
 
@@ -244,6 +247,14 @@ router.post('/start', async (req, res) => {
       utm_source: attribution.utm_source || null,
       utm_medium: attribution.utm_medium || null,
       utm_campaign: attribution.utm_campaign || null,
+
+      secondary_members: Array.isArray(secondary_members) ? secondary_members.map(m => ({
+        first_name: String(m.first_name || '').trim(),
+        last_name: String(m.last_name || '').trim(),
+        birthday: m.birthday || null,
+        email: String(m.email || '').trim().toLowerCase(),
+        cell_phone: digitsOnly(m.cell_phone),
+      })) : [],
 
       started_at: new Date().toISOString(),
     };

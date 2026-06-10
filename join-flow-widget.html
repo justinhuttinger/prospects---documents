@@ -672,6 +672,43 @@
     font-size: 14px; line-height: 1.6; color: var(--w-ink);
   }
 
+  /* Household / secondary members step */
+  #wcs-join-app .wcs-household-member {
+    border: 1px solid var(--w-border);
+    border-radius: 2px;
+    padding: 14px;
+    margin-bottom: 12px;
+    background: #fafaf9;
+  }
+  #wcs-join-app .wcs-household-member-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-household-remove {
+    background: none; border: 0; cursor: pointer;
+    font-size: 11px; color: var(--w-red);
+    text-transform: none; letter-spacing: 0;
+  }
+  #wcs-join-app .wcs-household-note { font-size: 12px; color: var(--w-ink-soft); }
+  #wcs-join-app .wcs-household-empty {
+    font-size: 13px; color: var(--w-ink-soft);
+    padding: 8px 0 12px;
+  }
+  #wcs-join-app .wcs-household-add { width: 100%; margin-top: 4px; }
+  #wcs-join-app .wcs-household-total {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-top: 18px; padding-top: 14px;
+    border-top: 1px solid var(--w-border);
+    font-size: 14px;
+  }
+  #wcs-join-app .wcs-household-total b {
+    font-family: var(--w-display); font-size: 22px;
+    color: var(--w-red);
+  }
+
   /* === Payment method choice ====================================== */
   #wcs-join-app .wcs-pm-list {
     display: flex; flex-direction: column; gap: 10px;
@@ -1076,7 +1113,7 @@
   const PAYPAGE_ORIGIN = 'https://apipayservice.abcfinancial.net';
   const STORAGE_KEY = 'wcs_join_state_v1';
   const STORAGE_TTL_MS = 60 * 60 * 1000;
-  const TOTAL_STEPS = 8;
+  const TOTAL_STEPS = 9;
 
   const root = document.getElementById('wcs-join-app');
   if (!root) return;
@@ -1130,7 +1167,9 @@
     config: null,            // config for currentLocationId (null until picked)
     locationLoading: false,
     selectedType: null,      // step 2 — chosen membership type (from config.types)
-    selectedPlan: null,      // step 3 — chosen term, shaped as a plan for downstream code
+    selectedTerm: null,      // step 3 — chosen term object (with tiers) for household auto-pricing
+    selectedPlan: null,      // resolved plan (size-matched tier), shaped for downstream code
+    secondaryMembers: [],    // step 5 — household members [{first_name,last_name,birthday,email,cell_phone}]
     contact: {
       first_name: '', last_name: '', email: '', cell_phone: '',
       birthday: '', gender: '',
@@ -1247,6 +1286,18 @@
     if (!state.termsAccepted) errors.terms = 'Required.';
     return errors;
   }
+  // Household members (step 5). Keyed `sec_<i>_<field>` to match renderStep5.
+  function clientValidateSecondary() {
+    const errors = {};
+    state.secondaryMembers.forEach((m, i) => {
+      if (!String(m.first_name || '').trim()) errors[`sec_${i}_first_name`] = 'Required.';
+      if (!String(m.last_name || '').trim()) errors[`sec_${i}_last_name`] = 'Required.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email || '')) errors[`sec_${i}_email`] = 'Invalid email.';
+      if (String(m.cell_phone || '').replace(/\D/g, '').length !== 10) errors[`sec_${i}_cell_phone`] = '10 digits.';
+      if (!birthdayToIso(m.birthday)) errors[`sec_${i}_birthday`] = 'MM/DD/YYYY required.';
+    });
+    return errors;
+  }
 
   // ----- API --------------------------------------------------------------
   async function api(path, opts) {
@@ -1289,6 +1340,13 @@
         payment_method_choice: state.paymentMethodChoice,
         contact: contactForServer,
         emergency_contact: state.emergencyContact,
+        secondary_members: state.secondaryMembers.map(m => ({
+          first_name: m.first_name,
+          last_name: m.last_name,
+          email: m.email,
+          cell_phone: m.cell_phone,
+          birthday: birthdayToIso(m.birthday),
+        })),
         marketing: state.marketing,
         attribution: captureAttribution(),
       }),
@@ -1466,16 +1524,18 @@
       2: { eyebrow: 'Membership',     title: 'Choose Your Membership' },
       3: { eyebrow: 'Commitment',     title: 'Pick Your Term' },
       4: { eyebrow: 'Member Profile', title: 'Tell Us About You' },
-      5: { eyebrow: 'Billing',        title: 'How You Pay' },
-      6: { eyebrow: 'Secure Payment', title: 'Enter Payment Details' },
-      7: { eyebrow: 'Final Step',     title: 'Review & Sign' },
-      8: { eyebrow: 'Confirmation',   title: 'Welcome to the Westside' },
+      5: { eyebrow: 'Household',      title: 'Add Household Members' },
+      6: { eyebrow: 'Billing',        title: 'How You Pay' },
+      7: { eyebrow: 'Secure Payment', title: 'Enter Payment Details' },
+      8: { eyebrow: 'Final Step',     title: 'Review & Sign' },
+      9: { eyebrow: 'Confirmation',   title: 'Welcome to the Westside' },
     }[state.currentStep] || { eyebrow: '', title: '' };
   }
 
   function renderProgressPills(activeStep) {
     let html = '';
-    for (let i = 1; i <= TOTAL_STEPS; i++) {
+    const total = displayTotal();
+    for (let i = 1; i <= total; i++) {
       const cls = i < activeStep ? 'is-done' : (i === activeStep ? 'is-active' : '');
       html += `<div class="wcs-progress-pill ${cls}"></div>`;
     }
@@ -1483,7 +1543,7 @@
   }
 
   function renderPanelHeader() {
-    const isConfirmed = state.currentStep === 8 && state.successData && !state.successData.pending && !state.successData.error;
+    const isConfirmed = state.currentStep === 9 && state.successData && !state.successData.pending && !state.successData.error;
     if (isConfirmed) {
       const loc = state.config?.location?.display_name || 'Online Join';
       return `
@@ -1494,11 +1554,11 @@
           </div>
           <h1>Welcome to the Westside</h1>
         </div>
-        <div class="wcs-panel-progress">${renderProgressPills(TOTAL_STEPS + 1)}</div>
+        <div class="wcs-panel-progress">${renderProgressPills(displayTotal() + 1)}</div>
       `;
     }
     const meta = stepMeta();
-    const stepLabel = `${String(state.currentStep).padStart(2, '0')} / ${String(TOTAL_STEPS).padStart(2, '0')}`;
+    const stepLabel = `${String(displayStep()).padStart(2, '0')} / ${String(displayTotal()).padStart(2, '0')}`;
     // Step 1 gets the WCS badge inline with the title — it's the member's
     // entry point so it earns a brand moment. Every other step keeps a
     // clean text-only header so the card doesn't get scroll-heavy.
@@ -1516,7 +1576,7 @@
           <h1>${escapeHtml(meta.title)}</h1>
         </div>
       </div>
-      <div class="wcs-panel-progress">${renderProgressPills(state.currentStep)}</div>
+      <div class="wcs-panel-progress">${renderProgressPills(displayStep())}</div>
     `;
   }
 
@@ -1604,6 +1664,59 @@
       }
     }
     return null;
+  }
+
+  // ----- Family / household helpers --------------------------------------
+  function isFamilyType() {
+    return !!state.selectedType?.allow_secondary_members;
+  }
+  // Tiers for the selected term, sorted ascending by capacity. Falls back to a
+  // single synthetic tier from the term's base fields if `tiers` is absent.
+  function currentTiers() {
+    const t = state.selectedTerm;
+    if (!t) return [];
+    if (Array.isArray(t.tiers) && t.tiers.length) return t.tiers;
+    return [{
+      plan_id: t.plan_id, max_members: t.max_members || 1,
+      enrollment_fee: t.enrollment_fee, cc: t.cc, ach: t.ach, has_ach_variant: t.has_ach_variant,
+    }];
+  }
+  function maxSecondaries() {
+    const tiers = currentTiers();
+    if (!tiers.length) return 0;
+    return Math.max(0, Math.max(...tiers.map(t => t.max_members || 1)) - 1);
+  }
+  // Smallest tier whose capacity covers the household (primary + secondaries).
+  function resolveTier() {
+    const tiers = currentTiers();
+    if (!tiers.length) return null;
+    const total = 1 + state.secondaryMembers.length;
+    return tiers.find(t => (t.max_members || 1) >= total) || tiers[tiers.length - 1];
+  }
+  function planFromTier(type, term, tier) {
+    return {
+      id: tier.plan_id,
+      plan_label: `${type.type_label} · ${termLabel(term.term)}`,
+      term: term.term,
+      has_ach_variant: !!tier.has_ach_variant,
+      enrollment_fee: tier.enrollment_fee,
+      today_amount: tier.cc?.today,
+      monthly_amount: tier.cc?.monthly,
+      today_amount_ach: tier.ach ? tier.ach.today : null,
+      monthly_amount_ach: tier.ach ? tier.ach.monthly : null,
+    };
+  }
+  // Re-point selectedPlan at the size-matched tier for the current household.
+  function syncSelectedPlanToHousehold() {
+    if (!state.selectedType || !state.selectedTerm) return;
+    const tier = resolveTier();
+    if (tier) state.selectedPlan = planFromTier(state.selectedType, state.selectedTerm, tier);
+  }
+  // Non-family flows hide the household step, so pills/labels read "x / 8".
+  function displayTotal() { return isFamilyType() ? 9 : 8; }
+  function displayStep() {
+    if (isFamilyType()) return state.currentStep;
+    return state.currentStep <= 4 ? state.currentStep : state.currentStep - 1;
   }
 
   // Step 2 — membership type cards (brochure style): a price hero (standard
@@ -1776,7 +1889,56 @@
     `;
   }
 
+  // Step 5 — household / secondary members (family types only). Each member
+  // adds name / DOB / email / phone (address inherited from the primary). The
+  // monthly total auto-updates from the size-matched tier as members change.
   function renderStep5() {
+    syncSelectedPlanToHousehold();
+    const baseCap = currentTiers()[0]?.max_members || 1; // people at the base price
+    const includedExtra = Math.max(0, baseCap - 1);
+    const maxSec = maxSecondaries();
+    const members = state.secondaryMembers;
+    const plan = state.selectedPlan || {};
+    const monthly = Number(plan.monthly_amount);
+    const err = state.inlineErrors;
+
+    const rows = members.map((m, i) => `
+      <div class="wcs-household-member">
+        <div class="wcs-household-member-head">
+          <span>Member ${i + 1}</span>
+          <button type="button" class="wcs-household-remove" data-action="remove-secondary" data-index="${i}">Remove</button>
+        </div>
+        <div class="wcs-row">
+          ${fieldHtml({ name: `sec-${i}-first_name`, label: 'First name', value: m.first_name, placeholder: 'Alex', error: err[`sec_${i}_first_name`] })}
+          ${fieldHtml({ name: `sec-${i}-last_name`, label: 'Last name', value: m.last_name, placeholder: 'Doe', error: err[`sec_${i}_last_name`] })}
+        </div>
+        <div class="wcs-row">
+          ${fieldHtml({ name: `sec-${i}-email`, label: 'Email', type: 'email', value: m.email, placeholder: 'alex@email.com', error: err[`sec_${i}_email`] })}
+          ${fieldHtml({ name: `sec-${i}-cell_phone`, label: 'Cell phone', type: 'tel', value: m.cell_phone, placeholder: '(555) 555-5555', error: err[`sec_${i}_cell_phone`] })}
+        </div>
+        <div class="wcs-row">
+          ${fieldHtml({ name: `sec-${i}-birthday`, label: 'Date of birth', value: m.birthday, placeholder: 'MM/DD/YYYY', max: 10, error: err[`sec_${i}_birthday`] })}
+          <div class="wcs-field"></div>
+        </div>
+      </div>
+    `).join('');
+
+    const canAdd = members.length < maxSec;
+    return `
+      <p style="margin-bottom: 6px;">Your membership includes <b>you${includedExtra ? ` + up to ${includedExtra} household member${includedExtra === 1 ? '' : 's'}` : ''}</b> at the base price.${maxSec > includedExtra ? ` You can add up to ${maxSec} total — adding more updates the price below.` : ''}</p>
+      <p class="wcs-household-note" style="margin-bottom: 14px;">Household members share your address. Add their name, date of birth, email, and phone.</p>
+      ${rows || '<p class="wcs-household-empty">No household members added yet.</p>'}
+      ${canAdd
+        ? `<button type="button" class="wcs-btn wcs-btn-secondary wcs-household-add" data-action="add-secondary">+ Add household member</button>`
+        : `<p class="wcs-household-note">Maximum household size reached.</p>`}
+      <div class="wcs-household-total">
+        <span>Monthly dues</span>
+        <b>${Number.isFinite(monthly) ? money(monthly) + '/mo' : '—'}</b>
+      </div>
+    `;
+  }
+
+  function renderStep6() {
     const choice = state.paymentMethodChoice;
     const plan = state.selectedPlan || {};
     // ACH savings line — only shown when the chosen plan has a configured
@@ -1809,7 +1971,7 @@
     `;
   }
 
-  function renderStep6() {
+  function renderStep7() {
     if (!state.paypageUrl) {
       return `
         <div class="wcs-loading-block">
@@ -1831,7 +1993,7 @@
   // and a signature pad. The Confirm Membership button on this step is
   // what actually calls /submit (which creates the ABC agreement and
   // uploads the signed PDF).
-  function renderStep7() {
+  function renderStep8() {
     const plan = state.selectedPlan || {};
     // CC/ACH variant: if the member picked ACH AND this plan has an ACH
     // variant configured, show the ACH amounts. Otherwise show CC amounts.
@@ -1900,7 +2062,7 @@
     `;
   }
 
-  function renderStep8() {
+  function renderStep9() {
     if (state.successData?.pending) {
       return `
         <div class="wcs-loading-block">
@@ -1952,7 +2114,7 @@
   }
 
   function renderFooter() {
-    const onConfirm = state.currentStep === 8 && state.successData && !state.successData.pending;
+    const onConfirm = state.currentStep === 9 && state.successData && !state.successData.pending;
     if (onConfirm) {
       return ''; // no footer on success/error confirm view
     }
@@ -1963,14 +2125,15 @@
       case 1: primary = ''; break; // location cards are themselves the action
       case 2: primary = ''; break; // per-card "Select" advances to the term step
       case 3: primary = ''; break; // per-card "Continue" picks the term + advances
-      case 4: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-5">Continue →</button>`; break;
-      case 5: primaryDisabled = !state.paymentMethodChoice;
-              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="advance-to-6" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
-      case 6: primary = ''; break;
-      case 7: primary = ''; break; // confirm button lives inside the review step body
+      case 4: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="continue-from-contact">Continue →</button>`; break;
+      case 5: primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="continue-from-household">Continue →</button>`; break;
+      case 6: primaryDisabled = !state.paymentMethodChoice;
+              primary = `<button class="wcs-btn wcs-btn-primary wcs-btn-cta" data-action="continue-from-pay" ${primaryDisabled ? 'disabled' : ''}>Continue to payment →</button>`; break;
+      case 7: primary = ''; break;
+      case 8: primary = ''; break; // confirm button lives inside the review step body
     }
 
-    const secondary = state.currentStep > 1 && state.currentStep < 8
+    const secondary = state.currentStep > 1 && state.currentStep < 9
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
 
@@ -1984,7 +2147,7 @@
   const DEFAULT_LOGO_URL = 'https://westcoaststrength.com/wp-content/uploads/2023/02/Untitled-design-26-1024x1024.png';
 
   function render() {
-    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7, 8: renderStep8 }[state.currentStep]) || renderStep1;
+    const bodyFn = ({ 1: renderStep1, 2: renderStep2, 3: renderStep3, 4: renderStep4, 5: renderStep5, 6: renderStep6, 7: renderStep7, 8: renderStep8, 9: renderStep9 }[state.currentStep]) || renderStep1;
     const flash = state.flashMessage
       ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
       : '';
@@ -2003,7 +2166,7 @@
     `;
     state.flashMessage = null;
     attachListeners();
-    if (state.currentStep === 7) {
+    if (state.currentStep === 8) {
       initSignaturePad();
       initAgreementScrollGate();
     }
@@ -2036,6 +2199,22 @@
       return;
     }
     if (!name) return;
+    // Household member fields: name = `sec-<index>-<field>`.
+    if (name.startsWith('sec-')) {
+      const m = name.match(/^sec-(\d+)-(.+)$/);
+      if (m) {
+        const idx = Number(m[1]);
+        const key = m[2];
+        if (state.secondaryMembers[idx]) {
+          let v = el.value;
+          if (key === 'cell_phone') { v = formatPhoneInput(v); el.value = v; }
+          else if (key === 'birthday') { v = formatBirthdayInput(v); el.value = v; }
+          state.secondaryMembers[idx][key] = v;
+        }
+      }
+      saveState();
+      return;
+    }
     if (el.type === 'checkbox') {
       if (name === 'marketing_email') state.marketing.email = el.checked;
       else if (name === 'marketing_sms') state.marketing.sms = el.checked;
@@ -2054,7 +2233,11 @@
     saveState();
   }
   async function handleAction(action, el, e) {
-    if (action === 'back') return goto(state.currentStep - 1);
+    if (action === 'back') {
+      // Non-family flows skip the household step (5): pay(6) → back → contact(4).
+      if (state.currentStep === 6 && !isFamilyType()) return goto(4);
+      return goto(state.currentStep - 1);
+    }
     if (action === 'show-cancellation') {
       if (e && typeof e.preventDefault === 'function') e.preventDefault();
       state.showCancellation = true; render(); return;
@@ -2097,20 +2280,24 @@
       const type = (state.config.types || []).find(t => t.id === el.dataset.typeId);
       if (type) {
         state.selectedType = type;
-        // Drop a stale term selection if it doesn't belong to this type.
-        if (state.selectedPlan && !(type.terms || []).some(t => t.plan_id === state.selectedPlan.id)) {
-          state.selectedPlan = null;
-        }
+        // Term + household are downstream of the type — reset them so a switch
+        // doesn't carry a stale term/tier or household into the new type.
+        state.selectedTerm = null;
+        state.secondaryMembers = [];
+        state.selectedPlan = null;
         saveState();
         goto(3);
       }
       return;
     }
     if (action === 'choose-term') {
-      // Step 3 — pick a term; shape it into the plan object downstream wants.
+      // Step 3 — pick a term. Keep the term object (with tiers) and reset the
+      // household so pricing starts from the base tier.
       const found = findTermByPlanId(el.dataset.planId);
       if (found) {
         state.selectedType = found.type;
+        state.selectedTerm = found.term;
+        state.secondaryMembers = [];
         state.selectedPlan = planFromTerm(found.type, found.term);
         saveState();
         goto(4);
@@ -2122,8 +2309,9 @@
       render(); saveState();
       return;
     }
-    if (action === 'advance-to-5') {
-      // Contact step → validate + server-side eligibility, then payment method.
+    if (action === 'continue-from-contact') {
+      // Contact step → validate + server-side eligibility, then household
+      // (family types) or payment method (everyone else).
       const errors = clientValidateContact();
       state.inlineErrors = errors;
       if (Object.keys(errors).length) { render(); return; }
@@ -2133,11 +2321,37 @@
         const elig = await checkEligibility(state.selectedPlan.id, birthdayToIso(state.contact.birthday));
         if (!elig.ok) { flash('error', elig.body?.error || 'Eligibility check failed.'); render(); return; }
         if (elig.body.eligible === false) { handleIneligible(elig.body); return; }
-        goto(5);
+        goto(isFamilyType() ? 5 : 6);
       } finally { el.disabled = false; }
       return;
     }
-    if (action === 'advance-to-6') {
+    if (action === 'add-secondary') {
+      if (state.secondaryMembers.length < maxSecondaries()) {
+        state.secondaryMembers.push({ first_name: '', last_name: '', birthday: '', email: '', cell_phone: '' });
+        syncSelectedPlanToHousehold();
+        render();
+      }
+      return;
+    }
+    if (action === 'remove-secondary') {
+      const idx = Number(el.dataset.index);
+      if (Number.isInteger(idx)) {
+        state.secondaryMembers.splice(idx, 1);
+        state.inlineErrors = {};
+        syncSelectedPlanToHousehold();
+        render();
+      }
+      return;
+    }
+    if (action === 'continue-from-household') {
+      const errors = clientValidateSecondary();
+      state.inlineErrors = errors;
+      if (Object.keys(errors).length) { render(); return; }
+      syncSelectedPlanToHousehold();
+      goto(6);
+      return;
+    }
+    if (action === 'continue-from-pay') {
       // Payment-method step → create signup row + PayPage URL, then the iframe.
       try {
         el.disabled = true;
@@ -2146,13 +2360,13 @@
         const r = await startSignup();
         if (!r.ok) {
           flash('error', (r.body?.errors || []).join(' ') || r.body?.error || `Failed to start (${r.status})`);
-          state.currentStep = 5;
+          state.currentStep = 6;
           render(); return;
         }
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
         saveState();
-        goto(6);
+        goto(7);
       } finally {}
       return;
     }
@@ -2258,7 +2472,7 @@
   }
   window.addEventListener('message', async (event) => {
     if (event.origin !== PAYPAGE_ORIGIN) return;
-    if (state.currentStep < 6) return;
+    if (state.currentStep < 7) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;
     // Payment method tokenized successfully. Don't call /submit yet — that
@@ -2266,7 +2480,7 @@
     // transaction ID and advance.
     state.paypageTransactionId = tx.id;
     state.paypagePaymentType = tx.paymentType;
-    state.currentStep = 7;
+    state.currentStep = 8;
     // Reset the scroll-to-bottom gate every time we land on the review step.
     state.agreementScrolledToBottom = false;
     state.agreementAcknowledged = false;
@@ -2300,13 +2514,13 @@
     state.submittingAgreement = false;
     if (r.ok && r.body?.success) {
       state.successData = r.body;
-      state.currentStep = 8;
+      state.currentStep = 9;
       clearStoredState();
       render();
       scrollWidgetToTop();
     } else {
       state.successData = { error: r.body?.error || 'We could not finalize your membership. Our team has been notified.' };
-      state.currentStep = 8;
+      state.currentStep = 9;
       render();
       scrollWidgetToTop();
     }

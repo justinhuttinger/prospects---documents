@@ -335,10 +335,10 @@
   #wcs-join-app .wcs-field textarea {
     width: 100%;
     padding: 14px 14px;
-    border: 1px solid var(--w-border);
+    border: 1px solid #d8d8d4;
     border-radius: 2px;
     font-size: 15px; font-family: inherit;
-    background: var(--w-surface);
+    background: #f1f1ef;
     color: var(--w-ink);
     transition: border-color 0.12s, box-shadow 0.12s;
   }
@@ -1724,11 +1724,11 @@
       <div class="wcs-section">
         <div class="wcs-section-label">Contact</div>
         <div class="wcs-row">
-          ${fieldHtml({ name: 'first_name', label: 'First name', value: c.first_name, autocomplete: 'given-name', error: err.first_name })}
-          ${fieldHtml({ name: 'last_name', label: 'Last name', value: c.last_name, autocomplete: 'family-name', error: err.last_name })}
+          ${fieldHtml({ name: 'first_name', label: 'First name', value: c.first_name, autocomplete: 'given-name', placeholder: 'Jane', error: err.first_name })}
+          ${fieldHtml({ name: 'last_name', label: 'Last name', value: c.last_name, autocomplete: 'family-name', placeholder: 'Doe', error: err.last_name })}
         </div>
         <div class="wcs-row">
-          ${fieldHtml({ name: 'email', label: 'Email', type: 'email', value: c.email, autocomplete: 'email', error: err.email })}
+          ${fieldHtml({ name: 'email', label: 'Email', type: 'email', value: c.email, autocomplete: 'email', placeholder: 'jane@email.com', error: err.email })}
           ${fieldHtml({ name: 'cell_phone', label: 'Cell phone', type: 'tel', value: c.cell_phone, autocomplete: 'tel-national', placeholder: '(555) 555-5555', error: err.cell_phone })}
         </div>
         <div class="wcs-row">
@@ -1746,19 +1746,19 @@
       </div>
       <div class="wcs-section">
         <div class="wcs-section-label">Address</div>
-        ${fieldHtml({ name: 'address_line1', label: 'Street', value: c.address_line1, autocomplete: 'address-line1', error: err.address_line1, full: true })}
-        ${fieldHtml({ name: 'address_line2', label: 'Apt / suite (optional)', value: c.address_line2, autocomplete: 'address-line2', full: true })}
+        ${fieldHtml({ name: 'address_line1', label: 'Street', value: c.address_line1, autocomplete: 'address-line1', placeholder: '123 Main St', error: err.address_line1, full: true })}
+        ${fieldHtml({ name: 'address_line2', label: 'Apt / suite (optional)', value: c.address_line2, autocomplete: 'address-line2', placeholder: 'Apt 4B', full: true })}
         <div class="wcs-row-3">
-          ${fieldHtml({ name: 'city', label: 'City', value: c.city, autocomplete: 'address-level2', error: err.city })}
-          ${fieldHtml({ name: 'state', label: 'State', value: c.state, max: 2, autocomplete: 'address-level1', error: err.state })}
-          ${fieldHtml({ name: 'zip_code', label: 'ZIP', value: c.zip_code, autocomplete: 'postal-code', error: err.zip_code })}
+          ${fieldHtml({ name: 'city', label: 'City', value: c.city, autocomplete: 'address-level2', placeholder: 'Salem', error: err.city })}
+          ${fieldHtml({ name: 'state', label: 'State', value: c.state, max: 2, autocomplete: 'address-level1', placeholder: 'OR', error: err.state })}
+          ${fieldHtml({ name: 'zip_code', label: 'ZIP', value: c.zip_code, autocomplete: 'postal-code', placeholder: '97301', error: err.zip_code })}
         </div>
       </div>
       <div class="wcs-section">
         <div class="wcs-section-label">Emergency contact</div>
         <div class="wcs-row">
-          ${fieldHtml({ name: 'ec_first_name', label: 'First name', value: ec.first_name, error: err.ec_first_name })}
-          ${fieldHtml({ name: 'ec_last_name', label: 'Last name', value: ec.last_name, error: err.ec_last_name })}
+          ${fieldHtml({ name: 'ec_first_name', label: 'First name', value: ec.first_name, placeholder: 'John', error: err.ec_first_name })}
+          ${fieldHtml({ name: 'ec_last_name', label: 'Last name', value: ec.last_name, placeholder: 'Doe', error: err.ec_last_name })}
         </div>
         ${fieldHtml({ name: 'ec_phone', label: 'Phone', type: 'tel', value: ec.phone, placeholder: '(555) 555-5555', error: err.ec_phone, full: true })}
       </div>

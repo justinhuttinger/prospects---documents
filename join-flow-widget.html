@@ -593,6 +593,85 @@
   }
   #wcs-join-app .wcs-term-enroll.is-none { color: #1a7f37; }
 
+  /* Standard price hero gets an ACH-discount line beneath it (type screen). */
+  #wcs-join-app .wcs-ach-discount {
+    margin-top: 8px;
+    font-size: 13px; font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--w-red);
+  }
+  #wcs-join-app .wcs-ach-discount span { font-weight: 600; color: var(--w-ink); opacity: 0.7; }
+
+  /* Term screen — enrollment fee is the hero (the only thing that differs). */
+  #wcs-join-app .wcs-term-enroll-hero {
+    text-align: center;
+    font-family: var(--w-display);
+    font-size: 64px; line-height: 0.95;
+    color: var(--w-ink);
+    padding-top: 16px;
+  }
+  #wcs-join-app .wcs-term-enroll-hero.is-none { color: #1a7f37; }
+  #wcs-join-app .wcs-term-enroll-label {
+    text-align: center;
+    margin-top: 6px;
+    font-size: 12px; font-weight: 800;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-term-monthly-note {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 13px; color: var(--w-ink); opacity: 0.75;
+  }
+
+  /* Cancellation-policy subscript link under the term cards. */
+  #wcs-join-app .wcs-cancellation-note {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  #wcs-join-app .wcs-cancellation-note a {
+    color: var(--w-ink); opacity: 0.7;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  #wcs-join-app .wcs-cancellation-note a:hover { opacity: 1; color: var(--w-red); }
+
+  /* Cancellation modal */
+  #wcs-join-app .wcs-modal-overlay {
+    position: fixed; inset: 0; z-index: 2147483000;
+    background: rgba(10, 10, 12, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #wcs-join-app .wcs-modal {
+    background: var(--w-surface);
+    border-radius: 4px;
+    max-width: 560px; width: 100%;
+    max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 24px 60px -12px rgba(0,0,0,0.4);
+  }
+  #wcs-join-app .wcs-modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 16px 20px;
+    border-bottom: 1px solid var(--w-border);
+  }
+  #wcs-join-app .wcs-modal-head h3 {
+    margin: 0; font-family: var(--w-display);
+    font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-modal-close {
+    background: none; border: 0; cursor: pointer;
+    font-size: 28px; line-height: 1; color: var(--w-ink);
+    padding: 0 4px;
+  }
+  #wcs-join-app .wcs-modal-body {
+    padding: 18px 20px; overflow-y: auto;
+    font-size: 14px; line-height: 1.6; color: var(--w-ink);
+  }
+
   /* === Payment method choice ====================================== */
   #wcs-join-app .wcs-pm-list {
     display: flex; flex-direction: column; gap: 10px;
@@ -1066,6 +1145,7 @@
     successData: null,
     inlineErrors: {},
     flashMessage: null,
+    showCancellation: false,  // step 3 cancellation-rules modal
     // Step 5 -> step 6 hand-off (set when PayPage posts a transaction ID,
     // consumed by the Confirm Membership button on step 6).
     paypageTransactionId: null,
@@ -1482,17 +1562,25 @@
   function termLabel(t) {
     return t === '1yr' ? '1-Year' : t === 'm2m' ? 'Month-to-Month' : (t || 'Membership');
   }
-  // Card-vs-Bank monthly price line for a term. Shows both so the member can
-  // see the ACH discount at a glance; bank price only when an ACH variant
-  // exists for that term.
-  function dualPriceHtml(term) {
-    const cc = Number(term?.cc?.monthly);
-    const ach = Number(term?.ach?.monthly);
-    const ccStr = Number.isFinite(cc) ? `${money(cc)}/mo card` : '';
-    const achStr = term?.has_ach_variant && Number.isFinite(ach)
-      ? ` · <span class="wcs-tpr-bank">${money(ach)}/mo bank</span>`
-      : '';
-    return `${ccStr}${achStr}`;
+  // Pricing helpers. The "standard" price is the card price; the ACH price is
+  // presented to the member as a discount — we never label prices "card"/"bank".
+  function numOrNull(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+  // Monthly dues are a property of the membership (same across terms in WCS's
+  // model — the term only changes the enrollment fee). Use the lowest configured
+  // monthly so the headline never overstates the price.
+  function typePricing(type) {
+    const ccs = (type.terms || []).map(t => numOrNull(t?.cc?.monthly)).filter(v => v != null);
+    const achs = (type.terms || []).filter(t => t.has_ach_variant)
+      .map(t => numOrNull(t?.ach?.monthly)).filter(v => v != null);
+    return {
+      standard: ccs.length ? Math.min(...ccs) : null,
+      ach: achs.length ? Math.min(...achs) : null,
+    };
+  }
+  function heroAmountHtml(amount) {
+    const whole = Math.floor(amount);
+    const cents = Math.round((amount - whole) * 100);
+    return `<div class="wcs-plan-hero-amount"><span class="wcs-plan-hero-cur">$</span><span class="wcs-plan-hero-num">${whole}${cents ? `<small style="font-size:0.5em;letter-spacing:0;">.${String(cents).padStart(2,'0')}</small>` : ''}</span></div>`;
   }
   // Shape a config term (under a type) into the plan-like object the rest of
   // the flow expects (pay step, review step, /start payload all read these).
@@ -1518,17 +1606,22 @@
     return null;
   }
 
-  // Step 2 — membership type cards. Each shows left-aligned amenities and a
-  // per-term Card-vs-Bank price compare block, then drills into the term step.
+  // Step 2 — membership type cards (brochure style): a price hero (standard
+  // monthly + ACH discount) and left-aligned amenities, then drills into the
+  // term step where the enrollment fee differs.
   function renderTypeCard(type) {
     const featuresHtml = (type.features || [])
       .map(f => `<li><svg class="wcs-plan-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><polyline points="6 10 9 13 14 7"/></svg><span>${escapeHtml(f)}</span></li>`)
       .join('');
-    const pricing = (type.terms || []).map(t => `
-      <div class="wcs-type-price-row">
-        <span class="wcs-tpr-term">${escapeHtml(termLabel(t.term))}</span>
-        <span class="wcs-tpr-price">${dualPriceHtml(t)}</span>
-      </div>`).join('');
+    const { standard, ach } = typePricing(type);
+    const heroHtml = standard != null ? `
+      <div class="wcs-plan-hero">
+        ${heroAmountHtml(standard)}
+        <div class="wcs-plan-hero-period">Per Month</div>
+        ${ach != null && ach < standard
+          ? `<div class="wcs-ach-discount">ACH discount — ${money(ach)}/mo <span>(save ${money(standard - ach)}/mo)</span></div>`
+          : ''}
+      </div>` : '';
     return `
       <div class="wcs-plan-card">
         <div class="wcs-plan-card-header">
@@ -1538,8 +1631,8 @@
         </div>
         <div class="wcs-plan-card-body">
           ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
+          ${heroHtml}
           ${featuresHtml ? `<div class="wcs-plan-features-header">What's Included</div><ul>${featuresHtml}</ul>` : ''}
-          ${pricing ? `<div class="wcs-type-pricing">${pricing}</div>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-type" data-type-id="${escapeHtml(type.id)}">Select →</button>
         </div>
       </div>
@@ -1554,30 +1647,20 @@
     return `<div class="wcs-plan-list">${types.map(renderTypeCard).join('')}</div>`;
   }
 
-  // Step 3 — term cards (1-Year vs Month-to-Month) for the chosen type.
+  // Step 3 — side-by-side term comparison (Month-to-Month vs 1-Year). Monthly
+  // dues are identical across terms (shown on the type screen); the only
+  // difference is the enrollment fee, so that's the focus here.
   function renderTermCard(type, term) {
-    const monthly = Number(term?.cc?.monthly) || 0;
-    const monthlyWhole = Math.floor(monthly);
-    const monthlyCents = Math.round((monthly - monthlyWhole) * 100);
-    const hasEnroll = term.enrollment_fee != null && Number(term.enrollment_fee) > 0;
-    const bank = term.has_ach_variant && term.ach && Number.isFinite(Number(term.ach.monthly))
-      ? ` · <span class="wcs-tpr-bank">${money(term.ach.monthly)}/mo bank</span>`
-      : '';
+    const enroll = Number(term.enrollment_fee);
+    const hasEnroll = Number.isFinite(enroll) && enroll > 0;
+    const monthly = Number(term?.cc?.monthly);
     return `
       <div class="wcs-plan-card">
         <div class="wcs-plan-card-header">${escapeHtml(termLabel(term.term))}</div>
         <div class="wcs-plan-card-body">
-          <div class="wcs-plan-hero">
-            <div class="wcs-plan-hero-amount">
-              <span class="wcs-plan-hero-cur">$</span>
-              <span class="wcs-plan-hero-num">${monthlyWhole}${monthlyCents ? `<small style="font-size:0.5em;letter-spacing:0;">.${String(monthlyCents).padStart(2, '0')}</small>` : ''}</span>
-            </div>
-            <div class="wcs-plan-hero-period">Per Month (card)</div>
-            <div class="wcs-term-dual">${money(monthly)}/mo card${bank}</div>
-          </div>
-          <div class="wcs-term-enroll ${hasEnroll ? '' : 'is-none'}">
-            ${hasEnroll ? `${money(term.enrollment_fee)} Enrollment Fee` : 'No Enrollment Fee'}
-          </div>
+          <div class="wcs-term-enroll-hero ${hasEnroll ? '' : 'is-none'}">${hasEnroll ? money(enroll) : '$0'}</div>
+          <div class="wcs-term-enroll-label">${hasEnroll ? 'Enrollment Fee' : 'No Enrollment Fee'}</div>
+          ${Number.isFinite(monthly) ? `<div class="wcs-term-monthly-note">then ${money(monthly)}/mo</div>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-term" data-plan-id="${escapeHtml(term.plan_id)}" style="margin-top:18px;">Continue →</button>
         </div>
       </div>
@@ -1591,9 +1674,31 @@
     if (terms.length === 0) {
       return `<div class="wcs-alert wcs-alert-info">No terms available for this membership. Please call ${escapeHtml(state.config.location.phone || 'us')}.</div>`;
     }
+    const cxLabel = state.config.copy?.cancellation_rules_label || 'Cancellation policy';
+    const hasCx = !!(state.config.copy?.cancellation_rules_body || '').trim();
     return `
-      <p style="margin-bottom: 12px;">Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership.</p>
+      <p style="margin-bottom: 12px;">Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership. Same monthly dues — the only difference is the enrollment fee.</p>
       <div class="wcs-plan-list">${terms.map(t => renderTermCard(type, t)).join('')}</div>
+      ${hasCx ? `<p class="wcs-cancellation-note"><a href="#" data-action="show-cancellation">${escapeHtml(cxLabel)}</a></p>` : ''}
+    `;
+  }
+
+  // Cancellation-rules modal — text is admin-editable via the online_join_copy
+  // keys cancellation_rules_label / cancellation_rules_body.
+  function renderCancellationModal() {
+    if (!state.showCancellation) return '';
+    const title = state.config?.copy?.cancellation_rules_label || 'Cancellation Policy';
+    const body = state.config?.copy?.cancellation_rules_body || '';
+    return `
+      <div class="wcs-modal-overlay" data-action="hide-cancellation">
+        <div class="wcs-modal">
+          <div class="wcs-modal-head">
+            <h3>${escapeHtml(title)}</h3>
+            <button class="wcs-modal-close" data-action="hide-cancellation" aria-label="Close">&times;</button>
+          </div>
+          <div class="wcs-modal-body">${escapeHtml(body).replace(/\n/g, '<br>')}</div>
+        </div>
+      </div>
     `;
   }
 
@@ -1894,6 +1999,7 @@
           ${renderFooter()}
         </div>
       </div>
+      ${renderCancellationModal()}
     `;
     state.flashMessage = null;
     attachListeners();
@@ -1947,8 +2053,20 @@
     }
     saveState();
   }
-  async function handleAction(action, el) {
+  async function handleAction(action, el, e) {
     if (action === 'back') return goto(state.currentStep - 1);
+    if (action === 'show-cancellation') {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      state.showCancellation = true; render(); return;
+    }
+    if (action === 'hide-cancellation') {
+      // Close on the × button or an overlay-background click, but ignore clicks
+      // that land inside the modal body.
+      if (el.classList?.contains('wcs-modal-close') || (e && e.target === el)) {
+        state.showCancellation = false; render();
+      }
+      return;
+    }
     if (action === 'choose-location') {
       const slug = el.dataset.slug;
       if (!slug) return;
@@ -2105,6 +2223,7 @@
     if (step < 1) step = 1;
     state.currentStep = step;
     state.inlineErrors = {};
+    state.showCancellation = false;
     saveState();
     render();
     scrollWidgetToTop();

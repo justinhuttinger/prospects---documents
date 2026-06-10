@@ -2138,18 +2138,17 @@
     const s = state.successData;
     const heading = state.config.copy?.step_7_welcome_heading
       || state.config.copy?.step_6_welcome_heading
-      || 'Welcome to the Westside.';
+      || 'Welcome to the WCS family!';
     const body = state.config.copy?.step_7_welcome_body
       || state.config.copy?.step_6_welcome_body
-      || "We're happy you're here. Your membership is active — book your free Day One session below to meet your trainer and tour the gym.";
+      || 'Your membership is active. Please check your email and text for next steps!';
+    const siteUrl = state.config.copy?.website_url || 'https://westcoaststrength.com';
     const hasBreakdown = s.today_amount != null || s.monthly_amount != null || s.enrollment_fee != null;
     return `
       <div class="wcs-success">
         <div class="wcs-checkmark">${ICONS.check}</div>
         <h1>${escapeHtml(heading)}</h1>
         <p style="margin-top: 8px;">${escapeHtml(body)}</p>
-        ${s.member_id ? `<div class="wcs-member-id">Member # ${escapeHtml(s.member_id)}</div>` : ''}
-        ${s.plan_label ? `<p class="wcs-success-plan">${escapeHtml(s.plan_label)}</p>` : ''}
         ${hasBreakdown ? `
           <div class="wcs-due-breakdown wcs-due-breakdown--success">
             ${s.enrollment_fee != null && s.enrollment_fee > 0
@@ -2163,9 +2162,7 @@
               : ''}
           </div>
         ` : ''}
-        ${s.day_one_booking_url
-          ? `<a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(s.day_one_booking_url)}" target="_blank" rel="noopener" style="margin-top: 16px;">Book your Day One →</a>`
-          : ''}
+        <a class="wcs-btn wcs-btn-primary wcs-btn-cta" href="${escapeHtml(siteUrl)}" target="_top" rel="noopener" style="margin-top: 16px;">Back to West Coast Strength →</a>
       </div>
     `;
   }

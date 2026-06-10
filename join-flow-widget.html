@@ -1212,6 +1212,7 @@
     hybridPhase: null,          // 'today' | 'draft'
     paypageCardTodayId: null,
     paypageBankDraftId: null,
+    liveTodayAmount: null,      // ABC's live due-today (shown for prorated clubs)
     successData: null,
     inlineErrors: {},
     flashMessage: null,
@@ -2074,7 +2075,10 @@
     const usesAch = state.paymentMethodChoice === 'ach' && plan.has_ach_variant;
     const todayAmt = usesAch && plan.today_amount_ach != null ? plan.today_amount_ach : plan.today_amount;
     const monthlyAmt = usesAch && plan.monthly_amount_ach != null ? plan.monthly_amount_ach : plan.monthly_amount;
-    const today = money(todayAmt);
+    // Prorated clubs: show ABC's live, date-aware due-today (enrollment + the
+    // prorated partial-month dues) instead of the static figure.
+    const isProrated = !!state.config?.location?.prorated_billing && state.liveTodayAmount != null;
+    const today = money(isProrated ? state.liveTodayAmount : todayAmt);
     const monthly = money(monthlyAmt);
     const loc = state.config?.location?.display_name || '';
     const memberName = `${state.contact.first_name || ''} ${state.contact.last_name || ''}`.trim();
@@ -2082,14 +2086,17 @@
     return `
       <div class="wcs-section">
         <div class="wcs-due-breakdown">
-          ${plan.enrollment_fee != null && plan.enrollment_fee > 0
-            ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(plan.enrollment_fee)}</b></div>`
-            : ''}
-          <div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}</b></div>
-          <div class="wcs-due-line is-total"><span>Total Due Today</span><b>${today}</b></div>
+          ${isProrated
+            ? `<div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}/mo</b></div>
+               <div class="wcs-due-line is-total"><span>Due Today <small style="opacity:.6;">· prorated</small></span><b>${today}</b></div>`
+            : `${plan.enrollment_fee != null && plan.enrollment_fee > 0
+                  ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(plan.enrollment_fee)}</b></div>`
+                  : ''}
+               <div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}</b></div>
+               <div class="wcs-due-line is-total"><span>Total Due Today</span><b>${today}</b></div>`}
         </div>
         <p class="wcs-due-note">
-          ${escapeHtml(plan.plan_label || 'Membership')}${loc ? ' · ' + escapeHtml(loc) : ''}
+          ${escapeHtml(plan.plan_label || 'Membership')}${loc ? ' · ' + escapeHtml(loc) : ''}${isProrated ? ' · today’s dues are prorated to your first billing date' : ''}
         </p>
       </div>
 
@@ -2158,7 +2165,11 @@
       || state.config.copy?.step_6_welcome_body
       || 'Your membership is active. Please check your email and text for next steps!';
     const siteUrl = state.config.copy?.website_url || 'https://westcoaststrength.com';
-    const hasBreakdown = s.today_amount != null || s.monthly_amount != null || s.enrollment_fee != null;
+    // Prorated clubs: the amount actually charged today is ABC's live prorated
+    // figure (captured at /start), not the static plan today_amount.
+    const isProrated = !!state.config?.location?.prorated_billing && state.liveTodayAmount != null;
+    const chargedToday = isProrated ? state.liveTodayAmount : s.today_amount;
+    const hasBreakdown = chargedToday != null || s.monthly_amount != null || s.enrollment_fee != null;
     return `
       <div class="wcs-success">
         <div class="wcs-checkmark">${ICONS.check}</div>
@@ -2166,14 +2177,14 @@
         <p style="margin-top: 8px;">${escapeHtml(body)}</p>
         ${hasBreakdown ? `
           <div class="wcs-due-breakdown wcs-due-breakdown--success">
-            ${s.enrollment_fee != null && s.enrollment_fee > 0
+            ${!isProrated && s.enrollment_fee != null && s.enrollment_fee > 0
               ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(s.enrollment_fee)}</b></div>`
               : ''}
             ${s.monthly_amount != null
-              ? `<div class="wcs-due-line"><span>Monthly Dues</span><b>${money(s.monthly_amount)}</b></div>`
+              ? `<div class="wcs-due-line"><span>Monthly Dues</span><b>${money(s.monthly_amount)}${isProrated ? '/mo' : ''}</b></div>`
               : ''}
-            ${s.today_amount != null
-              ? `<div class="wcs-due-line is-total"><span>Charged Today</span><b>${money(s.today_amount)}</b></div>`
+            ${chargedToday != null
+              ? `<div class="wcs-due-line is-total"><span>Charged Today${isProrated ? ' <small style="opacity:.6;">· prorated</small>' : ''}</span><b>${money(chargedToday)}</b></div>`
               : ''}
           </div>
         ` : ''}
@@ -2462,6 +2473,7 @@
         }
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
+        state.liveTodayAmount = r.body.live_today_amount != null ? Number(r.body.live_today_amount) : null;
         // EFT card-today hybrid: a second pass collects the card for today.
         state.hybrid = !!r.body.hybrid;
         state.paypageUrlToday = r.body.paypage_url_today || null;

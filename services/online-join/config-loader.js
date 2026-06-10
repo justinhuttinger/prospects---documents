@@ -43,7 +43,7 @@ async function loadPublicConfig(locationId, promo = null) {
 
   const { data: location, error: locErr } = await sb
     .from('online_join_locations')
-    .select('wcs_location_id, display_name, address_line1, address_line2, city, state, zip, phone, hours_summary, day_one_booking_url, hero_headline, hero_subhead, active')
+    .select('wcs_location_id, display_name, address_line1, address_line2, city, state, zip, phone, hours_summary, day_one_booking_url, hero_headline, hero_subhead, prorated_billing, active')
     .eq('wcs_location_id', locationId)
     .maybeSingle();
   if (locErr) throw new Error(`Location lookup failed: ${locErr.message}`);
@@ -165,6 +165,7 @@ async function loadPublicConfig(locationId, promo = null) {
       day_one_booking_url: location.day_one_booking_url,
       hero_headline: location.hero_headline,
       hero_subhead: location.hero_subhead,
+      prorated_billing: !!location.prorated_billing,
     },
     types: publicTypes,
     copy,

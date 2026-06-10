@@ -187,12 +187,21 @@ router.post('/start', async (req, res) => {
     // dates). Fall back to the stored hash if the fetch fails, so a transient
     // ABC outage doesn't block signups outright.
     let planValidationHash = plan.plan_validation_hash || null;
+    // Live, date-aware "due today" from ABC (paymentPlan.downPaymentTotalAmount).
+    // For prorated clubs this is the prorated partial-month figure; the widget
+    // shows it on Review/Welcome when the location is flagged prorated_billing.
+    let liveTodayAmount = null;
     try {
-      const { hash } = await fetchPlanValidationHash({
+      const { hash, raw } = await fetchPlanValidationHash({
         clubNumber: location.abc_club_number,
         paymentPlanId: plan.payment_plan_id,
       });
       planValidationHash = hash;
+      const dp = raw?.paymentPlan?.downPaymentTotalAmount;
+      if (dp != null) {
+        const n = parseFloat(String(dp).replace(/[^0-9.]/g, ''));
+        if (Number.isFinite(n)) liveTodayAmount = n;
+      }
     } catch (err) {
       await logSignupError({
         step: 'start',
@@ -331,6 +340,7 @@ router.post('/start', async (req, res) => {
       paypage_url: paypageUrl,            // recurring/draft pass (bank for ACH)
       hybrid,
       paypage_url_today: paypageUrlToday, // card pass for today's charge (hybrid only)
+      live_today_amount: liveTodayAmount, // ABC's live due-today (prorated clubs)
     });
   } catch (err) {
     console.error('[online-join-public] /start error:', err.message);

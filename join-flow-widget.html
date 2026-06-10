@@ -708,6 +708,8 @@
     font-family: var(--w-display); font-size: 22px;
     color: var(--w-red);
   }
+  #wcs-join-app .wcs-household-breakdown { margin-top: 18px; }
+  #wcs-join-app .wcs-household-breakdown small { font-weight: 400; }
 
   /* === Payment method choice ====================================== */
   #wcs-join-app .wcs-pm-list {
@@ -1749,8 +1751,8 @@
           ${type.badge ? `<span class="wcs-plan-badge">${escapeHtml(type.badge)}</span>` : ''}
         </div>
         <div class="wcs-plan-card-body">
-          ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
           ${heroHtml}
+          ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
           ${featuresHtml ? `<div class="wcs-plan-features-header">What's Included</div><ul>${featuresHtml}</ul>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-type" data-type-id="${escapeHtml(type.id)}">Select →</button>
         </div>
@@ -1900,13 +1902,24 @@
   // monthly total auto-updates from the size-matched tier as members change.
   function renderStep5() {
     syncSelectedPlanToHousehold();
-    const baseCap = currentTiers()[0]?.max_members || 1; // people at the base price
+    const tiers = currentTiers();                   // sorted ascending by capacity
+    const baseTier = tiers[0] || null;
+    const baseCap = baseTier?.max_members || 1;      // people at the base price
+    const basePrice = Number(baseTier?.cc?.monthly);
     const includedExtra = Math.max(0, baseCap - 1);
     const maxSec = maxSecondaries();
     const members = state.secondaryMembers;
-    const plan = state.selectedPlan || {};
-    const monthly = Number(plan.monthly_amount);
     const err = state.inlineErrors;
+    const total = 1 + members.length;
+    // Monthly for a given household size (smallest tier that fits).
+    const priceForCount = (c) => {
+      const t = tiers.find(tt => (tt.max_members || 1) >= c) || tiers[tiers.length - 1];
+      return Number(t?.cc?.monthly);
+    };
+    const currentPrice = priceForCount(total);
+    // Per-additional rate = step from base to the first larger tier.
+    const perAddTier = tiers.find(tt => (tt.max_members || 1) > baseCap);
+    const perAdd = (perAddTier && Number.isFinite(basePrice)) ? Number(perAddTier.cc.monthly) - basePrice : null;
 
     const rows = members.map((m, i) => `
       <div class="wcs-household-member">
@@ -1930,17 +1943,22 @@
     `).join('');
 
     const canAdd = members.length < maxSec;
+    const extraCount = Math.max(0, total - baseCap);
+    let breakdown = `<div class="wcs-due-line"><span>Base membership <small style="opacity:0.6;">· covers up to ${baseCap}</small></span><b>${Number.isFinite(basePrice) ? money(basePrice) + '/mo' : '—'}</b></div>`;
+    for (let j = 1; j <= extraCount; j++) {
+      const c = baseCap + j;
+      const delta = priceForCount(c) - priceForCount(c - 1);
+      breakdown += `<div class="wcs-due-line"><span>+ Household member ${baseCap + j}</span><b>+${money(delta)}/mo</b></div>`;
+    }
+    breakdown += `<div class="wcs-due-line is-total"><span>Monthly total</span><b>${Number.isFinite(currentPrice) ? money(currentPrice) + '/mo' : '—'}</b></div>`;
     return `
-      <p style="margin-bottom: 6px;">Your membership includes <b>you${includedExtra ? ` + up to ${includedExtra} household member${includedExtra === 1 ? '' : 's'}` : ''}</b> at the base price.${maxSec > includedExtra ? ` You can add up to ${maxSec} total — adding more updates the price below.` : ''}</p>
+      <p style="margin-bottom: 6px;">Your membership includes <b>you${includedExtra ? ` + up to ${includedExtra} household member${includedExtra === 1 ? '' : 's'}` : ''}</b> at the base price${Number.isFinite(basePrice) ? ` of ${money(basePrice)}/mo` : ''}.${perAdd != null && perAdd > 0 ? ` Each additional member is <b>+${money(perAdd)}/mo</b>.` : ''}</p>
       <p class="wcs-household-note" style="margin-bottom: 14px;">Household members share your address. Add their name, date of birth, email, and phone.</p>
       ${rows || '<p class="wcs-household-empty">No household members added yet.</p>'}
       ${canAdd
         ? `<button type="button" class="wcs-btn wcs-btn-secondary wcs-household-add" data-action="add-secondary">+ Add household member</button>`
         : `<p class="wcs-household-note">Maximum household size reached.</p>`}
-      <div class="wcs-household-total">
-        <span>Monthly dues</span>
-        <b>${Number.isFinite(monthly) ? money(monthly) + '/mo' : '—'}</b>
-      </div>
+      <div class="wcs-due-breakdown wcs-household-breakdown">${breakdown}</div>
     `;
   }
 

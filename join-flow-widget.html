@@ -66,6 +66,11 @@
     max-width: 720px;
     margin: 0 auto;
   }
+  /* Card-selection steps (location / type / term) widen so up to 4 cards fit
+     comfortably in a row; form steps keep the narrower reading width. */
+  #wcs-join-app .wcs-container--wide {
+    max-width: 1000px;
+  }
 
   /* === Brand block over the canvas ============================== */
   #wcs-join-app .wcs-brand {
@@ -375,7 +380,7 @@
   /* === Plan cards (horizontal grid) =============================== */
   #wcs-join-app .wcs-plan-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 12px;
     align-items: stretch;
   }
@@ -2205,8 +2210,11 @@
     const flash = state.flashMessage
       ? `<div class="wcs-alert ${state.flashMessage.type === 'error' ? 'wcs-alert-error' : 'wcs-alert-info'}">${escapeHtml(state.flashMessage.text)}</div>`
       : '';
+    // Widen the panel on the card-selection steps (location/type/term) so up to
+    // 4 membership types fit comfortably in a row.
+    const wide = [1, 2, 3].includes(state.currentStep) ? ' wcs-container--wide' : '';
     root.innerHTML = `
-      <div class="wcs-container">
+      <div class="wcs-container${wide}">
         <div class="wcs-panel">
           ${renderPanelHeader()}
           <div class="wcs-panel-body">

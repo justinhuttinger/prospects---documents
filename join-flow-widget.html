@@ -2196,7 +2196,10 @@
       case 8: primary = ''; break; // confirm button lives inside the review step body
     }
 
-    const secondary = state.currentStep > 1 && state.currentStep < 9
+    // When a location is hard-coded (?location= / data-location) the picker is
+    // skipped, so the first reachable step is 2 — don't offer Back from there.
+    const minStep = DEFAULT_LOCATION_ID ? 2 : 1;
+    const secondary = state.currentStep > minStep && state.currentStep < 9
       ? `<button class="wcs-btn wcs-btn-secondary" data-action="back">← Back</button>`
       : `<span></span>`;
 
@@ -2507,6 +2510,8 @@
 
   function goto(step) {
     if (step < 1) step = 1;
+    // Hard-coded location: never return to the location picker (step 1).
+    if (DEFAULT_LOCATION_ID && step < 2) step = 2;
     state.currentStep = step;
     state.inlineErrors = {};
     state.showCancellation = false;

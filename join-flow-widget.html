@@ -1751,8 +1751,8 @@
           ${type.badge ? `<span class="wcs-plan-badge">${escapeHtml(type.badge)}</span>` : ''}
         </div>
         <div class="wcs-plan-card-body">
-          ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
           ${heroHtml}
+          ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
           ${featuresHtml ? `<div class="wcs-plan-features-header">What's Included</div><ul>${featuresHtml}</ul>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-type" data-type-id="${escapeHtml(type.id)}">Select →</button>
         </div>

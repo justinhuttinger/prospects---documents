@@ -251,7 +251,22 @@ router.get('/types', async (req, res) => {
     if (req.query.location) q = q.eq('wcs_location_id', req.query.location);
     const { data, error } = await q;
     if (error) throw error;
-    res.json({ types: data || [] });
+    const types = data || [];
+    // Attach a lightweight child-plan summary so the admin list can show which
+    // terms (1yr / m2m) are set up per type without an N+1 of detail calls.
+    if (types.length) {
+      const ids = types.map(t => t.id);
+      const { data: childPlans } = await sb.from('online_join_plans')
+        .select('id, membership_type_id, term, today_amount, monthly_amount, active')
+        .in('membership_type_id', ids);
+      const byType = new Map();
+      for (const p of childPlans || []) {
+        if (!byType.has(p.membership_type_id)) byType.set(p.membership_type_id, []);
+        byType.get(p.membership_type_id).push(p);
+      }
+      types.forEach(t => { t.plans = byType.get(t.id) || []; });
+    }
+    res.json({ types });
   } catch (err) { handleError(res, err, 'GET /types'); }
 });
 

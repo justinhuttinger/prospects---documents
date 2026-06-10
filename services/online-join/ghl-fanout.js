@@ -1,6 +1,6 @@
 /**
  * GHL fan-out for /submit. After ABC successfully creates the agreement we
- * upsert a GHL contact and tag it with `sale`, `member`, `online-join`.
+ * upsert a GHL contact and tag it with `sale`, `member`.
  *
  * The `sale` tag is load-bearing — it drives the FB ROAS report. Skipping
  * this fan-out creates a silent reporting gap, so failures here log to
@@ -69,7 +69,7 @@ async function upsertOnlineJoinContact({ signup, plan, abcMemberId, abcAgreement
     country: 'US',
     dateOfBirth: signup.birthday || undefined,
     source: 'Online Join',
-    tags: ['sale', 'member', 'online-join'],
+    tags: ['sale', 'member'],
     customFields: [
       { key: 'abc_member_id', field_value: String(abcMemberId || '') },
       { key: 'abc_agreement_id', field_value: String(abcAgreementId || '') },
@@ -134,7 +134,7 @@ async function upsertAbandonedLead({ signup }) {
     country: 'US',
     dateOfBirth: signup.birthday || undefined,
     source: 'Online Join',
-    tags: ['abandoned check out', 'online-join'],
+    tags: ['abandoned check out'],
   };
 
   try {

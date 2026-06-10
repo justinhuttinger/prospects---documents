@@ -759,6 +759,12 @@
   #wcs-join-app .wcs-pm-sub {
     font-size: 12px; color: var(--w-ink-muted); margin-top: 4px;
   }
+  #wcs-join-app .wcs-pm-price {
+    font-family: var(--w-display);
+    font-size: 16px; letter-spacing: 0;
+    margin-left: 6px; color: var(--w-ink);
+  }
+  #wcs-join-app .wcs-pm-price--ach { color: var(--w-red); }
 
   /* === Checkboxes ================================================= */
   #wcs-join-app .wcs-checkbox {
@@ -1945,26 +1951,27 @@
     // ACH variant AND the ACH monthly is actually cheaper than CC.
     const ccMonthly = Number(plan.monthly_amount);
     const achMonthly = plan.monthly_amount_ach != null ? Number(plan.monthly_amount_ach) : null;
-    const hasSavings = plan.has_ach_variant && Number.isFinite(ccMonthly) && Number.isFinite(achMonthly) && achMonthly < ccMonthly;
+    const hasAch = plan.has_ach_variant && Number.isFinite(achMonthly);
+    const hasSavings = hasAch && Number.isFinite(ccMonthly) && achMonthly < ccMonthly;
     const savings = hasSavings ? ccMonthly - achMonthly : 0;
     const savingsLabel = hasSavings
       ? `<span class="wcs-pm-savings">Save ${money(savings)}/mo</span>`
       : '';
     return `
-      <p style="margin-bottom: 12px;">Pick how you'd like to be charged today and for monthly dues.</p>
+      <p style="margin-bottom: 12px;">Pick how you'd like to be charged today and for monthly dues.${hasSavings ? ` <b>Pay by bank (ACH) and save ${money(savings)}/mo.</b>` : ''}</p>
       <div class="wcs-pm-list">
         <div class="wcs-pm-card ${choice === 'card' ? 'is-selected' : ''}" data-action="select-pm" data-pm="card">
           <div class="wcs-pm-icon">${ICONS.card}</div>
           <div class="wcs-pm-text">
-            <div class="wcs-pm-name">Credit / Debit Card</div>
-            <div class="wcs-pm-sub">Visa, Mastercard, AmEx, Discover${Number.isFinite(ccMonthly) ? ` · ${money(ccMonthly)}/mo` : ''}</div>
+            <div class="wcs-pm-name">Credit / Debit Card${Number.isFinite(ccMonthly) ? ` <span class="wcs-pm-price">${money(ccMonthly)}/mo</span>` : ''}</div>
+            <div class="wcs-pm-sub">Standard price · Visa, Mastercard, AmEx, Discover</div>
           </div>
         </div>
         <div class="wcs-pm-card ${choice === 'ach' ? 'is-selected' : ''}" data-action="select-pm" data-pm="ach">
           <div class="wcs-pm-icon">${ICONS.bank}</div>
           <div class="wcs-pm-text">
-            <div class="wcs-pm-name">Bank Account (ACH) ${savingsLabel}</div>
-            <div class="wcs-pm-sub">Draft from checking${hasSavings ? ` · ${money(achMonthly)}/mo` : ' · lower fees'}</div>
+            <div class="wcs-pm-name">Bank Account (ACH)${hasAch ? ` <span class="wcs-pm-price wcs-pm-price--ach">${money(achMonthly)}/mo</span>` : ''} ${savingsLabel}</div>
+            <div class="wcs-pm-sub">${hasAch ? `ACH discount · draft from checking` : 'Draft from checking · lower fees'}</div>
           </div>
         </div>
       </div>

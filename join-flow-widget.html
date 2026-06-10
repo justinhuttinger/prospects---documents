@@ -2245,6 +2245,21 @@
       initSignaturePad();
       initAgreementScrollGate();
     }
+    postHeight();
+  }
+
+  // When embedded in an iframe, tell the host page our content height so it can
+  // size the iframe to fit — no internal scrollbar. The host listens for a
+  // `wcs-join-resize` message (see the embed snippet).
+  function postHeight() {
+    try {
+      if (window.parent === window) return; // not iframed
+      const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+      if (h && h !== postHeight._last) {
+        postHeight._last = h;
+        window.parent.postMessage({ type: 'wcs-join-resize', height: h }, '*');
+      }
+    } catch (_) {}
   }
 
   // ----- Events -----------------------------------------------------------
@@ -2718,6 +2733,17 @@
     state.currentStep = 1;
     render();
   }
+
+  // Keep the host iframe sized to our content as it changes (fonts/images load,
+  // step transitions, the PayPage iframe, etc.) so there's never a scrollbar.
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => postHeight()).observe(document.body);
+    }
+  } catch (_) {}
+  window.addEventListener('load', postHeight);
+  window.addEventListener('resize', postHeight);
+
   init();
 })();
 </script>

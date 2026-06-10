@@ -69,7 +69,8 @@ async function loadPublicConfig(locationId, promo = null) {
     .select(`
       id, membership_type_id, term, enrollment_fee, display_order, max_members,
       today_amount, monthly_amount,
-      today_amount_ach, monthly_amount_ach, payment_plan_id_ach
+      today_amount_ach, monthly_amount_ach, payment_plan_id_ach,
+      promo_code, promo_starts_at, promo_ends_at
     `)
     .eq('wcs_location_id', locationId)
     .eq('active', true)
@@ -90,6 +91,7 @@ async function loadPublicConfig(locationId, promo = null) {
   const tiersByType = new Map(); // type_id -> Map<term, tier[]>
   for (const p of plans || []) {
     if (!p.membership_type_id || !p.term) continue; // unassigned plan — skip
+    if (p.promo_code) continue;                     // promo plans: hidden from normal browse (see promo resolution below)
     const hasAch = !!p.payment_plan_id_ach;
     const tier = {
       plan_id: p.id,
@@ -151,6 +153,54 @@ async function loadPublicConfig(locationId, promo = null) {
     // A type with no active/assigned terms has nothing to sell — hide it.
     .filter(t => t.terms.length > 0);
 
+  // Plan-level promo: collect active plans whose promo_code matches `promo`
+  // (within window) — hidden from normal browsing above. Shape them as ONE
+  // "type" (grouped into terms/tiers) so the widget skips type selection and
+  // shows just the promo plan(s): a single plan goes direct, two terms (1yr +
+  // m2m) become a term choice.
+  let promoType = null;
+  if (promo) {
+    const matched = (plans || []).filter(p =>
+      p.membership_type_id && p.term && p.promo_code &&
+      String(p.promo_code) === String(promo) &&
+      (!p.promo_starts_at || nowMs >= Date.parse(p.promo_starts_at)) &&
+      (!p.promo_ends_at || nowMs <= Date.parse(p.promo_ends_at))
+    );
+    if (matched.length) {
+      const typeId = matched[0].membership_type_id;
+      const t = (types || []).find(x => x.id === typeId);
+      const byTerm = new Map();
+      for (const p of matched) {
+        const hasAch = !!p.payment_plan_id_ach;
+        const tier = {
+          plan_id: p.id, max_members: p.max_members || 1, enrollment_fee: num(p.enrollment_fee),
+          cc: { today: num(p.today_amount), monthly: num(p.monthly_amount) },
+          ach: hasAch ? { today: p.today_amount_ach != null ? num(p.today_amount_ach) : num(p.today_amount), monthly: p.monthly_amount_ach != null ? num(p.monthly_amount_ach) : num(p.monthly_amount) } : null,
+          has_ach_variant: hasAch, display_order: p.display_order,
+        };
+        if (!byTerm.has(p.term)) byTerm.set(p.term, []);
+        byTerm.get(p.term).push(tier);
+      }
+      const terms = [...byTerm.entries()].map(([termKey, tiers]) => {
+        tiers.sort((a, b) => (a.max_members - b.max_members) || ((a.display_order || 0) - (b.display_order || 0)));
+        const base = tiers[0];
+        return { term: termKey, plan_id: base.plan_id, enrollment_fee: base.enrollment_fee, cc: base.cc, ach: base.ach, has_ach_variant: base.has_ach_variant, max_members: base.max_members, tiers };
+      }).sort((a, b) => (TERM_ORDER[a.term] ?? 9) - (TERM_ORDER[b.term] ?? 9));
+      promoType = {
+        id: t?.id || typeId,
+        type_key: t?.type_key || 'promo',
+        type_label: t?.type_label || 'Special Offer',
+        description: t?.description || null,
+        features: t?.features || [],
+        badge: t?.badge || null,
+        is_promo: true,
+        allow_secondary_members: !!t?.allow_secondary_members,
+        age_rule: t?.age_rule || null,
+        terms,
+      };
+    }
+  }
+
   const payload = {
     location: {
       wcs_location_id: location.wcs_location_id,
@@ -168,6 +218,7 @@ async function loadPublicConfig(locationId, promo = null) {
       prorated_billing: !!location.prorated_billing,
     },
     types: publicTypes,
+    promo: promoType,   // plan-level promo (null unless ?promo matches a promo plan)
     copy,
   };
 

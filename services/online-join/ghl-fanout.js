@@ -1,10 +1,13 @@
 /**
  * GHL fan-out for /submit. After ABC successfully creates the agreement we
- * upsert a GHL contact and tag it with `sale`, `member`, `online-join`.
+ * upsert the existing lead contact (created at /start) to stamp the ABC linkage
+ * fields (abc_member_id, agreement, sign date, membership type).
  *
- * The `sale` tag is load-bearing — it drives the FB ROAS report. Skipping
- * this fan-out creates a silent reporting gap, so failures here log to
- * online_signup_errors but never block the user-facing success response.
+ * We intentionally apply NO tags here: the ABC→GHL reconciler in ghl-sync is
+ * the single source of truth for `sale`/`member` (an online-join member is an
+ * ABC member, so the reconciler tags it). Stamping abc_member_id helps that
+ * reconciler match this contact instead of creating a duplicate. Failures log
+ * to online_signup_errors but never block the user-facing success response.
  *
  * Per-location GHL API key is read from clubs-config.json (matches the
  * pattern in vip-referrals / pt-intake / kiosk routes).
@@ -69,7 +72,9 @@ async function upsertOnlineJoinContact({ signup, plan, abcMemberId, abcAgreement
     country: 'US',
     dateOfBirth: signup.birthday || undefined,
     source: 'Online Join',
-    tags: ['sale', 'member', 'online-join'],
+    // No tags from here: the ABC→GHL reconciler (ghl-sync) is the single source
+    // of truth for `sale`/`member`. We just stamp the ABC linkage fields (which
+    // also help the reconciler match this contact instead of creating a dupe).
     customFields: [
       { key: 'abc_member_id', field_value: String(abcMemberId || '') },
       { key: 'abc_agreement_id', field_value: String(abcAgreementId || '') },
@@ -134,7 +139,7 @@ async function upsertAbandonedLead({ signup }) {
     country: 'US',
     dateOfBirth: signup.birthday || undefined,
     source: 'Online Join',
-    tags: ['abandoned check out', 'online-join'],
+    tags: ['abandoned check out'],
   };
 
   try {

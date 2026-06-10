@@ -45,8 +45,36 @@ function toAbcGender(g) {
   }
 }
 
+// Assemble payPageBillingInfo from the today + draft tokens and their methods.
+// Generalizes all three modes (PayPage tokens only, never raw billing — so we
+// never trip API-MEM-MEM-0094):
+//   - Card-only:      today=card, draft=card  → dueTodayCC + draftCC
+//   - Bank-only ($0): no today,  draft=bank  → draftBank (no today charge)
+//   - Hybrid (EFT+today due): today=card, draft=bank → dueTodayCC + draftBank
+// `paypage_draft_payment_type` may differ from `paypage_payment_type` (today)
+// only in the hybrid; older rows without it fall back to the today method.
+function buildPayPageBillingInfo(signup) {
+  const todayId = signup.paypage_today_transaction_id || null;
+  const draftId = signup.paypage_draft_transaction_id || signup.paypage_today_transaction_id || null;
+  const todayIsCard = signup.paypage_payment_type === 'Credit Card';
+  const draftIsCard = (signup.paypage_draft_payment_type || signup.paypage_payment_type) === 'Credit Card';
+
+  const ppb = {};
+  // A today charge is only collectible via credit card (ABC has no bank
+  // "due today"). For a bank-only $0-today signup there's no card token, so we
+  // simply omit the today leg.
+  if (todayId && todayIsCard) {
+    ppb.payPageDueTodayCreditCard = { todayCreditCardTransactionId: todayId };
+  }
+  if (draftIsCard) {
+    ppb.payPageDraftCreditCard = { draftCreditCardTransactionId: draftId };
+  } else {
+    ppb.payPageDraftBankAccount = { draftAccountTransactionId: draftId };
+  }
+  return ppb;
+}
+
 function buildAgreementPayload(signup, plan) {
-  const paymentTypeIsCard = signup.paypage_payment_type === 'Credit Card';
   // Prefer the hash captured at /start time — it's the value ABC was using
   // when the user picked the plan, so it matches what they agreed to. The
   // plan-level hash is a fallback for signup rows from before this column
@@ -86,24 +114,10 @@ function buildAgreementPayload(signup, plan) {
       },
     },
 
-    // ABC rejects payloads that include BOTH todayBillingInfo/draftBillingInfo
-    // AND payPageBillingInfo (API-MEM-MEM-0094). Online-join only ever uses
-    // PayPage tokens, so we omit the other envelopes entirely.
-    payPageBillingInfo: paymentTypeIsCard
-      ? {
-          payPageDueTodayCreditCard: {
-            todayCreditCardTransactionId: signup.paypage_today_transaction_id,
-          },
-          payPageDraftCreditCard: {
-            draftCreditCardTransactionId:
-              signup.paypage_draft_transaction_id || signup.paypage_today_transaction_id,
-          },
-        }
-      : {
-          payPageDraftBankAccount: {
-            draftAccountTransactionId: signup.paypage_today_transaction_id,
-          },
-        },
+    // PayPage tokens only — we never send todayBillingInfo/draftBillingInfo
+    // alongside this (API-MEM-MEM-0094). See buildPayPageBillingInfo for the
+    // three modes (card-only / bank-only-$0 / EFT card-today hybrid).
+    payPageBillingInfo: buildPayPageBillingInfo(signup),
 
     marketingPreferences: {
       email: signup.marketing_email ? 'true' : 'false',
@@ -112,14 +126,6 @@ function buildAgreementPayload(signup, plan) {
       pushNotification: 'true',
     },
   };
-
-  // NOTE on EFT + due-today: ABC's PayPage has no payPageDueTodayBankAccount,
-  // and you cannot supplement payPageBillingInfo with todayBillingInfo
-  // (API-MEM-MEM-0094 — mutually exclusive). So a bank/EFT agreement created via
-  // PayPage tokens CANNOT collect a down-payment due today. EFT works only when
-  // the plan has $0 due today (first charge falls on the first scheduled draft).
-  // To charge money today on an EFT member, take the today amount on a card
-  // (payPageDueTodayCreditCard) while drafting recurring from the bank.
 
   // Household / secondary members (family plans). They ride on the same
   // agreement; the size-matched paymentPlanId already carries the combined dues.

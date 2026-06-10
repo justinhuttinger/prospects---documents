@@ -45,6 +45,10 @@ CREATE INDEX IF NOT EXISTS idx_online_join_types_location
 CREATE INDEX IF NOT EXISTS idx_online_join_types_promo
   ON online_join_membership_types(promo_code) WHERE promo_code IS NOT NULL;
 
+-- All portal DB access is service-role; enable RLS with no policy to match the
+-- rest of the public schema (see the 59-table RLS sweep).
+ALTER TABLE online_join_membership_types ENABLE ROW LEVEL SECURITY;
+
 -- Plans become children of a type + carry a term. Both nullable so existing
 -- rows survive the migration; the admin UI assigns them. The widget/config
 -- only surface plans that have a membership_type_id + term set.

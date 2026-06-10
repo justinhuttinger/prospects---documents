@@ -20,7 +20,7 @@ const { buildAgreementPayload, postAgreement, redactPaypageTokens } =
   require('../services/online-join/abc-agreement');
 const { fetchPlanValidationHash } = require('../services/online-join/abc-plan-fetch');
 const { resolveEffectivePlan } = require('../services/online-join/plan-variant');
-const { upsertOnlineJoinContact } = require('../services/online-join/ghl-fanout');
+const { upsertOnlineJoinContact, upsertAbandonedLead, removeContactTag } = require('../services/online-join/ghl-fanout');
 const { renderAndUploadSignedAgreement } = require('../services/online-join/signed-document');
 const { sendWelcomeEmail } = require('../services/online-join/sendgrid-fanout');
 const { logSignupError } = require('../services/online-join/error-log');
@@ -56,7 +56,9 @@ router.get('/locations', async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/config/:locationId', async (req, res) => {
   try {
-    const payload = await loadPublicConfig(req.params.locationId);
+    // ?promo=<code> unlocks promo-gated membership types within their window.
+    const promo = (req.query.promo || '').toString().trim() || null;
+    const payload = await loadPublicConfig(req.params.locationId, promo);
     if (!payload) return res.status(404).json({ error: 'Location not found or inactive' });
     res.json(payload);
   } catch (err) {
@@ -133,7 +135,10 @@ router.post('/start', async (req, res) => {
         payment_plan_id, plan_validation_hash, campaign_id, sales_person_id,
         today_amount, monthly_amount,
         payment_plan_id_ach, today_amount_ach, monthly_amount_ach,
-        age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
+        age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message ),
+        membership_type:membership_type_id (
+          age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
+        )
       `)
       .eq('id', plan_id)
       .maybeSingle();
@@ -162,12 +167,14 @@ router.post('/start', async (req, res) => {
     if (age == null || age < 0 || age > 120) {
       return res.status(400).json({ error: 'Birthday is invalid' });
     }
-    if (plan.age_rule && !ageMatchesRule(age, plan.age_rule)) {
+    // v2: age rule lives on the membership type; fall back to a plan-level rule.
+    const effectiveAgeRule = plan.membership_type?.age_rule || plan.age_rule;
+    if (effectiveAgeRule && !ageMatchesRule(age, effectiveAgeRule)) {
       return res.status(422).json({
         error: 'Not eligible for this plan',
         eligibility: {
           eligible: false,
-          ineligible_message: plan.age_rule.ineligible_message,
+          ineligible_message: effectiveAgeRule.ineligible_message,
         },
       });
     }
@@ -247,6 +254,35 @@ router.post('/start', async (req, res) => {
       .select('id')
       .single();
     if (insertErr) throw new Error(`Insert signup failed: ${insertErr.message}`);
+
+    // Abandoned-checkout capture: push the lead to GHL now (tagged
+    // `abandoned check out`) while we have their full contact info. If they go
+    // on to complete, /submit removes that tag and applies sale/member. Fully
+    // non-blocking — never delay or fail the PayPage redirect over this.
+    try {
+      const abandonedRow = { ...insertRow, id: inserted.id };
+      const leadResult = await upsertAbandonedLead({ signup: abandonedRow });
+      if (leadResult.ok) {
+        if (leadResult.contactId) {
+          await sb.from('online_signups').update({ ghl_contact_id: leadResult.contactId }).eq('id', inserted.id);
+        }
+      } else {
+        await logSignupError({
+          signupId: inserted.id,
+          step: 'start',
+          errorType: 'GHL_ABANDONED_UPSERT',
+          errorMessage: leadResult.error,
+          errorPayload: leadResult.data || null,
+        });
+      }
+    } catch (err) {
+      await logSignupError({
+        signupId: inserted.id,
+        step: 'start',
+        errorType: 'GHL_ABANDONED_THREW',
+        errorMessage: err.message,
+      });
+    }
 
     let paypageUrl;
     try {
@@ -502,6 +538,7 @@ router.post('/submit', async (req, res) => {
     }
 
     // GHL upsert.
+    let ghlContactId = signup.ghl_contact_id || null;
     try {
       const ghlResult = await upsertOnlineJoinContact({
         signup: inMemSignup,
@@ -511,6 +548,7 @@ router.post('/submit', async (req, res) => {
       });
       if (ghlResult.ok) {
         if (ghlResult.contactId) {
+          ghlContactId = ghlResult.contactId;
           await sb.from('online_signups').update({ ghl_contact_id: ghlResult.contactId }).eq('id', signup_id);
         }
       } else {
@@ -527,6 +565,28 @@ router.post('/submit', async (req, res) => {
         signupId: signup_id,
         step: 'fanout',
         errorType: 'GHL_UPSERT_THREW',
+        errorMessage: err.message,
+      });
+    }
+
+    // Member completed — drop the `abandoned check out` tag applied at /start so
+    // they don't sit in both the abandoned and member audiences. Non-blocking.
+    try {
+      const tagResult = await removeContactTag(signup.abc_club_number, ghlContactId, 'abandoned check out');
+      if (!tagResult.ok && ghlContactId) {
+        await logSignupError({
+          signupId: signup_id,
+          step: 'fanout',
+          errorType: 'GHL_ABANDONED_UNTAG',
+          errorMessage: tagResult.error,
+          errorPayload: tagResult.data || null,
+        });
+      }
+    } catch (err) {
+      await logSignupError({
+        signupId: signup_id,
+        step: 'fanout',
+        errorType: 'GHL_ABANDONED_UNTAG_THREW',
         errorMessage: err.message,
       });
     }

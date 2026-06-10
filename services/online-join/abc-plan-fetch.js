@@ -27,6 +27,7 @@ function abcHeaders() {
 
 function extractValidationHash(body) {
   const pv =
+    body?.paymentPlan?.planValidation ??   // ABC's current GET /clubs/plans/{id} envelope
     body?.response?.planValidation ??
     body?.planValidation ??
     body?.result?.planValidation ??

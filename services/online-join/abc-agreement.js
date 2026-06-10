@@ -34,6 +34,17 @@ function toAbcBirthday(iso) {
   return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
 }
 
+// ABC expects gender as male|female|unknown (API-MEM-VAL-0030). The widget
+// stores M/F/O, so map on the way out. Blank stays blank (ABC tolerates it).
+function toAbcGender(g) {
+  switch (String(g || '').trim().toUpperCase()) {
+    case 'M': case 'MALE': return 'male';
+    case 'F': case 'FEMALE': return 'female';
+    case 'O': case 'U': case 'UNKNOWN': return 'unknown';
+    default: return '';
+  }
+}
+
 function buildAgreementPayload(signup, plan) {
   const paymentTypeIsCard = signup.paypage_payment_type === 'Credit Card';
   // Prefer the hash captured at /start time — it's the value ABC was using
@@ -59,7 +70,7 @@ function buildAgreementPayload(signup, plan) {
       homePhone: signup.cell_phone,
       cellPhone: signup.cell_phone,
       birthday: toAbcBirthday(signup.birthday),
-      gender: signup.gender || '',
+      gender: toAbcGender(signup.gender),
       agreementAddressInfo: {
         addressLine1: signup.address_line1,
         addressLine2: signup.address_line2 || '',

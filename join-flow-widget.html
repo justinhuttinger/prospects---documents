@@ -889,9 +889,24 @@
   }
   #wcs-join-app .wcs-paypage-frame {
     display: block;
-    width: 700px; height: 740px;
+    width: 700px; height: 560px;
     border: 0;
     transform-origin: top left;
+  }
+  /* ABC hard-caps its form iframe at 500px, and the "reCAPTCHA quota exceeded"
+     notice overflows it — pushing ABC's Submit button ~10px below their own
+     fold. We can't resize ABC's iframe, so we flag the in-form scroll clearly. */
+  #wcs-join-app .wcs-pay-scrollhint {
+    max-width: 360px;
+    margin: 0 auto 8px;
+    padding: 9px 12px;
+    background: #fff6e5;
+    border: 1px solid #f0c97a;
+    border-radius: 4px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #7a5200;
+    text-align: center;
   }
   #wcs-join-app .wcs-trust {
     font-size: 12px; color: var(--w-ink-muted);
@@ -2104,6 +2119,7 @@
       'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
     return `
       ${header ? `<div class="wcs-pay-subhead"><span class="wcs-pay-subhead-tag">${escapeHtml(header)}</span></div>` : ''}
+      <div class="wcs-pay-scrollhint">After entering your card details, <b>scroll down inside the payment box</b> to reach the <b>Submit</b> button.</div>
       <div class="wcs-paypage-wrap"><iframe class="wcs-paypage-frame" src="${escapeHtml(url)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe></div>
       <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
     `;
@@ -2357,7 +2373,7 @@
   // the top-left FORM region (PAYPAGE_FORM_W x _H) via the clipped wrapper, and
   // scale it down to fit the wrapper width on narrow screens — so it never
   // scrolls sideways and there's no dead whitespace. transform-origin top-left.
-  const PAYPAGE_FORM_W = 360, PAYPAGE_FORM_H = 720;
+  const PAYPAGE_FORM_W = 360, PAYPAGE_FORM_H = 560;
   function sizePaypageFrame() {
     const wrap = root.querySelector('.wcs-paypage-wrap');
     const frame = root.querySelector('.wcs-paypage-frame');

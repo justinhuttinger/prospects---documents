@@ -68,6 +68,12 @@
   }
   /* Card-selection steps (location / type / term) widen so up to 4 cards fit
      comfortably in a row; form steps keep the narrower reading width. */
+  /* Payment step: wide enough that ABC's fixed ~700px PayPage form fits at 100%
+     (panel padding eats ~64px, so 800 → ~736px inner). */
+  #wcs-join-app .wcs-container--pay {
+    max-width: 800px;
+    margin: 0 auto;
+  }
   #wcs-join-app .wcs-container--wide {
     max-width: 1280px;
   }
@@ -872,21 +878,23 @@
     font-size: 12px; font-weight: 800;
     letter-spacing: 0.06em; text-transform: uppercase;
   }
-  /* ABC's PayPage is a third-party iframe. Its form is fairly tall (card fields
-     + consent + reCAPTCHA), so a short frame forces an ugly inner scrollbar.
-     Give it room and center it so the form sits cleanly in the panel; the JS
-     also grows the frame if ABC posts a content height. */
+  /* ABC's PayPage is a third-party iframe we cannot restyle inside (PCI). Its
+     billing form is a FIXED ~700x600 box (a nested 670px-wide form iframe under
+     a heading) that does NOT reflow — so we size the frame to those real
+     dimensions and scale-to-fit on narrower screens. Otherwise the fixed-width
+     form overflows and scrolls sideways. sizePaypageFrame() sets the scale. */
+  #wcs-join-app .wcs-paypage-wrap {
+    width: 100%; max-width: 700px;
+    margin: 0 auto 12px;
+    overflow: hidden;
+  }
   #wcs-join-app .wcs-paypage-frame {
     display: block;
-    width: 100%; max-width: 720px;
-    margin: 0 auto 12px;
-    min-height: 820px;
+    width: 700px; height: 600px;
     border: 1px solid var(--w-border);
     border-radius: 2px;
     background: var(--w-surface);
-  }
-  @media (max-width: 600px) {
-    #wcs-join-app .wcs-paypage-frame { min-height: 1080px; }
+    transform-origin: top left;
   }
   #wcs-join-app .wcs-trust {
     font-size: 12px; color: var(--w-ink-muted);
@@ -2099,7 +2107,7 @@
       'Your payment is securely processed by ABC Fitness. Card details never touch our servers.';
     return `
       ${header ? `<div class="wcs-pay-subhead"><span class="wcs-pay-subhead-tag">${escapeHtml(header)}</span></div>` : ''}
-      <iframe class="wcs-paypage-frame" src="${escapeHtml(url)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe>
+      <div class="wcs-paypage-wrap"><iframe class="wcs-paypage-frame" src="${escapeHtml(url)}" title="Secure payment form" allow="payment" referrerpolicy="strict-origin"></iframe></div>
       <div class="wcs-trust">${ICONS.lock}<span>${escapeHtml(trust)}</span></div>
     `;
   }
@@ -2324,7 +2332,8 @@
       : '';
     // Widen the panel on the card-selection steps (location/type/term) so up to
     // 4 membership types fit comfortably in a row.
-    const wide = [1, 2, 3].includes(state.currentStep) ? ' wcs-container--wide' : '';
+    const wide = [1, 2, 3].includes(state.currentStep) ? ' wcs-container--wide'
+               : state.currentStep === 7 ? ' wcs-container--pay' : '';
     root.innerHTML = `
       <div class="wcs-container${wide}">
         <div class="wcs-panel">
@@ -2344,8 +2353,26 @@
       initSignaturePad();
       initAgreementScrollGate();
     }
+    if (state.currentStep === 7) sizePaypageFrame();
     postHeight();
   }
+
+  // ABC's PayPage form is a fixed ~700x600 box that doesn't reflow. Scale it to
+  // fit the available width so it never scrolls sideways (e.g. on mobile, where
+  // the 670px form would otherwise overflow). transform-origin is top-left and
+  // the wrapper height tracks the scaled height so there's no dead space.
+  const PAYPAGE_NAT_W = 700, PAYPAGE_NAT_H = 600;
+  function sizePaypageFrame() {
+    const wrap = root.querySelector('.wcs-paypage-wrap');
+    const frame = root.querySelector('.wcs-paypage-frame');
+    if (!wrap || !frame) return;
+    const avail = wrap.clientWidth || PAYPAGE_NAT_W;
+    const scale = Math.min(1, avail / PAYPAGE_NAT_W);
+    frame.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+    wrap.style.height = Math.ceil(PAYPAGE_NAT_H * scale) + 'px';
+    postHeight();
+  }
+  window.addEventListener('resize', () => { if (state.currentStep === 7) sizePaypageFrame(); });
 
   // When embedded in an iframe, tell the host page our content height so it can
   // size the iframe to fit — no internal scrollbar. The host listens for a
@@ -2680,16 +2707,6 @@
     else if (type.includes('card') || type.includes('credit')) paymentType = 'Credit Card';
     return id ? { id, paymentType } : null;
   }
-  // ABC's PayPage iframe may post its content height; if so, size the frame to
-  // it so there's no inner scrollbar. Clamped to a sane range and only acts on
-  // clearly-named height fields, so unrelated messages can't distort the frame.
-  function extractPaypageHeight(data) {
-    if (data && typeof data === 'object') {
-      const h = Number(data.height ?? data.frameHeight ?? data.documentHeight ?? data.contentHeight ?? data.scrollHeight);
-      if (Number.isFinite(h) && h >= 400 && h <= 2600) return Math.ceil(h);
-    }
-    return null;
-  }
   function advanceToReview() {
     state.currentStep = 8;
     // Reset the scroll-to-bottom gate every time we land on the review step.
@@ -2713,12 +2730,6 @@
   }
   window.addEventListener('message', async (event) => {
     if (event.origin !== PAYPAGE_ORIGIN) return;
-    // Auto-size the PayPage frame to ABC's content height when provided.
-    const ph = extractPaypageHeight(event.data);
-    if (ph) {
-      const frame = root.querySelector('.wcs-paypage-frame');
-      if (frame) { frame.style.height = ph + 'px'; postHeight(); }
-    }
     if (state.currentStep < 7) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;

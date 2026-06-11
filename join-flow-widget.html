@@ -68,12 +68,6 @@
   }
   /* Card-selection steps (location / type / term) widen so up to 4 cards fit
      comfortably in a row; form steps keep the narrower reading width. */
-  /* Payment step: wide enough that ABC's fixed ~700px PayPage form fits at 100%
-     (panel padding eats ~64px, so 800 → ~736px inner). */
-  #wcs-join-app .wcs-container--pay {
-    max-width: 800px;
-    margin: 0 auto;
-  }
   #wcs-join-app .wcs-container--wide {
     max-width: 1280px;
   }
@@ -880,20 +874,23 @@
   }
   /* ABC's PayPage is a third-party iframe we cannot restyle inside (PCI). Its
      billing form is a FIXED ~700x600 box (a nested 670px-wide form iframe under
-     a heading) that does NOT reflow — so we size the frame to those real
-     dimensions and scale-to-fit on narrower screens. Otherwise the fixed-width
-     form overflows and scrolls sideways. sizePaypageFrame() sets the scale. */
+     a heading). The actual form is only ~345px wide and LEFT-aligned inside a
+     670px iframe — the right ~325px is empty. So we clip the wrapper tight to
+     the form (no dead whitespace, no sideways scroll) and sizePaypageFrame()
+     scales it down to fit narrow screens. Border/bg live on the wrapper since
+     the frame itself is clipped. */
   #wcs-join-app .wcs-paypage-wrap {
-    width: 100%; max-width: 700px;
+    width: 100%; max-width: 360px;
     margin: 0 auto 12px;
     overflow: hidden;
-  }
-  #wcs-join-app .wcs-paypage-frame {
-    display: block;
-    width: 700px; height: 600px;
     border: 1px solid var(--w-border);
     border-radius: 2px;
     background: var(--w-surface);
+  }
+  #wcs-join-app .wcs-paypage-frame {
+    display: block;
+    width: 700px; height: 740px;
+    border: 0;
     transform-origin: top left;
   }
   #wcs-join-app .wcs-trust {
@@ -2332,8 +2329,7 @@
       : '';
     // Widen the panel on the card-selection steps (location/type/term) so up to
     // 4 membership types fit comfortably in a row.
-    const wide = [1, 2, 3].includes(state.currentStep) ? ' wcs-container--wide'
-               : state.currentStep === 7 ? ' wcs-container--pay' : '';
+    const wide = [1, 2, 3].includes(state.currentStep) ? ' wcs-container--wide' : '';
     root.innerHTML = `
       <div class="wcs-container${wide}">
         <div class="wcs-panel">
@@ -2357,19 +2353,19 @@
     postHeight();
   }
 
-  // ABC's PayPage form is a fixed ~700x600 box that doesn't reflow. Scale it to
-  // fit the available width so it never scrolls sideways (e.g. on mobile, where
-  // the 670px form would otherwise overflow). transform-origin is top-left and
-  // the wrapper height tracks the scaled height so there's no dead space.
-  const PAYPAGE_NAT_W = 700, PAYPAGE_NAT_H = 600;
+  // ABC's form is ~345px wide, left-aligned in a 700px-wide page. We show only
+  // the top-left FORM region (PAYPAGE_FORM_W x _H) via the clipped wrapper, and
+  // scale it down to fit the wrapper width on narrow screens — so it never
+  // scrolls sideways and there's no dead whitespace. transform-origin top-left.
+  const PAYPAGE_FORM_W = 360, PAYPAGE_FORM_H = 720;
   function sizePaypageFrame() {
     const wrap = root.querySelector('.wcs-paypage-wrap');
     const frame = root.querySelector('.wcs-paypage-frame');
     if (!wrap || !frame) return;
-    const avail = wrap.clientWidth || PAYPAGE_NAT_W;
-    const scale = Math.min(1, avail / PAYPAGE_NAT_W);
-    frame.style.transform = scale < 1 ? `scale(${scale})` : 'none';
-    wrap.style.height = Math.ceil(PAYPAGE_NAT_H * scale) + 'px';
+    const avail = wrap.clientWidth || PAYPAGE_FORM_W;
+    const scale = Math.min(1, avail / PAYPAGE_FORM_W);
+    frame.style.transform = `scale(${scale})`;
+    wrap.style.height = Math.ceil(PAYPAGE_FORM_H * scale) + 'px';
     postHeight();
   }
   window.addEventListener('resize', () => { if (state.currentStep === 7) sizePaypageFrame(); });

@@ -149,6 +149,16 @@ function buildAgreementPayload(signup, plan) {
     };
   }
 
+  // Required add-on schedules (e.g. a CC convenience fee billed as a separate
+  // recurring line). ABC rejects the agreement (API-MEM-MEM-0024) unless every
+  // defaultChecked add-on schedule is echoed back under `schedules.addon` as the
+  // exact profit-center name from the plan detail. We captured those names live
+  // at /start (signup.abc_addon_schedules) so the casing matches verbatim.
+  const addonSchedules = Array.isArray(signup.abc_addon_schedules) ? signup.abc_addon_schedules : [];
+  if (addonSchedules.length) {
+    payload.schedules = { addon: addonSchedules };
+  }
+
   if (plan.campaign_id) payload.campaignId = plan.campaign_id;
   if (plan.sales_person_id) payload.salesPersonId = plan.sales_person_id;
 

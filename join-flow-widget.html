@@ -1827,9 +1827,10 @@
     return `<div class="wcs-plan-list">${types.map(renderTypeCard).join('')}</div>`;
   }
 
-  // Step 3 — side-by-side term comparison (Month-to-Month vs 1-Year). Monthly
-  // dues are identical across terms (shown on the type screen); the only
-  // difference is the enrollment fee, so that's the focus here.
+  // Step 3 — side-by-side term comparison (Month-to-Month vs 1-Year). Terms can
+  // differ in BOTH enrollment fee and monthly dues (e.g. Clackamas: 1YR has $0
+  // enrollment + lower dues; M2M has an enrollment fee + higher dues), so each
+  // card shows its own enrollment hero and monthly note.
   function renderTermCard(type, term) {
     const enroll = Number(term.enrollment_fee);
     const hasEnroll = Number.isFinite(enroll) && enroll > 0;
@@ -1866,7 +1867,7 @@
       ? (terms.length > 1
           ? `Special offer — choose your term for the <b>${escapeHtml(type.type_label)}</b> membership.`
           : `Your offer — the <b>${escapeHtml(type.type_label)}</b> membership.`)
-      : `Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership. Same monthly dues — the only difference is the enrollment fee.`;
+      : `Choose your commitment for the <b>${escapeHtml(type.type_label)}</b> membership. Each term shows its enrollment fee and monthly dues.`;
     return `
       <p style="margin-bottom: 12px;">${intro}</p>
       <div class="wcs-plan-list">${terms.map(t => renderTermCard(type, t)).join('')}</div>
@@ -2695,6 +2696,18 @@
     state.agreementScrolledToBottom = false;
     state.agreementAcknowledged = false;
     saveState();
+    // Funnel telemetry: billing was captured (PayPage tokenized) and the member
+    // reached Review & Sign. Fire-and-forget — flips the signup to "reviewing"
+    // so admin can tell this apart from a payment-form bounce. Never blocks.
+    if (state.signupId) {
+      try {
+        api('/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signup_id: state.signupId, milestone: 'payment_captured' }),
+        });
+      } catch (_) {}
+    }
     render();
     scrollWidgetToTop();
   }

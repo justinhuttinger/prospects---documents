@@ -191,6 +191,11 @@ router.post('/start', async (req, res) => {
     // For prorated clubs this is the prorated partial-month figure; the widget
     // shows it on Review/Welcome when the location is flagged prorated_billing.
     let liveTodayAmount = null;
+    // Add-on schedules that ABC requires us to echo back in the agreement
+    // request (defaultChecked=true && addon=true), e.g. a CC convenience fee
+    // billed as a separate recurring line. We send the exact `profitCenter`
+    // strings ABC returns (the match is case-sensitive — API-MEM-MEM-0023/0024).
+    let addonSchedules = [];
     try {
       const { hash, raw } = await fetchPlanValidationHash({
         clubNumber: location.abc_club_number,
@@ -201,6 +206,12 @@ router.post('/start', async (req, res) => {
       if (dp != null) {
         const n = parseFloat(String(dp).replace(/[^0-9.]/g, ''));
         if (Number.isFinite(n)) liveTodayAmount = n;
+      }
+      const scheds = raw?.paymentPlan?.schedules;
+      if (Array.isArray(scheds)) {
+        addonSchedules = scheds
+          .filter((s) => s && s.addon === true && s.defaultChecked === true && s.profitCenter)
+          .map((s) => String(s.profitCenter));
       }
     } catch (err) {
       await logSignupError({
@@ -225,6 +236,7 @@ router.post('/start', async (req, res) => {
       plan_id: plan.id,
       payment_plan_id: plan.payment_plan_id,
       plan_validation_hash: planValidationHash,
+      abc_addon_schedules: addonSchedules,
       abc_club_number: location.abc_club_number,
 
       first_name: String(contact.first_name || '').trim(),

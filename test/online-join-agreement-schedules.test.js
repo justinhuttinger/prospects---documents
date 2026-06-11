@@ -13,16 +13,16 @@ const baseSignup = {
 };
 const basePlan = { payment_plan_id: 'plan-1', plan_validation_hash: 'hash123' };
 
-test('includes schedules.addon when add-on schedules captured', () => {
+test('sends schedules as a flat array of profit-center names (List<String>)', () => {
   const signup = { ...baseSignup, abc_addon_schedules: ['Cc convenience fee'] };
   const payload = buildAgreementPayload(signup, basePlan);
-  assert.deepStrictEqual(payload.schedules, { addon: ['Cc convenience fee'] });
+  assert.deepStrictEqual(payload.schedules, ['Cc convenience fee']);
 });
 
 test('sends profit-center names verbatim (case-sensitive)', () => {
   const signup = { ...baseSignup, abc_addon_schedules: ['CC CONVENIENCE FEE'] };
   const payload = buildAgreementPayload(signup, basePlan);
-  assert.deepStrictEqual(payload.schedules.addon, ['CC CONVENIENCE FEE']);
+  assert.deepStrictEqual(payload.schedules, ['CC CONVENIENCE FEE']);
 });
 
 test('omits schedules entirely when none captured', () => {

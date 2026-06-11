@@ -872,12 +872,21 @@
     font-size: 12px; font-weight: 800;
     letter-spacing: 0.06em; text-transform: uppercase;
   }
+  /* ABC's PayPage is a third-party iframe. Its form is fairly tall (card fields
+     + consent + reCAPTCHA), so a short frame forces an ugly inner scrollbar.
+     Give it room and center it so the form sits cleanly in the panel; the JS
+     also grows the frame if ABC posts a content height. */
   #wcs-join-app .wcs-paypage-frame {
-    width: 100%; min-height: 560px;
+    display: block;
+    width: 100%; max-width: 720px;
+    margin: 0 auto 12px;
+    min-height: 820px;
     border: 1px solid var(--w-border);
     border-radius: 2px;
     background: var(--w-surface);
-    margin-bottom: 12px;
+  }
+  @media (max-width: 600px) {
+    #wcs-join-app .wcs-paypage-frame { min-height: 1080px; }
   }
   #wcs-join-app .wcs-trust {
     font-size: 12px; color: var(--w-ink-muted);
@@ -941,6 +950,14 @@
   #wcs-join-app .wcs-due-note {
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--w-ink-muted);
+    text-align: center;
+    margin-top: 10px;
+  }
+  /* Readable (non-uppercase) clarifier under the due breakdown — explains how a
+     prorated due-today is built and when monthly billing begins. */
+  #wcs-join-app .wcs-due-explain {
+    font-size: 12.5px; line-height: 1.5;
     color: var(--w-ink-muted);
     text-align: center;
     margin-top: 10px;
@@ -1213,6 +1230,7 @@
     paypageCardTodayId: null,
     paypageBankDraftId: null,
     liveTodayAmount: null,      // ABC's live due-today (shown for prorated clubs)
+    liveBreakdown: null,        // { enrollment_fee, prorated_dues, first_due_date } for prorated clubs
     successData: null,
     inlineErrors: {},
     flashMessage: null,
@@ -2107,20 +2125,42 @@
     const loc = state.config?.location?.display_name || '';
     const memberName = `${state.contact.first_name || ''} ${state.contact.last_name || ''}`.trim();
     const canSubmit = state.signatureHasInk && state.typedSignature.trim().length >= 2 && state.agreementAcknowledged && !state.submittingAgreement;
+    // Prorated due-today itemization: ABC charges enrollment fee + the first
+    // month's dues PRORATED to the billing date — NOT the full monthly, and the
+    // recurring CC convenience fee is not charged today (it starts on the
+    // recurring schedule). Show the parts so the member sees how today's number
+    // is built, and that monthly begins later.
+    const bd = state.liveBreakdown || {};
+    const enrollFee = bd.enrollment_fee;
+    const proratedDues = bd.prorated_dues;
+    const firstDue = bd.first_due_date;
+    const haveBreakdown = isProrated && proratedDues != null;
+    const monthlyAch = (!usesAch && plan.monthly_amount_ach != null) ? Number(plan.monthly_amount_ach) : null;
+    const ccFee = (monthlyAch != null && monthlyAmt != null && Number(monthlyAmt) > monthlyAch) ? (Number(monthlyAmt) - monthlyAch) : 0;
     return `
       <div class="wcs-section">
         <div class="wcs-due-breakdown">
-          ${isProrated
-            ? `<div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}/mo</b></div>
-               <div class="wcs-due-line is-total"><span>Due Today <small style="opacity:.6;">· prorated</small></span><b>${today}</b></div>`
-            : `${plan.enrollment_fee != null && plan.enrollment_fee > 0
-                  ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(plan.enrollment_fee)}</b></div>`
+          ${haveBreakdown
+            ? `<div class="wcs-due-line"><span>Monthly Dues${firstDue ? ' · from ' + escapeHtml(firstDue) : ''}</span><b>${monthly}/mo</b></div>
+               ${enrollFee != null && enrollFee > 0
+                  ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(enrollFee)}</b></div>`
                   : ''}
-               <div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}</b></div>
-               <div class="wcs-due-line is-total"><span>Total Due Today</span><b>${today}</b></div>`}
+               <div class="wcs-due-line"><span>First-Month Dues · Prorated</span><b>${money(proratedDues)}</b></div>
+               <div class="wcs-due-line is-total"><span>Due Today</span><b>${today}</b></div>`
+            : isProrated
+              ? `<div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}/mo</b></div>
+                 <div class="wcs-due-line is-total"><span>Due Today <small style="opacity:.6;">· prorated</small></span><b>${today}</b></div>`
+              : `${plan.enrollment_fee != null && plan.enrollment_fee > 0
+                    ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(plan.enrollment_fee)}</b></div>`
+                    : ''}
+                 <div class="wcs-due-line"><span>Monthly Dues</span><b>${monthly}</b></div>
+                 <div class="wcs-due-line is-total"><span>Total Due Today</span><b>${today}</b></div>`}
         </div>
+        ${haveBreakdown
+          ? `<p class="wcs-due-explain">Today you pay your enrollment fee plus first-month dues prorated to your ${firstDue ? escapeHtml(firstDue) + ' billing date' : 'first billing date'}. Your full ${monthly}/mo membership dues begin then${ccFee > 0 ? `, including a ${money(ccFee)} card convenience fee (waived if you pay by bank account)` : ''}.</p>`
+          : ''}
         <p class="wcs-due-note">
-          ${escapeHtml(plan.plan_label || 'Membership')}${loc ? ' · ' + escapeHtml(loc) : ''}${isProrated ? ' · today’s dues are prorated to your first billing date' : ''}
+          ${escapeHtml(plan.plan_label || 'Membership')}${loc ? ' · ' + escapeHtml(loc) : ''}
         </p>
       </div>
 
@@ -2193,13 +2233,33 @@
     // figure (captured at /start), not the static plan today_amount.
     const isProrated = !!state.config?.location?.prorated_billing && state.liveTodayAmount != null;
     const chargedToday = isProrated ? state.liveTodayAmount : s.today_amount;
+    // Prorated itemization (from the same /start capture, still in memory here):
+    // today's charge = enrollment fee + prorated first-month dues; monthly begins
+    // at the first billing date.
+    const bd = state.liveBreakdown || {};
+    const enrollFee = bd.enrollment_fee;
+    const proratedDues = bd.prorated_dues;
+    const firstDue = bd.first_due_date;
+    const haveBreakdown = isProrated && proratedDues != null;
     const hasBreakdown = chargedToday != null || s.monthly_amount != null || s.enrollment_fee != null;
     return `
       <div class="wcs-success">
         <div class="wcs-checkmark">${ICONS.check}</div>
         <h1>${escapeHtml(heading)}</h1>
         <p style="margin-top: 8px;">${escapeHtml(body)}</p>
-        ${hasBreakdown ? `
+        ${haveBreakdown ? `
+          <div class="wcs-due-breakdown wcs-due-breakdown--success">
+            ${s.monthly_amount != null
+              ? `<div class="wcs-due-line"><span>Monthly Dues${firstDue ? ' · from ' + escapeHtml(firstDue) : ''}</span><b>${money(s.monthly_amount)}/mo</b></div>`
+              : ''}
+            ${enrollFee != null && enrollFee > 0
+              ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(enrollFee)}</b></div>`
+              : ''}
+            <div class="wcs-due-line"><span>First-Month Dues · Prorated</span><b>${money(proratedDues)}</b></div>
+            <div class="wcs-due-line is-total"><span>Charged Today</span><b>${money(chargedToday)}</b></div>
+          </div>
+          ${firstDue ? `<p class="wcs-due-explain">Your ${money(s.monthly_amount)}/mo membership dues begin ${escapeHtml(firstDue)}.</p>` : ''}
+        ` : hasBreakdown ? `
           <div class="wcs-due-breakdown wcs-due-breakdown--success">
             ${!isProrated && s.enrollment_fee != null && s.enrollment_fee > 0
               ? `<div class="wcs-due-line"><span>Enrollment Fee</span><b>${money(s.enrollment_fee)}</b></div>`
@@ -2505,6 +2565,7 @@
         state.signupId = r.body.signup_id;
         state.paypageUrl = r.body.paypage_url;
         state.liveTodayAmount = r.body.live_today_amount != null ? Number(r.body.live_today_amount) : null;
+        state.liveBreakdown = r.body.live_breakdown || null;
         // EFT card-today hybrid: a second pass collects the card for today.
         state.hybrid = !!r.body.hybrid;
         state.paypageUrlToday = r.body.paypage_url_today || null;
@@ -2618,6 +2679,16 @@
     else if (type.includes('card') || type.includes('credit')) paymentType = 'Credit Card';
     return id ? { id, paymentType } : null;
   }
+  // ABC's PayPage iframe may post its content height; if so, size the frame to
+  // it so there's no inner scrollbar. Clamped to a sane range and only acts on
+  // clearly-named height fields, so unrelated messages can't distort the frame.
+  function extractPaypageHeight(data) {
+    if (data && typeof data === 'object') {
+      const h = Number(data.height ?? data.frameHeight ?? data.documentHeight ?? data.contentHeight ?? data.scrollHeight);
+      if (Number.isFinite(h) && h >= 400 && h <= 2600) return Math.ceil(h);
+    }
+    return null;
+  }
   function advanceToReview() {
     state.currentStep = 8;
     // Reset the scroll-to-bottom gate every time we land on the review step.
@@ -2629,6 +2700,12 @@
   }
   window.addEventListener('message', async (event) => {
     if (event.origin !== PAYPAGE_ORIGIN) return;
+    // Auto-size the PayPage frame to ABC's content height when provided.
+    const ph = extractPaypageHeight(event.data);
+    if (ph) {
+      const frame = root.querySelector('.wcs-paypage-frame');
+      if (frame) { frame.style.height = ph + 'px'; postHeight(); }
+    }
     if (state.currentStep < 7) return;
     const tx = extractTransaction(event.data);
     if (!tx) return;

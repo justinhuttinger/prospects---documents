@@ -389,6 +389,38 @@ router.post('/start', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/online-join/progress
+// Lightweight funnel marker so admin can tell WHERE a member dropped off.
+// The widget calls this when PayPage tokenizes (billing entered) and the member
+// reaches Review & Sign — distinguishing "bounced at the payment form"
+// (payment_pending) from "entered billing but never signed/confirmed"
+// (reviewing). Fire-and-forget on the client; never blocks the flow.
+// Body: { signup_id, milestone: 'payment_captured' }
+// ---------------------------------------------------------------------------
+router.post('/progress', async (req, res) => {
+  try {
+    const { signup_id, milestone } = req.body || {};
+    if (!signup_id) return res.status(400).json({ error: 'signup_id required' });
+    const sb = getSupabaseAdmin();
+    if (milestone === 'payment_captured') {
+      // Only advance forward, and only from payment_pending — never clobber a
+      // submitted/created/failed row if a late message arrives.
+      const { error } = await sb
+        .from('online_signups')
+        .update({ status: 'reviewing', payment_at: new Date().toISOString() })
+        .eq('id', signup_id)
+        .eq('status', 'payment_pending');
+      if (error) throw new Error(error.message);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    // Non-critical telemetry — log but don't surface an error to the widget.
+    console.error('[online-join-public] /progress error:', err.message);
+    res.json({ ok: false });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/online-join/submit
 // Receives PayPage transaction ID, posts ABC agreement, fans out.
 // Body (single-pass): { signup_id, paypage_transaction_id, paypage_payment_type, ... }
@@ -466,8 +498,9 @@ router.post('/submit', async (req, res) => {
       });
     }
 
-    // 3. Status must be payment_pending. Refuse anything else.
-    if (signup.status !== 'payment_pending') {
+    // 3. Status must be pre-submit (payment_pending, or reviewing once billing
+    //    was captured). Refuse anything already submitted/created/failed.
+    if (signup.status !== 'payment_pending' && signup.status !== 'reviewing') {
       return res.status(409).json({
         error: `Signup is in status "${signup.status}" — cannot submit`,
         code: 'BAD_STATUS',

@@ -196,6 +196,9 @@ router.post('/start', async (req, res) => {
     // billed as a separate recurring line. We send the exact `profitCenter`
     // strings ABC returns (the match is case-sensitive — API-MEM-MEM-0023/0024).
     let addonSchedules = [];
+    // Itemized prorated due-today (enrollment fee + prorated first-month dues +
+    // first billing date) for clearer Review/Welcome display at prorated clubs.
+    let liveBreakdown = null;
     try {
       const { hash, raw } = await fetchPlanValidationHash({
         clubNumber: location.abc_club_number,
@@ -212,6 +215,24 @@ router.post('/start', async (req, res) => {
         addonSchedules = scheds
           .filter((s) => s && s.addon === true && s.defaultChecked === true && s.profitCenter)
           .map((s) => String(s.profitCenter));
+      }
+      // Itemize the due-today so the widget can show the member exactly what
+      // makes up the prorated charge: enrollment fee + the PRORATED first-month
+      // dues (NOT the full monthly, and NOT inclusive of recurring add-ons like
+      // the CC convenience fee, which is only billed on the recurring schedule).
+      const dps = raw?.paymentPlan?.downPayments;
+      if (Array.isArray(dps)) {
+        const amt = (re) => {
+          const f = dps.find((d) => re.test(String(d?.name || '')));
+          if (!f) return null;
+          const n = parseFloat(String(f.total ?? f.subTotal ?? '').replace(/[^0-9.]/g, ''));
+          return Number.isFinite(n) ? n : null;
+        };
+        liveBreakdown = {
+          enrollment_fee: amt(/enroll/i),
+          prorated_dues: amt(/dues/i),
+          first_due_date: raw?.paymentPlan?.firstDueDate || null,
+        };
       }
     } catch (err) {
       await logSignupError({
@@ -353,6 +374,7 @@ router.post('/start', async (req, res) => {
       hybrid,
       paypage_url_today: paypageUrlToday, // card pass for today's charge (hybrid only)
       live_today_amount: liveTodayAmount, // ABC's live due-today (prorated clubs)
+      live_breakdown: liveBreakdown,      // itemized: enrollment + prorated dues + first due date
     });
   } catch (err) {
     console.error('[online-join-public] /start error:', err.message);

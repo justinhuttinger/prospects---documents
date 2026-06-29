@@ -99,6 +99,7 @@ const TYPE_FIELDS = [
   'type_label', 'description', 'features', 'badge',
   'age_rule_id', 'display_order',
   'promo_code', 'promo_starts_at', 'promo_ends_at',
+  'promo_callout', 'promo_callout_enabled',
   'allow_secondary_members',
   'active',
 ];

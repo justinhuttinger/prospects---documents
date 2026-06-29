@@ -587,6 +587,20 @@
     #wcs-join-app .wcs-limited-badge { font-size: 11px; padding: 5px 11px; }
   }
 
+  /* Promo callout — admin-toggled red highlight under the price on a membership
+     card (e.g. "HALF OFF AND NO ENROLLMENT"). */
+  #wcs-join-app .wcs-promo-callout {
+    margin: 12px auto 2px;
+    background: var(--w-red); color: #fff;
+    padding: 11px 16px; border-radius: 8px;
+    font-size: 15px; font-weight: 800; line-height: 1.25;
+    text-align: center; text-transform: uppercase; letter-spacing: 0.03em;
+    box-shadow: 0 2px 10px rgba(255,0,0,0.22);
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-promo-callout { font-size: 13px; padding: 9px 12px; }
+  }
+
   /* === Term step: enrollment-fee line under the price hero =========== */
   #wcs-join-app .wcs-term-dual {
     text-align: center;
@@ -1842,6 +1856,7 @@
         </div>
         <div class="wcs-plan-card-body">
           ${heroHtml}
+          ${type.promo_callout ? `<div class="wcs-promo-callout">${escapeHtml(type.promo_callout)}</div>` : ''}
           ${type.description ? `<div class="wcs-plan-description">${escapeHtml(type.description)}</div>` : ''}
           ${featuresHtml ? `<div class="wcs-plan-features-header">What's Included</div><ul>${featuresHtml}</ul>` : ''}
           <button class="wcs-plan-card-cta" data-action="choose-type" data-type-id="${escapeHtml(type.id)}">Select →</button>

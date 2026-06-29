@@ -55,6 +55,7 @@ async function loadPublicConfig(locationId, promo = null) {
     .select(`
       id, type_key, type_label, description, features, badge, display_order,
       promo_code, promo_starts_at, promo_ends_at, allow_secondary_members,
+      promo_callout, promo_callout_enabled,
       age_rule:age_rule_id ( id, name, min_age, max_age, ineligible_message )
     `)
     .eq('wcs_location_id', locationId)
@@ -145,6 +146,7 @@ async function loadPublicConfig(locationId, promo = null) {
         features: t.features || [],
         badge: t.badge || null,
         is_promo: !!t.promo_code,
+        promo_callout: (t.promo_callout_enabled && t.promo_callout && String(t.promo_callout).trim()) ? String(t.promo_callout).trim() : null,
         allow_secondary_members: !!t.allow_secondary_members,
         age_rule: t.age_rule || null,
         terms,
@@ -201,6 +203,7 @@ async function loadPublicConfig(locationId, promo = null) {
         features: t?.features || [],
         badge: t?.badge || null,
         is_promo: true,
+        promo_callout: (t?.promo_callout_enabled && t?.promo_callout && String(t.promo_callout).trim()) ? String(t.promo_callout).trim() : null,
         allow_secondary_members: !!t?.allow_secondary_members,
         age_rule: t?.age_rule || null,
         terms,

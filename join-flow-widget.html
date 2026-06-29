@@ -2478,6 +2478,10 @@
       if (isPromoMode() && state.currentStep === 3) return DEFAULT_LOCATION_ID ? undefined : goto(1);
       // Non-family flows skip the household step (5): pay(6) → back → contact(4).
       if (state.currentStep === 6 && !isFamilyType()) return goto(4);
+      // Single-term types skip the term step on the way in (choose-type → contact),
+      // so Back from contact returns to the type grid, not the skipped term step.
+      // (Promo mode shows its own term step, so leave it alone there.)
+      if (state.currentStep === 4 && !isPromoMode() && (state.selectedType?.terms || []).length === 1) return goto(2);
       return goto(state.currentStep - 1);
     }
     if (action === 'show-cancellation') {
@@ -2528,8 +2532,18 @@
         state.selectedTerm = null;
         state.secondaryMembers = [];
         state.selectedPlan = null;
-        saveState();
-        goto(3);
+        const terms = type.terms || [];
+        if (terms.length === 1) {
+          // Only one term to choose — skip the term step and go straight to
+          // contact with that term pre-selected.
+          state.selectedTerm = terms[0];
+          state.selectedPlan = planFromTerm(type, terms[0]);
+          saveState();
+          goto(4);
+        } else {
+          saveState();
+          goto(3);
+        }
       }
       return;
     }

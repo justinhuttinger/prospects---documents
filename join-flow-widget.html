@@ -577,10 +577,14 @@
   #wcs-join-app .wcs-limited-badge {
     position: absolute; top: 12px; left: 12px;
     background: #fff; color: var(--w-red);
-    border: 1px solid var(--w-red);
-    padding: 3px 8px; border-radius: 2px;
-    font-size: 9px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: 0.16em;
+    border: 1.5px solid var(--w-red);
+    padding: 6px 14px; border-radius: 4px;
+    font-size: 13px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.12);
+  }
+  @media (max-width: 380px) {
+    #wcs-join-app .wcs-limited-badge { font-size: 11px; padding: 5px 11px; }
   }
 
   /* === Term step: enrollment-fee line under the price hero =========== */

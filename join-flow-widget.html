@@ -1728,7 +1728,14 @@
     };
   }
   function findTermByPlanId(planId) {
-    for (const type of (state.config?.types || [])) {
+    // Search the regular membership types AND the plan-level promo type. In
+    // promo mode the term step renders config.promo's terms, whose plan_ids
+    // live only on config.promo (never in config.types) — so without the promo
+    // here, the term "Continue" button can't resolve its plan and silently does
+    // nothing.
+    const pools = [...(state.config?.types || [])];
+    if (state.config?.promo) pools.push(state.config.promo);
+    for (const type of pools) {
       for (const term of (type.terms || [])) {
         if (term.plan_id === planId) return { type, term };
       }

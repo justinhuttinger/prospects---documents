@@ -153,6 +153,13 @@ async function loadPublicConfig(locationId, promo = null) {
     // A type with no active/assigned terms has nothing to sell — hide it.
     .filter(t => t.terms.length > 0);
 
+  // A promo link is a dedicated offer: when the code unlocks promo-gated
+  // type(s), show ONLY those and hide the regular menu. If the code matches no
+  // promo type (wrong/expired code, or a plan-level promo handled below), fall
+  // back to the full menu so the page is never blank.
+  const promoTypesOnly = promo ? publicTypes.filter(t => t.is_promo) : [];
+  const visibleTypes = promoTypesOnly.length ? promoTypesOnly : publicTypes;
+
   // Plan-level promo: collect active plans whose promo_code matches `promo`
   // (within window) — hidden from normal browsing above. Shape them as ONE
   // "type" (grouped into terms/tiers) so the widget skips type selection and
@@ -217,7 +224,7 @@ async function loadPublicConfig(locationId, promo = null) {
       hero_subhead: location.hero_subhead,
       prorated_billing: !!location.prorated_billing,
     },
-    types: publicTypes,
+    types: visibleTypes,
     promo: promoType,   // plan-level promo (null unless ?promo matches a promo plan)
     copy,
   };

@@ -219,7 +219,11 @@ app.get('/widget/online-join', (req, res) => {
 // VIP Referrals consolidated widget — single template served from repo,
 // replaces 14 static GHL copies. Audience param: ?audience=staff|member
 app.get('/widget/vip-referrals', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.set('Cache-Control', 'no-store');
+  // Allow embedding from any origin — same as online-join (GHL embed + portal preview).
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *;");
   res.sendFile(__dirname + '/vip-referrals-widget.html');
 });
 

@@ -24,7 +24,7 @@
 ## File Structure
 
 **prospects---documents**
-- Create: `migrations/0NN_vip_referrals.sql` — 3 tables + RLS + seed config.
+- Create: `migrations/119_vip_referrals.sql` — 3 tables + RLS + seed config.
 - Create: `services/vip-referrals/store.js` — Supabase reads/writes.
 - Create: `services/vip-referrals/fanout.js` — `fireRecipient()` with auto-retry.
 - Modify: `routes/vip-referrals.js` — POST handler persists + uses store/fanout/config.
@@ -44,7 +44,7 @@
 ## Task 1: Migration — tables + RLS + config seed
 
 **Files:**
-- Create: `migrations/0NN_vip_referrals.sql` (use the next free number — check `ls migrations/`).
+- Create: `migrations/119_vip_referrals.sql` (use 119, the next free number after 118).
 
 **Interfaces:**
 - Produces: tables `vip_referral_submissions`, `vip_referral_recipients`, `vip_referral_config` with the columns the store module reads/writes.
@@ -52,7 +52,7 @@
 - [ ] **Step 1: Write the migration SQL**
 
 ```sql
--- migrations/0NN_vip_referrals.sql
+-- migrations/119_vip_referrals.sql
 -- VIP Referrals: persistence for the served widget + admin tracking.
 
 create table if not exists public.vip_referral_submissions (
@@ -130,7 +130,7 @@ on conflict (location_slug) do update
 - [ ] **Step 4: Commit**
 
 ```bash
-git add migrations/0NN_vip_referrals.sql
+git add migrations/119_vip_referrals.sql
 git commit -m "feat(vip-referrals): migration — submissions/recipients/config tables + RLS"
 ```
 

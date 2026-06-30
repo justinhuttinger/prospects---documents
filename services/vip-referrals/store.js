@@ -38,6 +38,7 @@ async function createSubmission(fields) {
     .single();
   if (error) throw new Error(error.message);
   const submissionId = data.id;
+  let recipientIds = [];
   if (recipients.length) {
     const rows = recipients.map(r => ({
       submission_id: submissionId,
@@ -46,10 +47,12 @@ async function createSubmission(fields) {
       phone: r.phone || null,
       fanout_status: r.fanout_status || 'failed',
     }));
-    const { error: rErr } = await db().from('vip_referral_recipients').insert(rows);
+    const { data: recData, error: rErr } = await db()
+      .from('vip_referral_recipients').insert(rows).select('id');
     if (rErr) throw new Error(rErr.message);
+    recipientIds = (recData || []).map(r => r.id);
   }
-  return submissionId;
+  return { submissionId, recipientIds };
 }
 
 async function recordRecipientResult(recipientId, patch) {

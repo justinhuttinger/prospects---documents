@@ -264,7 +264,7 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
     }
 
     // Build recipient list — incomplete rows are recorded as skipped.
-    const audience = String(body.audience || (employee && employee.id ? 'staff' : 'staff')).toLowerCase();
+    const audience = String(body.audience || 'staff').toLowerCase();
     const normalized = vips.map(v => {
       const firstName = String(v.firstName || '').trim();
       const lastName  = String(v.lastName  || '').trim();
@@ -273,7 +273,7 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
       return { first_name: firstName, last_name: lastName, phone, complete };
     });
 
-    const submissionId = await store.createSubmission({
+    const { submissionId, recipientIds } = await store.createSubmission({
       location_slug: slug,
       abc_club_number: abcClubNumber,
       audience,
@@ -293,12 +293,10 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
       })),
     });
 
-    // Re-read recipients to get their ids in insertion order.
-    const { recipients: recRows } = await store.getSubmission(submissionId);
     const results = [];
     for (let i = 0; i < normalized.length; i++) {
       const n = normalized[i];
-      const recRow = recRows[i];
+      const recipientId = recipientIds[i];
       if (!n.complete) { results.push({ ok: false, skipped: 'incomplete', vip: n }); continue; }
 
       const payload = {
@@ -313,7 +311,7 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
       };
 
       const r = await fireRecipient(inboundUrl, payload);
-      await store.recordRecipientResult(recRow.id, {
+      await store.recordRecipientResult(recipientId, {
         fanout_status: r.ok ? 'sent' : 'failed',
         http_status: r.http_status, error_detail: r.error_detail,
         webhook_url_used: inboundUrl, attempt_count: r.attempt_count,

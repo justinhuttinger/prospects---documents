@@ -28,6 +28,9 @@ const axios   = require('axios');
 const fs      = require('fs');
 const path    = require('path');
 
+const store = require('../services/vip-referrals/store');
+const { fireRecipient } = require('../services/vip-referrals/fanout');
+
 const router = express.Router();
 
 const ABC_BASE_URL    = process.env.ABC_BASE_URL || 'https://api.abcfinancial.com/rest';
@@ -222,15 +225,6 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
     const club = clubBySlug(slug);
     if (!club) return res.status(400).json({ ok: false, error: 'unknown_location', location: slug });
 
-    const inboundUrl = club.vipReferralWebhookUrl;
-    if (!inboundUrl) {
-      return res.status(500).json({
-        ok: false,
-        error: 'missing_inbound_webhook_url',
-        hint: `Set "vipReferralWebhookUrl" for ${club.clubName} in clubs-config.json`
-      });
-    }
-
     const member   = body.member   || {};
     const employee = body.employee || {};
     const vips     = Array.isArray(body.vips) ? body.vips : [];
@@ -250,65 +244,89 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
     const refContactId = referrer.contactId || '';
     const refAbcId     = (referrer.customFields && referrer.customFields.abc_member_id) || '';
 
-    const results = [];
-    for (const v of vips) {
+    // Resolve the webhook URL: config table first, clubs-config.json fallback.
+    let inboundUrl = club.vipReferralWebhookUrl;
+    let abcClubNumber = club.clubNumber;
+    try {
+      const cfg = await store.getLocationConfig(slug);
+      if (cfg) {
+        if (cfg.enabled === false) {
+          return res.status(503).json({ ok: false, error: 'location_disabled', location: slug });
+        }
+        if (cfg.webhook_url) inboundUrl = cfg.webhook_url;
+        if (cfg.abc_club_number) abcClubNumber = cfg.abc_club_number;
+      }
+    } catch (e) { console.warn('[vip-referrals] config lookup failed:', e.message); }
+
+    if (!inboundUrl) {
+      return res.status(500).json({ ok: false, error: 'missing_inbound_webhook_url',
+        hint: `Set a webhook URL for ${club.clubName} in VIP Referrals admin or clubs-config.json` });
+    }
+
+    // Build recipient list — incomplete rows are recorded as skipped.
+    const audience = String(body.audience || 'staff').toLowerCase();
+    const normalized = vips.map(v => {
       const firstName = String(v.firstName || '').trim();
       const lastName  = String(v.lastName  || '').trim();
       const phone     = e164(v.phone);
-      if (!firstName || !lastName || !phone) {
-        results.push({ ok: false, skipped: 'incomplete', vip: { firstName, lastName, phone } });
-        continue;
-      }
+      const complete  = !!(firstName && lastName && phone);
+      return { first_name: firstName, last_name: lastName, phone, complete };
+    });
+
+    const { submissionId, recipientIds } = await store.createSubmission({
+      location_slug: slug,
+      abc_club_number: abcClubNumber,
+      audience,
+      referrer_first_name: refFirst,
+      referrer_last_name: refLast,
+      referrer_phone: refPhone,
+      referrer_email: refEmail,
+      referrer_ghl_contact_id: refContactId,
+      referrer_abc_member_id: refAbcId,
+      employee_id: employee.id || null,
+      employee_name: employee.name || null,
+      vip_count: vips.length,
+      raw_payload: body,
+      recipients: normalized.map(n => ({
+        first_name: n.first_name, last_name: n.last_name, phone: n.phone,
+        fanout_status: n.complete ? 'failed' : 'skipped',
+      })),
+    });
+
+    const results = [];
+    for (let i = 0; i < normalized.length; i++) {
+      const n = normalized[i];
+      const recipientId = recipientIds[i];
+      if (!n.complete) { results.push({ ok: false, skipped: 'incomplete', vip: n }); continue; }
 
       const payload = {
-        first_name: firstName,
-        last_name:  lastName,
-        phone:      phone,
-
-        // Referrer info — flat keys so GHL Inbound Webhook custom-data mapping is simple
-        referred_by_first_name:    refFirst,
-        referred_by_last_name:     refLast,
-        referred_by_full_name:     `${refFirst} ${refLast}`,
-        referred_by_phone:         refPhone,
-        referred_by_email:         refEmail,
-        referred_by_contact_id:    refContactId,
-        referred_by_abc_member_id: refAbcId,
-
-        // Employee that took the referral
-        referral_employee_id:   employee.id   || '',
-        referral_employee_name: employee.name || '',
-
-        // Location metadata (handy for naming/filtering inside GHL)
-        club:             club.clubName,
-        location_slug:    slug,
-        ghl_location_id:  club.ghlLocationId,
-
-        source:        'VIP Survey',
-        submitted_at:  body.submittedAt || new Date().toISOString()
+        first_name: n.first_name, last_name: n.last_name, phone: n.phone,
+        referred_by_first_name: refFirst, referred_by_last_name: refLast,
+        referred_by_full_name: `${refFirst} ${refLast}`,
+        referred_by_phone: refPhone, referred_by_email: refEmail,
+        referred_by_contact_id: refContactId, referred_by_abc_member_id: refAbcId,
+        referral_employee_id: employee.id || '', referral_employee_name: employee.name || '',
+        club: club.clubName, location_slug: slug, ghl_location_id: club.ghlLocationId,
+        source: 'VIP Survey', submitted_at: body.submittedAt || new Date().toISOString(),
       };
 
       try {
-        const resp = await axios.post(inboundUrl, payload, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 15000
+        const r = await fireRecipient(inboundUrl, payload);
+        await store.recordRecipientResult(recipientId, {
+          fanout_status: r.ok ? 'sent' : 'failed',
+          http_status: r.http_status, error_detail: r.error_detail,
+          webhook_url_used: inboundUrl, attempt_count: r.attempt_count,
         });
-        results.push({
-          ok:     true,
-          status: resp.status,
-          name:   `${firstName} ${lastName}`
-        });
+        results.push({ ok: r.ok, name: `${n.first_name} ${n.last_name}`, status: r.http_status, error: r.ok ? undefined : r.error_detail });
       } catch (e) {
-        results.push({
-          ok:     false,
-          name:   `${firstName} ${lastName}`,
-          status: e.response?.status,
-          error:  e.response?.data || e.message
-        });
+        console.error('[vip-referrals] recipient record failed:', e.message);
+        results.push({ ok: false, name: `${n.first_name} ${n.last_name}`, error: e.message });
       }
     }
 
+    await store.recomputeSubmissionStatus(submissionId);
     const fired = results.filter(r => r.ok).length;
-    return res.json({ ok: true, fired, total: vips.length, created: fired, results });
+    return res.json({ ok: true, fired, total: vips.length, created: fired, submissionId, results });
   } catch (err) {
     console.error('[vip-referrals]', err.response?.data || err.message);
     return res.status(500).json({ ok: false, error: err.response?.data || err.message });

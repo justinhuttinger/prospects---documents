@@ -1,0 +1,600 @@
+<!--
+  WCS VIP Referrals Widget — Standalone v2 (consolidated)
+  --------------------------------------------------------
+  Single served template replacing all 14 static GHL copies.
+  Audience switching: ?audience=staff (default) shows the "Who Helped You?"
+  Team Member dropdown; ?audience=member hides it entirely.
+
+  Per-location: the widget detects which club it's for in this order:
+    1. window.WCS_LOCATION   — set by a <script> tag on the embedding page
+    2. ?location=<slug>      — URL query param on the embedding page
+    3. WCS_FALLBACK_LOCATION — hardcoded fallback below
+
+  Slug = lowercase clubName from prospects---documents/clubs-config.json:
+    salem | keizer | eugene | milwaukie | clackamas | springfield | medford
+
+  Backend lives in prospects---documents on Render:
+    GET  /api/vip-referrals/employees?location=<slug>  -> [{id,name}]
+    POST /webhooks/vip-referrals                       -> fans out to GHL
+-->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+.wcs-vip {
+  --wcs-ink: #0a0a0a;
+  --wcs-ink-soft: #2a2a2a;
+  --wcs-mute: #6b6b6b;
+  --wcs-border: #d6d6d6;
+  --wcs-border-strong: #0a0a0a;
+  --wcs-bg: #f5f5f5;
+  --wcs-error: #b91c1c;
+  --wcs-ok: #15803d;
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 22px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+  color: var(--wcs-ink);
+  box-sizing: border-box;
+}
+.wcs-vip *, .wcs-vip *::before, .wcs-vip *::after { box-sizing: inherit; }
+
+.wcs-vip__accent { width: 36px; height: 3px; background: var(--wcs-ink); margin-bottom: 16px; }
+
+.wcs-vip__title {
+  font-weight: 700; font-size: 18px; letter-spacing: 0.08em;
+  text-transform: uppercase; margin: 0 0 8px; color: var(--wcs-ink);
+}
+
+.wcs-vip__helper {
+  font-weight: 400; font-size: 13px; color: var(--wcs-mute);
+  line-height: 1.5; margin: 0 0 20px;
+}
+
+.wcs-vip__section {
+  margin-bottom: 20px;
+}
+.wcs-vip__section-label {
+  font-weight: 600; font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--wcs-ink-soft);
+  margin: 0 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--wcs-border);
+}
+
+.wcs-vip__grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border: 1px solid var(--wcs-border); border-radius: 10px; overflow: hidden;
+}
+.wcs-vip__grid--single { grid-template-columns: 1fr; }
+
+.wcs-vip__cell {
+  padding: 10px 12px; background: #fff;
+  border-right: 1px solid var(--wcs-border);
+  border-bottom: 1px solid var(--wcs-border);
+}
+.wcs-vip__cell:nth-child(2n) { border-right: none; }
+.wcs-vip__cell--full { grid-column: 1 / -1; border-right: none; }
+.wcs-vip__cell:last-child, .wcs-vip__cell:nth-last-child(2):nth-child(2n+1) { border-bottom: none; }
+.wcs-vip__grid--single .wcs-vip__cell { border-right: none; }
+
+.wcs-vip__field-label {
+  display: block; font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--wcs-mute);
+  font-weight: 600; margin-bottom: 2px;
+}
+.wcs-vip__req {
+  color: var(--wcs-error);
+  font-weight: 700;
+  margin-left: 3px;
+}
+
+.wcs-vip__input, .wcs-vip__select {
+  display: block; width: 100%; border: none; padding: 2px 0;
+  font: inherit; font-size: 14px; color: var(--wcs-ink);
+  background: transparent; outline: none; border-radius: 0;
+  -webkit-appearance: none; appearance: none;
+}
+.wcs-vip__input::placeholder { color: var(--wcs-mute); }
+.wcs-vip__select { padding-right: 18px; background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%236b6b6b' d='M0 0l5 6 5-6z'/></svg>") right center no-repeat; }
+
+.wcs-vip__cell--invalid { background: #fef2f2; }
+.wcs-vip__cell--invalid .wcs-vip__field-label { color: var(--wcs-error); }
+
+.wcs-vip__rows {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.wcs-vip__row {
+  position: relative;
+  border: 1px solid var(--wcs-border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.wcs-vip__row:focus-within { border-color: var(--wcs-ink); }
+
+.wcs-vip__row-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: var(--wcs-bg);
+  border-bottom: 1px solid var(--wcs-border);
+}
+.wcs-vip__row-num {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--wcs-ink-soft); font-weight: 600;
+}
+.wcs-vip__remove {
+  border: none; background: transparent; color: var(--wcs-mute);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 600; cursor: pointer; padding: 2px 4px;
+}
+.wcs-vip__remove:hover { color: var(--wcs-error); }
+
+.wcs-vip__row-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+}
+.wcs-vip__row-cell {
+  padding: 10px 12px; background: #fff;
+  border-right: 1px solid var(--wcs-border);
+  border-bottom: 1px solid var(--wcs-border);
+}
+.wcs-vip__row-cell:nth-child(2n) { border-right: none; }
+.wcs-vip__row-cell--full { grid-column: 1 / -1; border-right: none; border-bottom: none; }
+.wcs-vip__row-cell:nth-last-child(2):nth-child(2n+1) { border-bottom: none; }
+.wcs-vip__row-cell--invalid { background: #fef2f2; }
+.wcs-vip__row-cell--invalid .wcs-vip__field-label { color: var(--wcs-error); }
+
+.wcs-vip__add {
+  width: 100%; border: 1px dashed var(--wcs-border); background: transparent;
+  padding: 12px; font: inherit; font-weight: 500; font-size: 12px;
+  letter-spacing: 0.08em; color: var(--wcs-ink-soft); cursor: pointer;
+  border-radius: 10px; text-transform: uppercase;
+  transition: border-color 0.15s, background 0.15s; margin-top: 10px;
+}
+.wcs-vip__add:hover:not(:disabled) { border-color: var(--wcs-ink); background: var(--wcs-bg); border-style: solid; }
+.wcs-vip__add:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.wcs-vip__submit {
+  width: 100%; margin-top: 18px;
+  border: none; background: var(--wcs-ink); color: #fff;
+  padding: 14px 16px; font: inherit; font-weight: 700; font-size: 13px;
+  letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+  border-radius: 10px; transition: opacity 0.15s, transform 0.05s;
+}
+.wcs-vip__submit:hover:not(:disabled) { opacity: 0.88; }
+.wcs-vip__submit:active:not(:disabled) { transform: translateY(1px); }
+.wcs-vip__submit:disabled { background: var(--wcs-border); color: #fff; cursor: not-allowed; }
+
+.wcs-vip__status {
+  margin-top: 12px; font-size: 12px; text-align: center; min-height: 16px;
+  color: var(--wcs-mute); letter-spacing: 0.04em;
+}
+.wcs-vip__status--error { color: var(--wcs-error); }
+.wcs-vip__status--ok    { color: var(--wcs-ok); }
+
+.wcs-vip__success {
+  text-align: center; padding: 28px 16px;
+}
+.wcs-vip__success-mark {
+  width: 48px; height: 48px; margin: 0 auto 14px;
+  border-radius: 50%; background: var(--wcs-ink); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700;
+}
+.wcs-vip__success-title {
+  font-weight: 700; font-size: 16px; letter-spacing: 0.08em;
+  text-transform: uppercase; margin: 0 0 6px;
+}
+.wcs-vip__success-text { font-size: 13px; color: var(--wcs-mute); margin: 0; }
+
+@media (min-width: 720px) {
+  .wcs-vip { max-width: 680px; padding: 30px; }
+  .wcs-vip__title { font-size: 22px; }
+  .wcs-vip__helper { font-size: 14px; }
+}
+</style>
+
+<div class="wcs-vip" id="wcs-vip-root">
+  <div id="wcsVipForm">
+    <div class="wcs-vip__accent"></div>
+    <h3 class="wcs-vip__title">Refer Your VIPs</h3>
+    <p class="wcs-vip__helper">Know someone who'd love World Class Strength? Refer up to 5 friends below &mdash; we'll reach out and let them know you sent us their way.</p>
+
+    <!-- Member -->
+    <div class="wcs-vip__section">
+      <p class="wcs-vip__section-label">Your Info</p>
+      <div class="wcs-vip__grid">
+        <div class="wcs-vip__cell" data-cell="member.firstName">
+          <label class="wcs-vip__field-label">First Name<span class="wcs-vip__req" aria-label="required">*</span></label>
+          <input class="wcs-vip__input" type="text" autocomplete="given-name" data-field="member.firstName">
+        </div>
+        <div class="wcs-vip__cell" data-cell="member.lastName">
+          <label class="wcs-vip__field-label">Last Name<span class="wcs-vip__req" aria-label="required">*</span></label>
+          <input class="wcs-vip__input" type="text" autocomplete="family-name" data-field="member.lastName">
+        </div>
+        <div class="wcs-vip__cell" data-cell="member.phone">
+          <label class="wcs-vip__field-label">Phone<span class="wcs-vip__req" aria-label="required">*</span></label>
+          <input class="wcs-vip__input" type="tel" inputmode="tel" autocomplete="tel" data-field="member.phone" placeholder="(555) 555-5555">
+        </div>
+        <div class="wcs-vip__cell" data-cell="member.email">
+          <label class="wcs-vip__field-label">Email<span class="wcs-vip__req" aria-label="required">*</span></label>
+          <input class="wcs-vip__input" type="email" inputmode="email" autocomplete="email" data-field="member.email">
+        </div>
+      </div>
+    </div>
+
+    <!-- Employee (staff audience only — hidden for member audience via JS) -->
+    <div class="wcs-vip__section" id="wcsVipEmployeeSection">
+      <p class="wcs-vip__section-label">Who Helped You? <span style="text-transform:none;letter-spacing:0;color:var(--wcs-mute);font-weight:400;">(optional)</span></p>
+      <div class="wcs-vip__grid wcs-vip__grid--single">
+        <div class="wcs-vip__cell wcs-vip__cell--full" data-cell="employeeId">
+          <label class="wcs-vip__field-label">Team Member <span style="text-transform:none;letter-spacing:0;color:var(--wcs-mute);font-weight:400;">(optional)</span></label>
+          <select class="wcs-vip__select" data-field="employeeId" id="wcsVipEmployee">
+            <option value="">Loading team members...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIPs -->
+    <div class="wcs-vip__section">
+      <p class="wcs-vip__section-label">Your VIPs (up to 5)</p>
+      <div class="wcs-vip__rows" id="wcsVipRows"></div>
+      <button type="button" class="wcs-vip__add" id="wcsVipAdd">+ Add another VIP</button>
+    </div>
+
+    <button type="button" class="wcs-vip__submit" id="wcsVipSubmit">Send Referrals</button>
+    <div class="wcs-vip__status" id="wcsVipStatus"></div>
+  </div>
+
+  <div id="wcsVipDone" style="display:none;">
+    <div class="wcs-vip__success">
+      <div class="wcs-vip__success-mark">&#10003;</div>
+      <p class="wcs-vip__success-title">Thanks for the referrals!</p>
+      <p class="wcs-vip__success-text" id="wcsVipDoneText">We'll reach out to your VIPs soon.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ----- CONFIG -----
+  var WCS_API_BASE          = 'https://prospects-documents.onrender.com';
+  var WCS_EMPLOYEES_API     = WCS_API_BASE + '/api/vip-referrals/employees';
+  var WCS_WEBHOOK_URL       = WCS_API_BASE + '/webhooks/vip-referrals';
+  var WCS_FALLBACK_LOCATION = 'salem';
+  var MAX_VIPS              = 5;
+
+  // Detect location: window var > URL param > fallback
+  var WCS_LOCATION = (function () {
+    if (typeof window !== 'undefined' && window.WCS_LOCATION) return String(window.WCS_LOCATION).toLowerCase().trim();
+    try {
+      var qp = new URLSearchParams(window.location.search).get('location');
+      if (qp) return String(qp).toLowerCase().trim();
+    } catch (e) {}
+    return WCS_FALLBACK_LOCATION;
+  })();
+
+  // Detect audience: URL param > window var > default 'staff'
+  // member  = public-facing, no Team Member dropdown
+  // staff   = internal, shows Team Member dropdown
+  var WCS_AUDIENCE = (new URLSearchParams(location.search).get('audience') || window.WCS_AUDIENCE || 'staff').toLowerCase();
+
+  // ----- STATE -----
+  var state = {
+    member: { firstName: '', lastName: '', phone: '', email: '' },
+    employeeId: '',
+    employeeName: '',
+    vips: [],   // [{ id, firstName, lastName, phone }]
+    employees: [],
+    submitted: false,
+    submitting: false,
+    submitAttempted: false
+  };
+  var nextVipId = 1;
+
+  // ----- DOM -----
+  var formEl    = document.getElementById('wcsVipForm');
+  var doneEl    = document.getElementById('wcsVipDone');
+  var doneText  = document.getElementById('wcsVipDoneText');
+  var rowsEl    = document.getElementById('wcsVipRows');
+  var addBtn    = document.getElementById('wcsVipAdd');
+  var submitBtn = document.getElementById('wcsVipSubmit');
+  var statusEl  = document.getElementById('wcsVipStatus');
+  var employeeSection = document.getElementById('wcsVipEmployeeSection');
+  var employeeSelect  = document.getElementById('wcsVipEmployee');
+
+  // ----- AUDIENCE GATE: hide employee section for member audience -----
+  if (WCS_AUDIENCE === 'member') {
+    if (employeeSection) employeeSection.style.display = 'none';
+    employeeSelect = null; // prevent any reference below
+  }
+
+  // ----- HELPERS -----
+  function escapeAttr(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+  function digits(s) { return String(s || '').replace(/\D+/g, ''); }
+  function isValidPhone(s) {
+    var d = digits(s);
+    return d.length === 10 || (d.length === 11 && d[0] === '1');
+  }
+  function isValidEmail(s) {
+    if (!s) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s).trim());
+  }
+  function formatPhone(s) {
+    var d = digits(s);
+    if (d.length > 11) d = d.slice(0, 11);
+    if (d.length === 11 && d[0] === '1') d = d.slice(1);
+    if (d.length === 0) return '';
+    if (d.length < 4)  return '(' + d;
+    if (d.length < 7)  return '(' + d.slice(0,3) + ') ' + d.slice(3);
+    return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6,10);
+  }
+  function vipValid(v) {
+    return v.firstName.trim() && v.lastName.trim() && isValidPhone(v.phone);
+  }
+  function memberValid() {
+    return state.member.firstName.trim() &&
+           state.member.lastName.trim() &&
+           isValidPhone(state.member.phone) &&
+           isValidEmail(state.member.email);
+  }
+  function formValid() {
+    if (!memberValid()) return false;
+    if (state.vips.length === 0) return false;
+    return state.vips.every(vipValid);
+  }
+  function getValidationErrors() {
+    var errs = [];
+    if (!state.member.firstName.trim())   errs.push('your first name');
+    if (!state.member.lastName.trim())    errs.push('your last name');
+    if (!isValidPhone(state.member.phone)) errs.push('your phone');
+    if (!isValidEmail(state.member.email)) errs.push('your email');
+    if (state.vips.length === 0) errs.push('at least one VIP');
+    state.vips.forEach(function (v, i) {
+      var n = i + 1;
+      if (!v.firstName.trim())     errs.push('VIP #' + n + ' first name');
+      if (!v.lastName.trim())      errs.push('VIP #' + n + ' last name');
+      if (!isValidPhone(v.phone))  errs.push('VIP #' + n + ' phone');
+    });
+    return errs;
+  }
+
+  // ----- EMPLOYEE LOAD (staff audience only) -----
+  function loadEmployees() {
+    if (WCS_AUDIENCE === 'member' || !employeeSelect) return;
+    var url = WCS_EMPLOYEES_API + (WCS_EMPLOYEES_API.indexOf('?') === -1 ? '?' : '&') + 'location=' + encodeURIComponent(WCS_LOCATION);
+    fetch(url, { credentials: 'omit' })
+      .then(function (r) { if (!r.ok) throw new Error('http_' + r.status); return r.json(); })
+      .then(function (list) {
+        state.employees = Array.isArray(list) ? list : (list && list.employees) || [];
+        renderEmployees();
+      })
+      .catch(function (e) {
+        if (employeeSelect) employeeSelect.innerHTML = '<option value="">Could not load team members</option>';
+        console.warn('[wcs-vip] employee load failed', e);
+      });
+  }
+  function renderEmployees() {
+    if (!employeeSelect) return;
+    var html = '<option value="">Select a team member...</option>';
+    state.employees.forEach(function (e) {
+      var name = e.name || (((e.firstName || '') + ' ' + (e.lastName || '')).trim());
+      html += '<option value="' + escapeAttr(e.id) + '">' + escapeAttr(name) + '</option>';
+    });
+    employeeSelect.innerHTML = html;
+  }
+
+  // ----- VIP ROWS -----
+  function addVip() {
+    if (state.vips.length >= MAX_VIPS) return;
+    state.vips.push({ id: nextVipId++, firstName: '', lastName: '', phone: '' });
+    renderVips();
+    syncSubmit();
+  }
+  function removeVip(id) {
+    state.vips = state.vips.filter(function (v) { return v.id !== id; });
+    renderVips();
+    syncSubmit();
+  }
+  function renderVips() {
+    rowsEl.innerHTML = '';
+    state.vips.forEach(function (v, idx) {
+      var row = document.createElement('div');
+      row.className = 'wcs-vip__row';
+      row.innerHTML =
+        '<div class="wcs-vip__row-head">' +
+          '<span class="wcs-vip__row-num">VIP #' + (idx + 1) + '</span>' +
+          (state.vips.length > 1 ? '<button type="button" class="wcs-vip__remove" data-action="remove" data-id="' + v.id + '">Remove</button>' : '') +
+        '</div>' +
+        '<div class="wcs-vip__row-grid">' +
+          '<div class="wcs-vip__row-cell"  data-vip-cell="' + v.id + '.firstName">' +
+            '<label class="wcs-vip__field-label">First Name<span class="wcs-vip__req" aria-label="required">*</span></label>' +
+            '<input class="wcs-vip__input" type="text" autocomplete="off" data-vip-field="firstName" data-id="' + v.id + '" value="' + escapeAttr(v.firstName) + '">' +
+          '</div>' +
+          '<div class="wcs-vip__row-cell"  data-vip-cell="' + v.id + '.lastName">' +
+            '<label class="wcs-vip__field-label">Last Name<span class="wcs-vip__req" aria-label="required">*</span></label>' +
+            '<input class="wcs-vip__input" type="text" autocomplete="off" data-vip-field="lastName" data-id="' + v.id + '" value="' + escapeAttr(v.lastName) + '">' +
+          '</div>' +
+          '<div class="wcs-vip__row-cell wcs-vip__row-cell--full" data-vip-cell="' + v.id + '.phone">' +
+            '<label class="wcs-vip__field-label">Phone<span class="wcs-vip__req" aria-label="required">*</span></label>' +
+            '<input class="wcs-vip__input" type="tel" inputmode="tel" autocomplete="off" data-vip-field="phone" data-id="' + v.id + '" value="' + escapeAttr(v.phone) + '" placeholder="(555) 555-5555">' +
+          '</div>' +
+        '</div>';
+      rowsEl.appendChild(row);
+    });
+    addBtn.disabled = state.vips.length >= MAX_VIPS;
+  }
+
+  // ----- VALIDATION DECOR -----
+  function markCell(selector, invalid) {
+    var el = document.querySelector(selector);
+    if (!el) return;
+    el.classList.toggle('wcs-vip__cell--invalid', !!invalid);
+    el.classList.toggle('wcs-vip__row-cell--invalid', !!invalid);
+  }
+  function decorate() {
+    // Member cells use data-cell="member.<field>"
+    markCell('[data-cell="member.firstName"]', state.member.firstName.trim() === '');
+    markCell('[data-cell="member.lastName"]',  state.member.lastName.trim()  === '');
+    markCell('[data-cell="member.phone"]',     !isValidPhone(state.member.phone));
+    markCell('[data-cell="member.email"]',     !isValidEmail(state.member.email));
+    state.vips.forEach(function (v) {
+      markCell('[data-vip-cell="' + v.id + '.firstName"]', v.firstName.trim() === '');
+      markCell('[data-vip-cell="' + v.id + '.lastName"]',  v.lastName.trim()  === '');
+      markCell('[data-vip-cell="' + v.id + '.phone"]',     !isValidPhone(v.phone));
+    });
+  }
+
+  // ----- SUBMIT STATE -----
+  // Submit button stays clickable so users can trigger validation feedback.
+  // Only disabled while a submission is in flight.
+  function syncSubmit() {
+    submitBtn.disabled = state.submitting;
+    if (state.submitAttempted) decorate();
+  }
+
+  // ----- EVENTS -----
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t || !t.matches) return;
+
+    if (t.matches('[data-field]')) {
+      var path = t.getAttribute('data-field');
+      var val  = t.value;
+      if (path === 'member.phone') {
+        val = formatPhone(val);
+        if (val !== t.value) t.value = val;
+      }
+      if (path.indexOf('member.') === 0) {
+        var key = path.slice(7);
+        state.member[key] = val;
+      } else if (path === 'employeeId' && employeeSelect) {
+        state.employeeId = val;
+        var opt = employeeSelect.options[employeeSelect.selectedIndex];
+        state.employeeName = opt ? opt.textContent : '';
+      }
+      syncSubmit();
+    }
+
+    if (t.matches('[data-vip-field]')) {
+      var id = parseInt(t.getAttribute('data-id'), 10);
+      var key2 = t.getAttribute('data-vip-field');
+      var v = state.vips.find(function (x) { return x.id === id; });
+      if (!v) return;
+      var val2 = t.value;
+      if (key2 === 'phone') {
+        val2 = formatPhone(val2);
+        if (val2 !== t.value) t.value = val2;
+      }
+      v[key2] = val2;
+      syncSubmit();
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (employeeSelect && e.target && e.target.matches && e.target.matches('[data-field="employeeId"]')) {
+      state.employeeId = e.target.value;
+      var opt = e.target.options[e.target.selectedIndex];
+      state.employeeName = opt ? opt.textContent : '';
+      syncSubmit();
+    }
+  });
+
+  rowsEl.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-action="remove"]');
+    if (!btn) return;
+    removeVip(parseInt(btn.getAttribute('data-id'), 10));
+  });
+
+  addBtn.addEventListener('click', addVip);
+
+  submitBtn.addEventListener('click', function () {
+    state.submitAttempted = true;
+    decorate();
+    if (!formValid()) {
+      var errs = getValidationErrors();
+      var listed = errs.slice(0, 4).join(', ');
+      var more   = errs.length > 4 ? ' (+' + (errs.length - 4) + ' more)' : '';
+      statusEl.textContent = 'Required: ' + listed + more + '.';
+      statusEl.className = 'wcs-vip__status wcs-vip__status--error';
+      return;
+    }
+    submit();
+  });
+
+  // ----- SUBMIT -----
+  function submit() {
+    state.submitting = true;
+    syncSubmit();
+    statusEl.textContent = 'Sending...';
+    statusEl.className = 'wcs-vip__status';
+
+    var body = {
+      location: WCS_LOCATION,
+      audience: WCS_AUDIENCE,
+      member: {
+        firstName: state.member.firstName.trim(),
+        lastName:  state.member.lastName.trim(),
+        phone:     digits(state.member.phone),
+        email:     state.member.email.trim().toLowerCase() || null
+      },
+      employee: WCS_AUDIENCE === 'member' ? {} : {
+        id:   state.employeeId,
+        name: state.employeeName
+      },
+      vips: state.vips.map(function (v) {
+        return {
+          firstName: v.firstName.trim(),
+          lastName:  v.lastName.trim(),
+          phone:     digits(v.phone)
+        };
+      }),
+      submittedAt: new Date().toISOString()
+    };
+
+    fetch(WCS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) throw new Error((data && (data.error || data.message)) || ('http_' + r.status));
+          return data;
+        });
+      })
+      .then(function (data) {
+        state.submitted = true;
+        var n = (data && data.created) || body.vips.length;
+        doneText.textContent = 'We received ' + n + ' VIP referral' + (n === 1 ? '' : 's') + '. We\'ll reach out soon.';
+        formEl.style.display = 'none';
+        doneEl.style.display = 'block';
+      })
+      .catch(function (err) {
+        state.submitting = false;
+        syncSubmit();
+        statusEl.textContent = 'Submission failed: ' + (err && err.message || err) + '. Please try again.';
+        statusEl.className = 'wcs-vip__status wcs-vip__status--error';
+        console.error('[wcs-vip] submit failed', err);
+      });
+  }
+
+  // ----- INIT -----
+  addVip();          // start with 1 row
+  loadEmployees();   // fire employee fetch (no-op when audience=member)
+  syncSubmit();
+
+  // ----- AUTO-HEIGHT: report scroll height to parent iframe -----
+  function wcsPostHeight() {
+    var el = document.getElementById('wcs-vip-root') || document.body;
+    parent.postMessage({ type: 'wcs-vip-height', height: el.scrollHeight }, '*');
+  }
+  window.addEventListener('load', wcsPostHeight);
+  window.addEventListener('resize', wcsPostHeight);
+  new MutationObserver(wcsPostHeight).observe(document.body, { childList: true, subtree: true });
+})();
+</script>

@@ -192,6 +192,18 @@ app.use('/api/admin/online-join', (req, res, next) => {
 });
 app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
 
+// VIP Referrals admin API — same CORS-then-auth pattern as online-join.
+app.use('/api/admin/vip-referrals', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use('/api/admin/vip-referrals', requireAdmin, require('./routes/vip-referrals-admin'));
+
 // Paychex Training admin API — same CORS-then-auth pattern as online-join.
 app.use('/api/admin/paychex-training', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -214,6 +226,17 @@ app.get('/widget/online-join', (req, res) => {
   res.removeHeader('X-Frame-Options');
   res.setHeader('Content-Security-Policy', "frame-ancestors *;");
   res.sendFile(__dirname + '/join-flow-widget.html');
+});
+
+// VIP Referrals consolidated widget — single template served from repo,
+// replaces 14 static GHL copies. Audience param: ?audience=staff|member
+app.get('/widget/vip-referrals', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.set('Cache-Control', 'no-store');
+  // Allow embedding from any origin — same as online-join (GHL embed + portal preview).
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *;");
+  res.sendFile(__dirname + '/vip-referrals-widget.html');
 });
 
 // Static assets referenced by the widget (background image, etc.). The

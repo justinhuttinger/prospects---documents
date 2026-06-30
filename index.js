@@ -216,6 +216,13 @@ app.get('/widget/online-join', (req, res) => {
   res.sendFile(__dirname + '/join-flow-widget.html');
 });
 
+// VIP Referrals consolidated widget — single template served from repo,
+// replaces 14 static GHL copies. Audience param: ?audience=staff|member
+app.get('/widget/vip-referrals', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(__dirname + '/vip-referrals-widget.html');
+});
+
 // Static assets referenced by the widget (background image, etc.). The
 // widget is loaded cross-origin from Elementor, so CORS must be open.
 app.use('/widget-assets', express.static(__dirname + '/widget-assets', {

@@ -310,13 +310,18 @@ router.post('/webhooks/vip-referrals', async (req, res) => {
         source: 'VIP Survey', submitted_at: body.submittedAt || new Date().toISOString(),
       };
 
-      const r = await fireRecipient(inboundUrl, payload);
-      await store.recordRecipientResult(recipientId, {
-        fanout_status: r.ok ? 'sent' : 'failed',
-        http_status: r.http_status, error_detail: r.error_detail,
-        webhook_url_used: inboundUrl, attempt_count: r.attempt_count,
-      });
-      results.push({ ok: r.ok, name: `${n.first_name} ${n.last_name}`, status: r.http_status, error: r.ok ? undefined : r.error_detail });
+      try {
+        const r = await fireRecipient(inboundUrl, payload);
+        await store.recordRecipientResult(recipientId, {
+          fanout_status: r.ok ? 'sent' : 'failed',
+          http_status: r.http_status, error_detail: r.error_detail,
+          webhook_url_used: inboundUrl, attempt_count: r.attempt_count,
+        });
+        results.push({ ok: r.ok, name: `${n.first_name} ${n.last_name}`, status: r.http_status, error: r.ok ? undefined : r.error_detail });
+      } catch (e) {
+        console.error('[vip-referrals] recipient record failed:', e.message);
+        results.push({ ok: false, name: `${n.first_name} ${n.last_name}`, error: e.message });
+      }
     }
 
     await store.recomputeSubmissionStatus(submissionId);

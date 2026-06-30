@@ -192,6 +192,18 @@ app.use('/api/admin/online-join', (req, res, next) => {
 });
 app.use('/api/admin/online-join', requireAdmin, require('./routes/online-join-admin'));
 
+// VIP Referrals admin API — same CORS-then-auth pattern as online-join.
+app.use('/api/admin/vip-referrals', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use('/api/admin/vip-referrals', requireAdmin, require('./routes/vip-referrals-admin'));
+
 // Paychex Training admin API — same CORS-then-auth pattern as online-join.
 app.use('/api/admin/paychex-training', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');

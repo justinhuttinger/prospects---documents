@@ -12,18 +12,26 @@
   #wcs-join-app, #wcs-join-app *, #wcs-join-app *::before, #wcs-join-app *::after {
     box-sizing: border-box;
   }
+  /* WCS brand display face (Prohibition Oblique), self-hosted from the widget
+     asset dir which sends Access-Control-Allow-Origin: * — matches the main
+     westcoaststrength.com theme. */
+  @font-face {
+    font-family: 'WCSDisplay';
+    src: url('https://prospects-documents.onrender.com/widget-assets/display.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
   #wcs-join-app {
-    /* === Brand tokens ============================================ */
+    /* === Brand tokens (aligned to the westcoaststrength.com theme) ==== */
     --w-canvas: #0a0a0c;
     --w-canvas-soft: #15151a;
     --w-surface: #ffffff;
-    --w-surface-soft: #f6f6f4;     /* warm off-white for input bg */
-    --w-ink: #0a0a0c;              /* primary text */
-    --w-ink-muted: #6b6b73;
+    --w-surface-soft: #f4f4f2;     /* off-white bands, matching the site */
+    --w-ink: #16181d;              /* near-black ink (site) */
+    --w-ink-muted: #565961;
     --w-ink-soft: #a0a0a8;
     --w-on-dark: #f5f5f2;
     --w-on-dark-muted: #9a9aa3;
-    --w-border: #ececea;
+    --w-border: rgba(0, 0, 0, 0.12);
     --w-border-strong: #1a1a1f;    /* used for emphasis on the card */
     --w-red: #ff0000;
     --w-red-dark: #cc0000;
@@ -36,8 +44,8 @@
        page loads it (Elementor font kit), it wins via the cascade.
        Bebas Neue is the free Google Fonts fallback that captures the
        same tall-condensed-all-caps energy. */
-    --w-display: 'Prohibition', 'Bebas Neue', 'Anton', 'Archivo Black', 'Impact', sans-serif;
-    --w-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --w-display: 'WCSDisplay', 'Bebas Neue', 'Anton', 'Archivo Black', 'Impact', sans-serif;
+    --w-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --w-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
     font-family: var(--w-body);
@@ -50,9 +58,8 @@
     /* User-provided canvas background. Cover-fit so it scales to any
        viewport; fixed so it doesn't scroll under the panel; fallback
        to a near-white tone for the brief moment before the image loads. */
-    background:
-      url('https://prospects-documents.onrender.com/widget-assets/online-join-bg.png') center / cover no-repeat fixed,
-      #f6f6f4;
+    /* Clean light canvas like the site's content sections (no photo wash). */
+    background: #f4f4f2;
     min-height: 100%;
   }
   @media (max-width: 640px) {
@@ -299,19 +306,19 @@
   /* === Buttons ==================================================== */
   #wcs-join-app .wcs-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 16px 22px; border-radius: 2px;
-    font-family: var(--w-body);
-    font-weight: 800; font-size: 12px;
-    letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 15px 26px; border-radius: 0;
+    font-family: var(--w-display);
+    font-weight: 400; font-size: 19px;
+    letter-spacing: 0.05em; text-transform: uppercase;
     cursor: pointer; border: 1px solid transparent;
     transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.05s ease-out;
     line-height: 1;
   }
   #wcs-join-app .wcs-btn:active { transform: translateY(1px); }
   #wcs-join-app .wcs-btn-primary {
-    background: var(--w-ink); color: #fff; width: 100%;
+    background: var(--w-red); color: #fff; width: 100%;
   }
-  #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red); }
+  #wcs-join-app .wcs-btn-primary:hover { background: var(--w-red-dark); }
   #wcs-join-app .wcs-btn-primary:disabled {
     background: var(--w-ink-soft); color: #fff; cursor: not-allowed;
     opacity: 0.6;
@@ -321,7 +328,7 @@
     width: 100%;
   }
   #wcs-join-app .wcs-btn-secondary:hover {
-    background: var(--w-surface-soft); border-color: var(--w-ink);
+    background: var(--w-ink); color: #fff; border-color: var(--w-ink);
   }
   #wcs-join-app .wcs-btn-cta {
     padding: 18px 24px;
@@ -537,9 +544,9 @@
     border: 0;
     width: 100%;
     padding: 16px 18px;
-    font-family: var(--w-body);
-    font-weight: 800; font-size: 13px;
-    letter-spacing: 0.22em; text-transform: uppercase;
+    font-family: var(--w-display);
+    font-weight: 400; font-size: 20px;
+    letter-spacing: 0.05em; text-transform: uppercase;
     cursor: pointer;
     transition: background 0.15s;
   }

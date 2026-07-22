@@ -624,7 +624,8 @@
   }
   #wcs-join-app .wcs-term-enroll.is-none { color: #1a7f37; }
 
-  /* Standard price hero gets an ACH-discount line beneath it (type screen). */
+  /* The big hero shows the ACH discount price; the standard price sits beneath
+     it on this line (type screen). */
   #wcs-join-app .wcs-ach-discount {
     margin-top: 2px;
     font-size: 13px; font-weight: 800;
@@ -1846,12 +1847,16 @@
       .map(f => `<li><svg class="wcs-plan-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><polyline points="6 10 9 13 14 7"/></svg><span>${escapeHtml(f)}</span></li>`)
       .join('');
     const { standard, ach } = typePricing(type);
-    const heroHtml = standard != null ? `
+    // Lead with the ACH discount price as the big figure; show the standard
+    // price beneath it. Never label prices "card"/"cc".
+    const hasAch     = ach != null && standard != null && ach < standard;
+    const heroAmount = hasAch ? ach : standard;
+    const heroHtml = heroAmount != null ? `
       <div class="wcs-plan-hero">
-        ${heroAmountHtml(standard)}
-        <div class="wcs-plan-hero-period">Per Month</div>
-        ${ach != null && ach < standard
-          ? `<div class="wcs-ach-discount">ACH discount — ${money(ach)}/mo <span>(save ${money(standard - ach)}/mo)</span></div>`
+        ${heroAmountHtml(heroAmount)}
+        <div class="wcs-plan-hero-period">Per Month${hasAch ? ' &middot; ACH Discount Price' : ''}</div>
+        ${hasAch
+          ? `<div class="wcs-ach-discount">Standard price ${money(standard)}/mo <span>(save ${money(standard - ach)}/mo with ACH)</span></div>`
           : ''}
       </div>` : '';
     return `
@@ -1890,7 +1895,9 @@
     const monthly = Number(term?.cc?.monthly);
     const ach = term.has_ach_variant && Number.isFinite(Number(term?.ach?.monthly)) ? Number(term.ach.monthly) : null;
     const monthlyNote = Number.isFinite(monthly)
-      ? `then ${money(monthly)}/mo${ach != null ? ` <span class="wcs-tpr-bank">· ${money(ach)}/mo ACH</span>` : ''}`
+      ? ( ach != null
+          ? `then <span class="wcs-tpr-bank">${money(ach)}/mo ACH discount</span> &middot; standard ${money(monthly)}/mo`
+          : `then ${money(monthly)}/mo` )
       : '';
     return `
       <div class="wcs-plan-card">

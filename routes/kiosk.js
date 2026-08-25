@@ -30,6 +30,15 @@
 //        reported "did they book" question.
 //        -> { ok, appointments: [{ id, start, end, calendarId, title }] }
 //
+//   POST /api/kiosk/extend-trial
+//        Give a lapsed prospect more trial days from the kiosk. Sets the
+//        expiration N days out and the visit allowance to N, which is what
+//        flips ABC's isActive back to true.
+//        body: { location, prospectId, days }
+//        -> { ok, days, expirationDate, before, after }
+//        PROSPECTS ONLY — a cancelled member returns not_a_prospect, because
+//        ABC gives us no writable member agreement route.
+//
 //   POST /webhooks/tour-completed
 //        Fan-out the full tour state to the per-club inbound webhook
 //        with a flat-key payload.
@@ -45,6 +54,7 @@ const {
   searchByPhone, searchByEmail,
   getLastCheckin, hasPhoto,
 } = require('../lib/kiosk-abc');
+const { grantTrialDays, MAX_DAYS } = require('../services/kiosk/trial');
 
 const router = express.Router();
 
@@ -332,6 +342,39 @@ router.get('/api/kiosk/check-day-one', async (req, res) => {
   } catch (err) {
     console.error('[kiosk/check-day-one]', (err.response && err.response.data) || err.message);
     return res.status(500).json({ ok: false, error: (err.response && err.response.data) || err.message });
+  }
+});
+
+// ---- Grant trial days ----
+router.post('/api/kiosk/extend-trial', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const slug = String(body.location || '').toLowerCase().trim();
+    const club = clubBySlug(slug);
+    if (!club) return res.status(400).json({ ok: false, error: 'unknown_location', location: slug });
+
+    const prospectId = String(body.prospectId || '').trim();
+    if (!prospectId) return res.status(400).json({ ok: false, error: 'missing_prospect_id' });
+
+    const result = await grantTrialDays(club.clubNumber, prospectId, body.days);
+
+    if (!result.ok) {
+      // not_a_prospect is an ordinary outcome, not a fault: the person is a
+      // real member and staff need to handle them at the desk.
+      const status = result.error === 'not_a_prospect' ? 404
+        : result.error === 'invalid_days' ? 400
+        : 502;
+      return res.status(status).json({ ...result, maxDays: MAX_DAYS });
+    }
+
+    console.log(
+      `[kiosk/extend-trial] ${club.clubName} ${prospectId} ` +
+      `+${result.days}d -> ${result.expirationDate} (visits ${result.after.visitsAllowed})`
+    );
+    return res.json(result);
+  } catch (err) {
+    console.error('[kiosk/extend-trial]', (err.response && err.response.data) || err.message);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 

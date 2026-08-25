@@ -183,3 +183,94 @@ test('a garbage provider payload does not throw', async () => {
   const r = await suggestAddresses('482 Liberty St');
   assert.deepStrictEqual(r.suggestions, []);
 });
+
+// --- local-first ranking ----------------------------------------------------
+//
+// The rule: nearby leads, but out-of-area is never unreachable. A member who
+// lives in Texas and is visiting has to be able to find their own address.
+
+const { rankLocalFirst, NEAR_MILES, coordsForSlug, CLUB_COORDS, milesBetween } =
+  require('../services/waiver/address');
+
+const near = (miles, rank, line1) => ({ line1, city: 'Salem', state: 'OR', _miles: miles, _rank: rank });
+
+test('every club has its own coordinates, and an unknown slug still works', () => {
+  assert.deepStrictEqual(
+    Object.keys(CLUB_COORDS).sort(),
+    ['clackamas', 'eugene', 'keizer', 'medford', 'milwaukie', 'salem', 'springfield']
+  );
+  assert.deepStrictEqual(coordsForSlug('MEDFORD'), CLUB_COORDS.medford);
+  assert.deepStrictEqual(coordsForSlug('nowhere'), CLUB_COORDS.salem, 'falls back, never throws');
+});
+
+test('milesBetween is roughly right', () => {
+  const [sLat, sLon] = CLUB_COORDS.salem;
+  const [mLat, mLon] = CLUB_COORDS.medford;
+  const d = milesBetween(sLat, sLon, mLat, mLon);
+  assert.ok(d > 170 && d < 230, `Salem to Medford should be ~200mi, got ${Math.round(d)}`);
+  assert.strictEqual(Math.round(milesBetween(sLat, sLon, sLat, sLon)), 0);
+});
+
+test('nearby hits lead, closest first', () => {
+  const out = rankLocalFirst([
+    near(40, 0, 'far-ish'),
+    near(2, 1, 'closest'),
+    near(15, 2, 'middle'),
+  ]);
+  assert.deepStrictEqual(out.map(s => s.line1), ['closest', 'middle', 'far-ish']);
+});
+
+test('an out-of-state address is still reachable when locals fill the list', () => {
+  const hits = [
+    near(1, 0, 'local A'), near(2, 1, 'local B'), near(3, 2, 'local C'),
+    near(4, 3, 'local D'), near(5, 4, 'local E'), near(6, 5, 'local F'),
+    { line1: 'Austin TX', city: 'Austin', state: 'TX', _miles: 1800, _rank: 6 },
+  ];
+
+  const out = rankLocalFirst(hits);
+  const austinAt = out.findIndex(s => s.line1 === 'Austin TX');
+
+  assert.ok(austinAt >= 0, 'the far hit must survive');
+  assert.ok(austinAt < 5, 'and must land inside the five results the kiosk shows');
+});
+
+test('with no far hits, locals get the whole list', () => {
+  const hits = [near(1, 0, 'A'), near(2, 1, 'B'), near(3, 2, 'C')];
+  const out = rankLocalFirst(hits);
+  assert.strictEqual(out.length, 3);
+  assert.deepStrictEqual(out.map(s => s.line1), ['A', 'B', 'C']);
+});
+
+test('with no nearby hits, far results keep the provider ranking', () => {
+  const hits = [
+    { line1: 'third', _miles: 900, _rank: 2 },
+    { line1: 'first', _miles: 1800, _rank: 0 },
+    { line1: 'second', _miles: 400, _rank: 1 },
+  ];
+  // Distance is meaningless once nothing is local; text-match quality is all
+  // that is left to go on.
+  assert.deepStrictEqual(rankLocalFirst(hits).map(s => s.line1), ['first', 'second', 'third']);
+});
+
+test('the near/far boundary is the configured radius', () => {
+  const out = rankLocalFirst([
+    { line1: 'just outside', _miles: NEAR_MILES + 1, _rank: 0 },
+    { line1: 'just inside', _miles: NEAR_MILES - 1, _rank: 1 },
+  ]);
+  assert.strictEqual(out[0].line1, 'just inside');
+});
+
+test('a hit with no coordinates sorts last rather than faking a distance of zero', () => {
+  const out = rankLocalFirst([
+    { line1: 'no coords', _miles: Number.POSITIVE_INFINITY, _rank: 0 },
+    near(5, 1, 'real local'),
+  ]);
+  assert.strictEqual(out[0].line1, 'real local');
+});
+
+test('the sort-only internals never reach the kiosk', () => {
+  const cleaned = dedupe([
+    { line1: '1 A St', city: 'Salem', state: 'OR', _lat: 44.9, _lon: -123.0, _miles: 3, _rank: 0 },
+  ]);
+  assert.deepStrictEqual(Object.keys(cleaned[0]).sort(), ['city', 'line1', 'state']);
+});

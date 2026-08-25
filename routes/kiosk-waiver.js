@@ -16,10 +16,11 @@
 //      Public club list for the kiosk's slug router and its fallback picker.
 //      -> { ok, locations: [{ slug, name, displayName, clubNumber }] }
 //
-// GET  /address-suggest?q=
+// GET  /address-suggest?q=&location=
 //      US address type-ahead for the address step. Server-side so no geocoding
 //      key reaches the tablet. Google Places when GOOGLE_PLACES_API_KEY is set,
-//      keyless Photon otherwise.
+//      keyless Photon otherwise. `location` is the club slug, used to rank
+//      results by distance from that club.
 //
 // POST /lead                                        <-- the halfway trigger
 //      Fired the moment name + contact info are entered, several steps before
@@ -100,7 +101,7 @@ router.get('/locations', (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/address-suggest', async (req, res) => {
   try {
-    const result = await suggestAddresses(req.query.q);
+    const result = await suggestAddresses(req.query.q, req.query.location);
     // Suggestions for the same prefix do not change minute to minute, and the
     // same few streets get typed all day at a given club.
     res.set('Cache-Control', 'public, max-age=300');

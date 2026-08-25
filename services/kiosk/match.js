@@ -7,6 +7,9 @@
  * trigger and raises the tour-queue card — so the answer is ready long before
  * submit.
  *
+ * The search itself goes to our synced `abc_members` table, not to ABC — see
+ * member-search.js for why ABC cannot answer this question at all.
+ *
  * Scoring mirrors the tour kiosk's /api/kiosk/lookup, deliberately: two
  * different definitions of "is this the same person" across two kiosks in the
  * same lobby is how duplicates come back.
@@ -18,7 +21,7 @@
  *   none    — nobody found. Create as normal.
  */
 
-const { searchByPhone, searchByEmail } = require('../../lib/kiosk-abc');
+const { searchMembers } = require('./member-search');
 
 const norm = s => String(s || '').trim().toLowerCase();
 
@@ -28,10 +31,7 @@ const norm = s => String(s || '').trim().toLowerCase();
 async function findExistingMember(club, { firstName, lastName, email, phone }) {
   if (!phone && !email) return { match: 'none', candidates: [] };
 
-  const [byPhone, byEmail] = await Promise.all([
-    phone ? searchByPhone(club.clubNumber, phone).catch(() => []) : Promise.resolve([]),
-    email ? searchByEmail(club.clubNumber, email).catch(() => []) : Promise.resolve([]),
-  ]);
+  const { byPhone, byEmail } = await searchMembers(club.clubNumber, { phone, email });
 
   // Which inputs found each person matters: agreeing on phone AND email is what
   // separates a confident match from a shared family phone number.

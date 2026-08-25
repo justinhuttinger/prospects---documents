@@ -35,6 +35,24 @@ function stubAxios() {
 
 const respond = fn => responders.push(fn);
 
+// The member lookup goes to our synced abc_members table, not to ABC, so it is
+// stubbed at the module boundary rather than at axios. Priming require.cache
+// has to happen before index.js pulls the chain in.
+let searchResult = { byPhone: [], byEmail: [] };
+const SEARCH_MODULE = require.resolve(path.join(ROOT, 'services/kiosk/member-search'));
+require.cache[SEARCH_MODULE] = {
+  id: SEARCH_MODULE,
+  filename: SEARCH_MODULE,
+  loaded: true,
+  exports: {
+    searchMembers: async () => {
+      if (searchResult instanceof Error) throw searchResult;
+      return searchResult;
+    },
+    phone10: v => String(v || '').replace(/\D+/g, '').slice(-10),
+  },
+};
+
 let server;
 let base;
 
@@ -51,7 +69,10 @@ test.before(async () => {
 });
 
 test.after(() => server && server.close());
-test.beforeEach(() => stubAxios());
+test.beforeEach(() => {
+  stubAxios();
+  searchResult = { byPhone: [], byEmail: [] };
+});
 
 function request(method, urlPath, body) {
   return new Promise((resolve, reject) => {
@@ -109,15 +130,8 @@ function abcMember({ first = 'Dana', last = 'Reyes', id = 'ABC-EXISTING' } = {})
   };
 }
 
-// The member search is hit once with primaryPhone and once with email.
 function stubSearch(byPhone, byEmail) {
-  respond(({ method, url, config }) => {
-    if (method !== 'get' || !url.includes('/members')) return null;
-    const params = (config && config.params) || {};
-    if (params.primaryPhone !== undefined) return { status: 200, data: { members: byPhone } };
-    if (params.email !== undefined) return { status: 200, data: { members: byEmail } };
-    return { status: 200, data: { members: [] } };
-  });
+  searchResult = { byPhone, byEmail };
 }
 
 function stubPipeline() {
@@ -178,11 +192,8 @@ test('nobody found is a clean none', async () => {
   assert.deepStrictEqual(res.body.abcMatch.candidates, []);
 });
 
-test('an ABC outage degrades to none rather than failing the step', async () => {
-  respond(({ method, url }) => {
-    if (method === 'get' && url.includes('/members')) throw new Error('ABC down');
-    return null;
-  });
+test('a search outage degrades to none rather than failing the step', async () => {
+  searchResult = new Error('member search unavailable');
 
   const res = await request('POST', '/api/kiosk-waiver/lead', LEAD);
 

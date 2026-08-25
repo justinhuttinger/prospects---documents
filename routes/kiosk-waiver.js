@@ -32,8 +32,9 @@
 //
 // POST /submit                                      <-- the final trigger
 //      Runs the full ABC pipeline (prospect, waiver PDF, document, alert,
-//      photo, check-in, GHL write-back), then the SendGrid confirmation and
-//      the club's "kiosk waiver completed" inbound webhook.
+//      photo, check-in, GHL write-back), then the club's "kiosk waiver
+//      completed" inbound webhook and the tour-queue update. No email: the
+//      member is standing in front of a coach.
 //      -> { ok, abcMemberId, clubNumber, steps }
 //
 // Per-club webhook URLs come from the club_integrations table, which Admin ->
@@ -46,7 +47,6 @@ const express = require('express');
 
 const clubs = require('../services/waiver/clubs');
 const { processWaiverSubmission } = require('../services/waiver/flow');
-const { sendWaiverConfirmation } = require('../services/waiver/sendgrid');
 const { upsertKioskContact, fireInboundWebhook, e164 } = require('../services/waiver/ghl');
 const { resolveWebhookUrl } = require('../services/waiver/integrations');
 const { suggestAddresses } = require('../services/waiver/address');
@@ -254,15 +254,10 @@ router.post('/submit', async (req, res) => {
   // notification, so a failure is reported but never fails the submission.
   const completedWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
 
-  const [sendgrid, webhook, tourIntake] = await Promise.all([
-    sendWaiverConfirmation({
-      email,
-      firstName,
-      lastName,
-      clubName: club.clubName,
-      clubSlug: slug,
-      abcMemberId: result.prospectId,
-    }),
+  // No confirmation email. The member is standing at the front desk with a
+  // coach; a receipt in their inbox adds nothing and reads as spam to somebody
+  // who has not joined anything yet.
+  const [webhook, tourIntake] = await Promise.all([
     fireInboundWebhook(completedWebhookUrl, {
       first_name: firstName,
       last_name: lastName,
@@ -316,7 +311,7 @@ router.post('/submit', async (req, res) => {
     created: result.created,
     clubNumber: result.clubNumber,
     clubName: result.clubName,
-    steps: { ...result.steps, sendgrid, webhook, tourIntake },
+    steps: { ...result.steps, webhook, tourIntake },
   });
 });
 

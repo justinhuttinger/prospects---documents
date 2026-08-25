@@ -167,7 +167,12 @@ async function processWaiverSubmission(formData) {
       pdfBuffer,
       documentName: sanitizeDocumentName(formData.first_name, formData.last_name),
     }),
-    abc.addMemberAlert(clubNumber, prospectId),
+    // The alert is what the front desk reads on the check-in that follows, so
+    // it has to describe what actually happened. Telling staff "NEW PROFILE"
+    // for somebody who has been coming for a year is worse than no alert.
+    abc.addMemberAlert(clubNumber, prospectId, created
+      ? undefined
+      : { text: 'WAIVER SIGNED TODAY', color: 'Blue' }),
   ]);
 
   // 4. Photo, before the check-in so the desk sees a face on the first scan.

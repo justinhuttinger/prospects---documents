@@ -252,3 +252,21 @@ test('the completed webhook says whether the profile is new', async () => {
     salem.kioskWaiverCompletedWebhookUrl = '';
   }
 });
+
+test('the front-desk alert says who they actually are', async () => {
+  stubPipeline();
+
+  // Returning: "NEW PROFILE" would be wrong on the check-in that follows.
+  await request('POST', '/api/kiosk-waiver/submit', { ...SUBMISSION, abcMemberId: 'ABC-EXISTING' });
+  const returning = calls.find(c => c.url.includes('/members/alerts/'));
+  assert.strictEqual(returning.body.text, 'WAIVER SIGNED TODAY');
+
+  stubAxios();
+  stubPipeline();
+
+  // Brand new: unchanged from before.
+  await request('POST', '/api/kiosk-waiver/submit', SUBMISSION);
+  const fresh = calls.find(c => c.url.includes('/members/alerts/'));
+  assert.strictEqual(fresh.body.text, 'NEW PROFILE');
+  assert.strictEqual(fresh.body.color, 'Purple');
+});

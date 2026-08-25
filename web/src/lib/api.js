@@ -48,6 +48,18 @@ export async function lookupMember({ location, phone, email, firstName, lastName
   return jsonOrThrow(res)
 }
 
+// Grants a returning prospect more trial days. Prospects only -- ABC gives us
+// no writable agreement route for real members, so a member comes back as
+// not_a_prospect and the UI says so.
+export async function extendTrial({ location, prospectId, days }) {
+  const res = await fetch(`${API_BASE}/api/kiosk/extend-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location, prospectId, days }),
+  })
+  return jsonOrThrow(res)
+}
+
 export async function checkDayOneBooked({ location, phone, email }) {
   const params = new URLSearchParams({ location })
   if (phone) params.set('phone', phone)

@@ -1,4 +1,7 @@
+import { useState } from 'react'
+
 import StepShell from '../StepShell'
+import ExtendTrial from '../components/ExtendTrial'
 
 function formatLastVisit(s) {
   if (!s) return 'No prior check-in on file'
@@ -9,6 +12,9 @@ function formatLastVisit(s) {
 
 export default function LookupResult({ state, dispatch, location, progress, onBack, onNext }) {
   const { match, candidates, found } = state.lookup
+  // Held locally: granting days changes ABC, not the tour we are about to run,
+  // so it does not belong in the kiosk session state.
+  const [granted, setGranted] = useState(null)
   const fullName = `${state.member.firstName} ${state.member.lastName}`.trim()
 
   // Atomic dispatch: switch lookup AND advance in one action so the new
@@ -60,8 +66,25 @@ export default function LookupResult({ state, dispatch, location, progress, onBa
             <div className="text-text-primary">{formatLastVisit(state.lookup.lastVisit)}</div>
             <div className="text-tile-sub">Profile Photo</div>
             <div className="text-text-primary">{state.lookup.hasPhoto ? 'On file' : "None — we'll grab one"}</div>
+            {(granted || state.lookup.memberStatus) && (
+              <>
+                <div className="text-tile-sub">Access</div>
+                <div className="text-text-primary">
+                  {granted
+                    ? `Through ${granted.after.expirationDate}`
+                    : state.lookup.memberStatus}
+                </div>
+              </>
+            )}
           </div>
         </div>
+
+        <ExtendTrial
+          location={location}
+          prospectId={state.lookup.abcMemberId}
+          currentExpiration={granted?.after?.expirationDate}
+          onGranted={setGranted}
+        />
       </StepShell>
     )
   }

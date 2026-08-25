@@ -13,6 +13,29 @@ const axios = require('axios');
 
 const ABC_BASE_URL = process.env.ABC_BASE_URL || 'https://api.abcfinancial.com/rest';
 
+/**
+ * ABC answers 200 with the failure in the BODY for field-validation errors:
+ *
+ *   { status: { message: "Invalid value for field text - expected format ...",
+ *               count: "0", messageCode: "API-..." } }
+ *
+ * Treating any 200 as success is how a rejected alert, or a waiver document
+ * that never attached, gets reported as fine. Every write here goes through
+ * this instead.
+ */
+function abcOk(data) {
+  const status = (data && data.status) || {};
+  const message = String(status.message || '').toLowerCase();
+  if (message && message !== 'success') return false;
+  if (status.count !== undefined && String(status.count) === '0') return false;
+  return true;
+}
+
+function abcFailure(data) {
+  const status = (data && data.status) || {};
+  return status.message || 'ABC reported a failure with no message';
+}
+
 function getAbcHeaders() {
   return {
     app_id: process.env.ABC_APP_ID,
@@ -55,6 +78,9 @@ async function uploadDocument(clubNumber, memberId, { pdfBuffer, documentName })
       },
       { headers: getAbcHeaders() }
     );
+    if (!abcOk(response.data)) {
+      return { success: false, error: abcFailure(response.data), data: response.data };
+    }
     return { success: true, data: response.data };
   } catch (error) {
     return { success: false, error: (error.response && error.response.data) || error.message };
@@ -71,14 +97,32 @@ async function addMemberAlert(clubNumber, memberId, options = {}) {
     color = 'Purple',
     showOneTime = 'true',
     acknowledge = 'false',
+    // The rest of the documented POST body. `expirationDate` is the important
+    // one: alerts cannot be listed, edited or deleted through the API, so it is
+    // the ONLY way a persistent alert ever goes away on its own.
+    note,
+    sound,
+    expirationDate,
+    allowDoorAccess,
   } = options;
+
+  const payload = { acknowledge, clubNumber, color, showOneTime, text };
+  // Sent only when supplied. ABC accepts unknown and empty fields silently, so
+  // an always-present blank would look fine and quietly mean nothing.
+  if (note !== undefined) payload.note = note;
+  if (sound !== undefined) payload.sound = sound;
+  if (expirationDate !== undefined) payload.expirationDate = expirationDate;
+  if (allowDoorAccess !== undefined) payload.allowDoorAccess = allowDoorAccess;
 
   try {
     const response = await axios.post(
       `${ABC_BASE_URL}/${clubNumber}/members/alerts/${memberId}`,
-      { acknowledge, clubNumber, color, showOneTime, text },
+      payload,
       { headers: getAbcHeaders() }
     );
+    if (!abcOk(response.data)) {
+      return { success: false, error: abcFailure(response.data), data: response.data };
+    }
     return { success: true, data: response.data };
   } catch (error) {
     return { success: false, error: (error.response && error.response.data) || error.message };
@@ -97,6 +141,9 @@ async function uploadMemberPicture(clubNumber, memberId, imageBase64) {
       { image },
       { headers: getAbcHeaders() }
     );
+    if (!abcOk(response.data)) {
+      return { success: false, error: abcFailure(response.data), data: response.data };
+    }
     return { success: true, data: response.data };
   } catch (error) {
     return { success: false, error: (error.response && error.response.data) || error.message };
@@ -146,6 +193,9 @@ async function postMemberCheckin(clubNumber, memberId, { stationId, allowed = tr
       payload,
       { headers: getAbcHeaders() }
     );
+    if (!abcOk(response.data)) {
+      return { success: false, error: abcFailure(response.data), data: response.data };
+    }
     return { success: true, data: response.data };
   } catch (error) {
     return { success: false, error: (error.response && error.response.data) || error.message };
@@ -154,6 +204,7 @@ async function postMemberCheckin(clubNumber, memberId, { stationId, allowed = tr
 
 module.exports = {
   ABC_BASE_URL,
+  abcOk,
   getAbcHeaders,
   createProspect,
   uploadDocument,

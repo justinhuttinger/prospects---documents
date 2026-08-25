@@ -247,3 +247,87 @@ test('the result is read back from ABC rather than assumed', async () => {
   assert.strictEqual(reads, 2, 'read before and after the write');
   assert.strictEqual(res.body.after.expirationDate, '2026-09-04');
 });
+
+// --- the pass-active alert --------------------------------------------------
+
+test('granting days puts the new end date in front of the front desk', async () => {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) return prospectRecord();
+    return null;
+  });
+
+  await post({ location: 'salem', prospectId: PROSPECT_ID, days: 10 });
+
+  const alert = calls.find(c => c.url.includes('/members/alerts/'));
+  assert.ok(alert, 'expected an alert');
+  // ABC caps alert text at 22 chars and rejects "/" outright -- it answers 200
+  // with the rejection in the body, so this is easy to break without noticing.
+  assert.match(alert.body.text, /^PASS ACTIVE TO \d{2}-\d{2}$/);
+  assert.ok(alert.body.text.length <= 22, `too long: ${alert.body.text.length}`);
+  assert.ok(!alert.body.text.includes('/'), 'ABC rejects a slash in alert text');
+  assert.strictEqual(alert.body.color, 'Blue');
+  // Shown on every visit while the pass is valid, not just the next one.
+  assert.strictEqual(alert.body.showOneTime, 'false');
+});
+
+test('the alert expires three days after the pass does', async () => {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) return prospectRecord();
+    return null;
+  });
+
+  const res = await post({ location: 'salem', prospectId: PROSPECT_ID, days: 10 });
+
+  const { addDays, ALERT_GRACE_DAYS } = require(path.join(ROOT, 'services/kiosk/trial'));
+  const alert = calls.find(c => c.url.includes('/members/alerts/'));
+
+  // This is the only thing that ever removes the alert: it cannot be listed,
+  // edited or deleted through the API. Without it, showOneTime:false would be
+  // permanent clutter nobody could clear outside DataTrak.
+  assert.strictEqual(ALERT_GRACE_DAYS, 3);
+  assert.strictEqual(alert.body.expirationDate, addDays(res.body.expirationDate, 3));
+  assert.ok(alert.body.expirationDate > res.body.expirationDate, 'outlives the pass');
+});
+
+test('addDays crosses month and year boundaries', async () => {
+  const { addDays } = require(path.join(ROOT, 'services/kiosk/trial'));
+  assert.strictEqual(addDays('2026-08-30', 3), '2026-09-02');
+  assert.strictEqual(addDays('2026-12-30', 3), '2027-01-02');
+  assert.strictEqual(addDays('2024-02-27', 3), '2024-03-01', 'leap year');
+  assert.strictEqual(addDays('nonsense', 3), 'nonsense');
+});
+
+test('the alert date matches the expiration actually written', async () => {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) return prospectRecord();
+    return null;
+  });
+
+  const res = await post({ location: 'salem', prospectId: PROSPECT_ID, days: 10 });
+
+  const { formatAlertDate } = require(path.join(ROOT, 'services/kiosk/trial'));
+  const alert = calls.find(c => c.url.includes('/members/alerts/'));
+  assert.strictEqual(alert.body.text, `PASS ACTIVE TO ${formatAlertDate(res.body.expirationDate)}`);
+});
+
+test('formatAlertDate is MM-DD, and passes odd input through', async () => {
+  const { formatAlertDate } = require(path.join(ROOT, 'services/kiosk/trial'));
+  assert.strictEqual(formatAlertDate('2026-09-04'), '09-04');
+  assert.strictEqual(formatAlertDate('2026-12-31'), '12-31');
+  assert.strictEqual(formatAlertDate(''), '');
+  assert.strictEqual(formatAlertDate('nonsense'), 'nonsense');
+});
+
+test('a failed alert does not fail the grant', async () => {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) return prospectRecord();
+    if (url.includes('/members/alerts/')) throw new Error('ABC alert service down');
+    return null;
+  });
+
+  const res = await post({ location: 'salem', prospectId: PROSPECT_ID, days: 10 });
+
+  assert.strictEqual(res.status, 200, 'the days are granted; the alert is a courtesy');
+  assert.strictEqual(res.body.ok, true);
+  assert.strictEqual(res.body.alert.success, false);
+});

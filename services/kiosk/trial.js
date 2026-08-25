@@ -21,11 +21,18 @@
 
 const axios = require('axios');
 
+const { addMemberAlert } = require('../waiver/abc');
+
 const BASE_URL = process.env.ABC_BASE_URL || 'https://api.abcfinancial.com/rest';
 
 // A trial is a short-term courtesy. Anything past this is someone fat-fingering
 // a number, and ABC would happily store 999999 visits.
 const MAX_DAYS = 90;
+
+// How long the "pass active until" alert outlives the pass itself. Someone who
+// turns up on their last day, or a couple of days late, should still have the
+// desk see what they were given.
+const ALERT_GRACE_DAYS = 3;
 
 function headers() {
   return {
@@ -47,6 +54,27 @@ function expirationDateFrom(days, now = new Date()) {
   pacificNow.setDate(pacificNow.getDate() + Number(days));
   const p = n => String(n).padStart(2, '0');
   return `${pacificNow.getFullYear()}-${p(pacificNow.getMonth() + 1)}-${p(pacificNow.getDate())}`;
+}
+
+/** YYYY-MM-DD plus n days, calendar-safe across month and year boundaries. */
+function addDays(iso, n) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Number(n));
+  const p = v => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * MM-DD for the alert.
+ *
+ * A hyphen, not a slash: ABC rejects alert text containing "/" outright, and
+ * caps the whole string at 22 characters (alpha, numeric, spaces and ,_!%+-@^).
+ * "PASS ACTIVE TO 09-04" is 20, which leaves room and still reads at a glance.
+ */
+function formatAlertDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  return m ? `${m[2]}-${m[3]}` : String(iso || '');
 }
 
 /** Returns the prospect record, or null when the id is not a prospect. */
@@ -121,7 +149,28 @@ async function grantTrialDays(clubNumber, prospectId, days) {
   // they have access, and ABC's own record is the thing the door will check.
   const after = summarize(await getProspect(clubNumber, prospectId));
 
-  return { ok: true, days: n, expirationDate, before, after };
+  // Put the pass window in front of whoever scans them in, on every visit for
+  // as long as it is valid.
+  //
+  // showOneTime is false because the desk needs this on each check-in, not just
+  // the next one. That is only safe because the alert carries its own
+  // expirationDate: alerts cannot be listed, edited or deleted through the API,
+  // so without an expiry a persistent alert would be permanent clutter nobody
+  // could clear outside DataTrak.
+  //
+  // The expiry runs GRACE_DAYS past the pass end, so a member arriving on their
+  // last day, or a day or two late, still shows the desk what they had.
+  const alert = await addMemberAlert(clubNumber, prospectId, {
+    text: `PASS ACTIVE TO ${formatAlertDate(expirationDate)}`,
+    color: 'Blue',
+    showOneTime: 'false',
+    expirationDate: addDays(expirationDate, ALERT_GRACE_DAYS),
+  });
+
+  return { ok: true, days: n, expirationDate, before, after, alert };
 }
 
-module.exports = { grantTrialDays, getProspect, expirationDateFrom, summarize, MAX_DAYS };
+module.exports = {
+  grantTrialDays, getProspect, expirationDateFrom, summarize, formatAlertDate, addDays,
+  MAX_DAYS, ALERT_GRACE_DAYS,
+};

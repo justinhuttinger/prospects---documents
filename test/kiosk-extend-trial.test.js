@@ -177,19 +177,51 @@ test('expirationDateFrom crosses a month boundary correctly', async () => {
 
 // --- refusals ---------------------------------------------------------------
 
-test('a cancelled member is refused as not a prospect, not as an error', async () => {
-  // ABC answers 200 with an empty list for an id that exists as a member.
-  respond(({ method, url }) =>
-    method === 'get' && url.includes('/prospects/')
-      ? { status: 200, data: { status: { message: 'No records found.' }, prospects: [] } }
-      : null
-  );
+test('a real member gets the alert, since their expiration cannot be written', async () => {
+  respond(({ method, url }) => {
+    // ABC answers 200 with an empty list for an id that is a member, not a prospect.
+    if (method === 'get' && url.includes('/prospects/')) {
+      return { status: 200, data: { status: { message: 'No records found.' }, prospects: [] } };
+    }
+    if (method === 'get' && url.includes('/members/')) {
+      return { status: 200, data: { members: [{ memberId: 'M1', personal: { firstName: 'Dana', lastName: 'Reyes', memberStatus: 'Cancelled' } }] } };
+    }
+    return null;
+  });
 
   const res = await post({ location: 'salem', prospectId: 'a-real-member', days: 10 });
 
+  assert.strictEqual(res.status, 200, 'not an error -- the desk still gets flagged');
+  assert.strictEqual(res.body.mode, 'alert_only');
+  assert.strictEqual(res.body.days, 10);
+
+  // ABC has no writable member agreement route, so nothing is PUT.
+  assert.strictEqual(calls.filter(c => c.method === 'put').length, 0);
+  const alert = calls.find(c => c.url.includes('/members/alerts/'));
+  assert.ok(alert, 'but the alert is posted');
+  assert.match(alert.body.text, /^PASS ACTIVE TO \d{2}-\d{2}$/);
+});
+
+test('an id that is neither prospect nor member is a real 404', async () => {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) return { status: 200, data: { prospects: [] } };
+    if (method === 'get' && url.includes('/members/')) return { status: 200, data: { members: [] } };
+    return null;
+  });
+
+  const res = await post({ location: 'salem', prospectId: 'nobody', days: 10 });
+
   assert.strictEqual(res.status, 404);
-  assert.strictEqual(res.body.error, 'not_a_prospect');
-  assert.strictEqual(calls.filter(c => c.method === 'put').length, 0, 'nothing is written');
+  assert.strictEqual(res.body.error, 'not_found');
+});
+
+test('a prospect grant reports the full mode', async () => {
+  respond(({ method, url }) =>
+    method === 'get' && url.includes('/prospects/') ? prospectRecord() : null
+  );
+
+  const res = await post({ location: 'salem', prospectId: PROSPECT_ID, days: 10 });
+  assert.strictEqual(res.body.mode, 'full');
 });
 
 test('rejects a day count that is not a sane trial', async () => {

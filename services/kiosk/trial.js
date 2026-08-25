@@ -90,6 +90,52 @@ async function getProspect(clubNumber, prospectId) {
   return list[0] || null;
 }
 
+/**
+ * Put the pass window in front of whoever scans them in, on every visit for as
+ * long as it is valid.
+ *
+ * showOneTime is false because the desk needs this on each check-in, not just
+ * the next one. That is only safe because the alert carries its own
+ * expirationDate: alerts cannot be listed, edited or deleted through the API,
+ * so without an expiry a persistent alert would be permanent clutter nobody
+ * could clear outside DataTrak.
+ *
+ * The expiry runs ALERT_GRACE_DAYS past the pass end, so somebody arriving on
+ * their last day, or a day or two late, still shows the desk what they had.
+ */
+function postPassAlert(clubNumber, memberId, expirationDate) {
+  return addMemberAlert(clubNumber, memberId, {
+    text: `PASS ACTIVE TO ${formatAlertDate(expirationDate)}`,
+    color: 'Blue',
+    showOneTime: 'false',
+    expirationDate: addDays(expirationDate, ALERT_GRACE_DAYS),
+  });
+}
+
+/** The member record, or null. Members and prospects are separate id spaces. */
+async function getMember(clubNumber, memberId) {
+  const r = await axios.get(`${BASE_URL}/${clubNumber}/members/${memberId}`, {
+    headers: headers(),
+    timeout: 20000,
+    validateStatus: () => true,
+  });
+  const list = (r.data && r.data.members) || [];
+  return list[0] || null;
+}
+
+function summarizeMember(member) {
+  const personal = (member && member.personal) || {};
+  const agreement = (member && member.agreement) || {};
+  return {
+    firstName: personal.firstName || '',
+    lastName: personal.lastName || '',
+    isActive: String(personal.memberStatus || '').toLowerCase() === 'active',
+    expirationDate: agreement.expirationDate || '',
+    visitsAllowed: '',
+    visitsUsed: '',
+  };
+}
+
 function summarize(prospect) {
   const personal = (prospect && prospect.personal) || {};
   const agreement = (prospect && prospect.agreement) || {};
@@ -115,11 +161,33 @@ async function grantTrialDays(clubNumber, prospectId, days) {
     return { ok: false, error: 'invalid_days', maxDays: MAX_DAYS };
   }
 
+  const expirationDate = expirationDateFrom(n);
+
   const existing = await getProspect(clubNumber, prospectId);
-  if (!existing) return { ok: false, error: 'not_a_prospect' };
+
+  if (!existing) {
+    // A real member, not a prospect. ABC gives us no writable agreement route
+    // for members, so their expiration and visit allowance cannot be changed --
+    // but the ALERT endpoint works on any member id, and telling the front desk
+    // "PASS ACTIVE TO 09-04" is most of the value. Do that rather than refuse.
+    const member = await getMember(clubNumber, prospectId);
+    if (!member) return { ok: false, error: 'not_found' };
+
+    const alert = await postPassAlert(clubNumber, prospectId, expirationDate);
+    return {
+      ok: true,
+      // The caller shows this differently: the desk is flagged, but ABC's own
+      // expiration is untouched and the door will not know about it.
+      mode: 'alert_only',
+      days: n,
+      expirationDate,
+      before: summarizeMember(member),
+      after: summarizeMember(member),
+      alert,
+    };
+  }
 
   const before = summarize(existing);
-  const expirationDate = expirationDateFrom(n);
 
   const body = {
     prospect: {
@@ -149,28 +217,12 @@ async function grantTrialDays(clubNumber, prospectId, days) {
   // they have access, and ABC's own record is the thing the door will check.
   const after = summarize(await getProspect(clubNumber, prospectId));
 
-  // Put the pass window in front of whoever scans them in, on every visit for
-  // as long as it is valid.
-  //
-  // showOneTime is false because the desk needs this on each check-in, not just
-  // the next one. That is only safe because the alert carries its own
-  // expirationDate: alerts cannot be listed, edited or deleted through the API,
-  // so without an expiry a persistent alert would be permanent clutter nobody
-  // could clear outside DataTrak.
-  //
-  // The expiry runs GRACE_DAYS past the pass end, so a member arriving on their
-  // last day, or a day or two late, still shows the desk what they had.
-  const alert = await addMemberAlert(clubNumber, prospectId, {
-    text: `PASS ACTIVE TO ${formatAlertDate(expirationDate)}`,
-    color: 'Blue',
-    showOneTime: 'false',
-    expirationDate: addDays(expirationDate, ALERT_GRACE_DAYS),
-  });
+  const alert = await postPassAlert(clubNumber, prospectId, expirationDate);
 
-  return { ok: true, days: n, expirationDate, before, after, alert };
+  return { ok: true, mode: 'full', days: n, expirationDate, before, after, alert };
 }
 
 module.exports = {
-  grantTrialDays, getProspect, expirationDateFrom, summarize, formatAlertDate, addDays,
+  grantTrialDays, getProspect, getMember, expirationDateFrom, summarize, formatAlertDate, addDays,
   MAX_DAYS, ALERT_GRACE_DAYS,
 };

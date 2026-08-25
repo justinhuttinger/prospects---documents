@@ -36,8 +36,10 @@
 //        flips ABC's isActive back to true.
 //        body: { location, prospectId, days }
 //        -> { ok, days, expirationDate, before, after }
-//        PROSPECTS ONLY — a cancelled member returns not_a_prospect, because
-//        ABC gives us no writable member agreement route.
+//        A prospect gets the expiration and visit allowance written, plus the
+//        alert. A real MEMBER gets the alert only (mode:'alert_only') — ABC
+//        gives us no writable member agreement route, but the desk still needs
+//        to know the pass window.
 //
 //   POST /webhooks/tour-completed
 //        Fan-out the full tour state to the per-club inbound webhook
@@ -359,17 +361,15 @@ router.post('/api/kiosk/extend-trial', async (req, res) => {
     const result = await grantTrialDays(club.clubNumber, prospectId, body.days);
 
     if (!result.ok) {
-      // not_a_prospect is an ordinary outcome, not a fault: the person is a
-      // real member and staff need to handle them at the desk.
-      const status = result.error === 'not_a_prospect' ? 404
+      const status = result.error === 'not_found' ? 404
         : result.error === 'invalid_days' ? 400
         : 502;
       return res.status(status).json({ ...result, maxDays: MAX_DAYS });
     }
 
     console.log(
-      `[kiosk/extend-trial] ${club.clubName} ${prospectId} ` +
-      `+${result.days}d -> ${result.expirationDate} (visits ${result.after.visitsAllowed})`
+      `[kiosk/extend-trial] ${club.clubName} ${prospectId} ${result.mode} ` +
+      `+${result.days}d -> ${result.expirationDate}`
     );
     return res.json(result);
   } catch (err) {

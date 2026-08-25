@@ -51,6 +51,7 @@ const { upsertKioskContact, fireInboundWebhook, e164 } = require('../services/wa
 const { resolveWebhookUrl } = require('../services/waiver/integrations');
 const { suggestAddresses } = require('../services/waiver/address');
 const { announceArrival, announceCompletion } = require('../services/kiosk/tour-intake');
+const { findExistingMember } = require('../services/kiosk/match');
 
 const router = express.Router();
 
@@ -134,11 +135,17 @@ router.post('/lead', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'missing_contact_info' });
   }
 
-  const ghl = await upsertKioskContact(
-    club,
-    { firstName, lastName, email, phone },
-    { stage: 'lead' }
-  );
+  // Look them up in ABC now, at the same step that raises the queue card, so
+  // submit already knows whether to create a profile or attach to theirs.
+  // Failure here is not fatal: the worst case is the old behaviour.
+  const [ghl, abcMatch] = await Promise.all([
+    upsertKioskContact(club, { firstName, lastName, email, phone }, { stage: 'lead' }),
+    findExistingMember(club, { firstName, lastName, email, phone })
+      .catch(err => {
+        console.error('[kiosk-waiver/lead] ABC lookup failed:', err.message);
+        return { match: 'none', candidates: [], error: err.message };
+      }),
+  ]);
 
   const leadWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverLeadWebhookUrl');
   const webhook = await fireInboundWebhook(leadWebhookUrl, {
@@ -171,6 +178,8 @@ router.post('/lead', async (req, res) => {
     contactId: ghl.contactId || null,
     // The kiosk carries this back at submit so the photo lands on the same card.
     tourIntakeId: tourIntake.id || null,
+    // 'exact' the kiosk attaches to silently; 'partial' it must ask about.
+    abcMatch,
     ghl,
     webhook,
     tourIntake,
@@ -216,6 +225,9 @@ router.post('/submit', async (req, res) => {
     location: { id: club.ghlLocationId, name: `West Coast Strength - ${club.clubName}` },
     location_slug: slug,
     contact_id: str(body.contactId),
+    // Set only when the member was matched in ABC and, for a partial match,
+    // confirmed it was them. Empty means create a new profile.
+    abc_member_id: str(body.abcMemberId),
 
     member_profile_photo: body.photoDataUrl || '',
     signature_data_url: body.signatureDataUrl,
@@ -264,6 +276,8 @@ router.post('/submit', async (req, res) => {
       gender: formData.Gender,
 
       abc_member_id: String(result.prospectId),
+      // Lets a GHL workflow greet a returning member differently from a new one.
+      is_new_profile: result.created ? 'yes' : 'no',
       ghl_contact_id: formData.contact_id,
       abc_club_number: String(club.clubNumber),
       club: club.clubName,
@@ -298,6 +312,8 @@ router.post('/submit', async (req, res) => {
   return res.json({
     ok: true,
     abcMemberId: result.prospectId,
+    // false when we attached to a record they already had.
+    created: result.created,
     clubNumber: result.clubNumber,
     clubName: result.clubName,
     steps: { ...result.steps, sendgrid, webhook, tourIntake },

@@ -30,7 +30,9 @@
 //      the club's "kiosk waiver completed" inbound webhook.
 //      -> { ok, abcMemberId, clubNumber, steps }
 //
-// Per-club config in clubs-config.json:
+// Per-club webhook URLs come from the club_integrations table, which Admin ->
+// Club Integrations edits in the staff portal, and fall back to the matching
+// keys in clubs-config.json:
 //   kioskWaiverLeadWebhookUrl       GHL inbound webhook, halfway
 //   kioskWaiverCompletedWebhookUrl  GHL inbound webhook, on completion
 
@@ -40,6 +42,7 @@ const clubs = require('../services/waiver/clubs');
 const { processWaiverSubmission } = require('../services/waiver/flow');
 const { sendWaiverConfirmation } = require('../services/waiver/sendgrid');
 const { upsertKioskContact, fireInboundWebhook, e164 } = require('../services/waiver/ghl');
+const { resolveWebhookUrl } = require('../services/waiver/integrations');
 
 const router = express.Router();
 
@@ -115,7 +118,8 @@ router.post('/lead', async (req, res) => {
     { stage: 'lead' }
   );
 
-  const webhook = await fireInboundWebhook(club.kioskWaiverLeadWebhookUrl, {
+  const leadWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverLeadWebhookUrl');
+  const webhook = await fireInboundWebhook(leadWebhookUrl, {
     first_name: firstName,
     last_name: lastName,
     email,
@@ -210,6 +214,8 @@ router.post('/submit', async (req, res) => {
 
   // ABC has the signed waiver on file from here on. Everything below is a
   // notification, so a failure is reported but never fails the submission.
+  const completedWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
+
   const [sendgrid, webhook] = await Promise.all([
     sendWaiverConfirmation({
       email,
@@ -219,7 +225,7 @@ router.post('/submit', async (req, res) => {
       clubSlug: slug,
       abcMemberId: result.prospectId,
     }),
-    fireInboundWebhook(club.kioskWaiverCompletedWebhookUrl, {
+    fireInboundWebhook(completedWebhookUrl, {
       first_name: firstName,
       last_name: lastName,
       email,

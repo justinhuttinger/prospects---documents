@@ -30,6 +30,8 @@ const axios   = require('axios');
 const fs      = require('fs');
 const path    = require('path');
 
+const { resolveWebhookUrl } = require('../services/waiver/integrations');
+
 const router = express.Router();
 
 const CLUBS_FILE = path.join(__dirname, '..', 'clubs-config.json');
@@ -73,12 +75,12 @@ router.post('/webhooks/pt-intake', async (req, res) => {
     const club = clubBySlug(slug);
     if (!club) return res.status(400).json({ ok: false, error: 'unknown_location', location: slug });
 
-    const inboundUrl = club.ptIntakeWebhookUrl;
+    const inboundUrl = await resolveWebhookUrl(club, 'ptIntakeWebhookUrl');
     if (!inboundUrl) {
       return res.status(500).json({
         ok: false,
         error: 'missing_inbound_webhook_url',
-        hint: `Set "ptIntakeWebhookUrl" for ${club.clubName} in clubs-config.json`
+        hint: `Set the PT intake webhook for ${club.clubName} in Admin -> Club Integrations`
       });
     }
 

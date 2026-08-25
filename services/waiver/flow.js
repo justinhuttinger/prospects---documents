@@ -111,7 +111,9 @@ async function stampGhlContact(club, contactId, abcMemberId) {
 /**
  * Run the whole pipeline.
  *
- * @param {object} formData flat submission (see the key list in routes/kiosk-waiver.js)
+ * @param {object} formData flat submission (see the key list in routes/kiosk-waiver.js).
+ *        Set `abc_member_id` to attach to an existing ABC record instead of
+ *        creating one.
  * @returns {Promise<{clubNumber, clubName, prospectId, steps}>}
  * @throws when the club cannot be resolved, or when ABC refuses the prospect.
  */
@@ -127,13 +129,34 @@ async function processWaiverSubmission(formData) {
 
   const clubNumber = String(club.clubNumber);
 
-  // 1. Prospect — fatal on failure.
-  const { prospectId, data: prospectData } = await abc.createProspect(clubNumber, {
-    personal: buildProspectPersonal(formData),
-    agreement: {
-      beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0],
-    },
-  });
+  // 1. The ABC record.
+  //
+  // When the caller already matched this person in ABC we reuse their id
+  // instead of creating a second one. Everything downstream — waiver, photo,
+  // alert, check-in — then lands on the record they already have. Creating
+  // unconditionally is how a returning member ends up with a duplicate
+  // profile, which is invisible until somebody notices two of them in DataTrak.
+  const existingMemberId = String(formData.abc_member_id || '').trim();
+
+  let prospectId;
+  let prospectData;
+  let created;
+
+  if (existingMemberId) {
+    prospectId = existingMemberId;
+    prospectData = { reused: true, memberId: existingMemberId };
+    created = false;
+  } else {
+    const result = await abc.createProspect(clubNumber, {
+      personal: buildProspectPersonal(formData),
+      agreement: {
+        beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0],
+      },
+    });
+    prospectId = result.prospectId;
+    prospectData = result.data;
+    created = true;
+  }
 
   // 2. Waiver PDF — fatal on failure; the signed document is the deliverable.
   const pdfBuffer = await generatePDF(formData);
@@ -144,7 +167,12 @@ async function processWaiverSubmission(formData) {
       pdfBuffer,
       documentName: sanitizeDocumentName(formData.first_name, formData.last_name),
     }),
-    abc.addMemberAlert(clubNumber, prospectId),
+    // The alert is what the front desk reads on the check-in that follows, so
+    // it has to describe what actually happened. Telling staff "NEW PROFILE"
+    // for somebody who has been coming for a year is worse than no alert.
+    abc.addMemberAlert(clubNumber, prospectId, created
+      ? undefined
+      : { text: 'WAIVER SIGNED TODAY', color: 'Blue' }),
   ]);
 
   // 4. Photo, before the check-in so the desk sees a face on the first scan.
@@ -169,6 +197,9 @@ async function processWaiverSubmission(formData) {
     clubNumber,
     clubName: club.clubName,
     prospectId,
+    // Lets the caller say "welcome back" rather than "welcome", and lets us see
+    // in the logs how often the dedupe is actually catching someone.
+    created,
     steps: { prospect: prospectData, document, alert, picture, checkin, ghl },
   };
 }

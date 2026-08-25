@@ -493,3 +493,40 @@ test('GET /address-suggest answers 200 with an empty list when the provider dies
   assert.strictEqual(res.status, 200, 'the field degrades to a plain input');
   assert.deepStrictEqual(res.body.suggestions, []);
 });
+
+// --- phone formatting -------------------------------------------------------
+//
+// ABC rejects anything that is not exactly 10 digits, and that rejection fails
+// the WHOLE prospect, not just the phone. A real check-in died here.
+
+test('a 10-digit number starting with 1 keeps all ten digits', async () => {
+  stubFullSubmitChain();
+
+  await request('POST', '/api/kiosk-waiver/submit', { ...SUBMISSION, phone: '1234560087' });
+
+  const prospect = calls.find(c => c.url.includes('/prospects'));
+  const personal = prospect.body.prospects[0].prospect.personal;
+  // Stripping the leading 1 here left "234560087" and ABC refused the lot.
+  assert.strictEqual(personal.primaryPhone, '1234560087');
+  assert.strictEqual(personal.mobilePhone, '1234560087');
+});
+
+test('an 11-digit number loses only the country code', async () => {
+  stubFullSubmitChain();
+
+  await request('POST', '/api/kiosk-waiver/submit', { ...SUBMISSION, phone: '+1 (503) 555-1212' });
+
+  const personal = calls.find(c => c.url.includes('/prospects')).body.prospects[0].prospect.personal;
+  assert.strictEqual(personal.primaryPhone, '5035551212');
+});
+
+test('an unusable phone is sent empty rather than malformed', async () => {
+  stubFullSubmitChain();
+
+  // ABC accepts a prospect with no phone, so a missing number costs a field
+  // while a bad one costs the whole person.
+  await request('POST', '/api/kiosk-waiver/submit', { ...SUBMISSION, phone: '503555', email: 'dana@example.com' });
+
+  const personal = calls.find(c => c.url.includes('/prospects')).body.prospects[0].prospect.personal;
+  assert.strictEqual(personal.primaryPhone, '');
+});

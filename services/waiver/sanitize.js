@@ -23,12 +23,23 @@ const STATE_CODES = {
   'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 };
 
-// ABC accepts plain 10 digits; anything else it silently stores wrong.
+/**
+ * ABC wants exactly 10 digits and rejects anything else outright, which fails
+ * the whole prospect -- not just the phone.
+ *
+ * The leading 1 is only a country code when there are 11 digits. Stripping it
+ * from any number starting with 1 turns a 10-digit "1234560087" into a 9-digit
+ * "234560087", which is precisely how a check-in died in production.
+ *
+ * Anything that still is not 10 digits comes back empty rather than malformed:
+ * ABC accepts a prospect with no phone, so a missing number costs us a field
+ * while a bad one costs us the whole person.
+ */
 function formatPhoneNumber(phone) {
   if (!phone) return '';
   const digits = String(phone).replace(/\D/g, '');
-  const phoneDigits = digits.startsWith('1') ? digits.substring(1) : digits;
-  return phoneDigits.length === 10 ? phoneDigits : phoneDigits;
+  const national = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  return national.length === 10 ? national : '';
 }
 
 function getStateCode(state) {

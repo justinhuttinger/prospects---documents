@@ -56,9 +56,16 @@ async function createProspect(clubNumber, { personal, agreement }) {
     payload,
     { headers: getAbcHeaders() }
   );
+  // ABC answers 200 with the rejection in the body, so a validation failure
+  // arrives looking like success with no id attached. Surface ABC's own message
+  // rather than the useless "did not return a prospect id" -- staff need to know
+  // WHICH field it refused.
   const prospectId = response.data && response.data.result && response.data.result.memberId;
   if (!prospectId) {
-    const err = new Error('ABC did not return a prospect id');
+    const reason = abcOk(response.data)
+      ? 'ABC accepted the request but returned no prospect id'
+      : abcFailure(response.data);
+    const err = new Error(`ABC refused the prospect: ${reason}`);
     err.abcResponse = response.data;
     throw err;
   }

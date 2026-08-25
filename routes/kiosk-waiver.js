@@ -248,7 +248,13 @@ router.post('/submit', async (req, res) => {
   try {
     result = await processWaiverSubmission(formData);
   } catch (err) {
-    console.error('[kiosk-waiver/submit]', (err.response && err.response.data) || err.message);
+    // err.abcResponse carries ABC's own status message; without it the log says
+    // only that something went wrong and the cause has to be guessed.
+    console.error(
+      '[kiosk-waiver/submit]',
+      err.message,
+      JSON.stringify((err.response && err.response.data) || err.abcResponse || null)
+    );
     return res.status(502).json({
       ok: false,
       error: err.message,

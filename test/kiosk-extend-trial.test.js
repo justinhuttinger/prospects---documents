@@ -363,3 +363,44 @@ test('a failed alert does not fail the grant', async () => {
   assert.strictEqual(res.body.ok, true);
   assert.strictEqual(res.body.alert.success, false);
 });
+
+test('a prospect grant posts the alert as well as writing the dates', async () => {
+  respond(({ method, url }) =>
+    method === 'get' && url.includes('/prospects/') ? prospectRecord() : null
+  );
+
+  const res = await post({ location: 'salem', prospectId: PROSPECT_ID, days: 7 });
+
+  // Prospects get both halves: the agreement write AND the desk alert. A
+  // member only gets the alert, but nobody gets neither.
+  assert.strictEqual(res.body.mode, 'full');
+  assert.ok(calls.some(c => c.method === 'put' && c.url.includes('/prospects/')), 'dates written');
+  assert.ok(calls.some(c => c.url.includes('/members/alerts/')), 'desk alerted');
+});
+
+test('ABC refusing a prospect says which field it refused', async () => {
+  // ABC answers 200 with the rejection in the body, so the old message was just
+  // "did not return a prospect id" and the cause had to be guessed.
+  respond(({ url }) => {
+    if (url.endsWith('/prospects')) {
+      return {
+        status: 200,
+        data: { status: { message: 'Postal code provided is not valid.', count: '0' } },
+      };
+    }
+    if (url.includes('pdfshift.io')) return { status: 200, data: Buffer.from('%PDF-1.4') };
+    return null;
+  });
+
+  const res = await request('POST', '/api/kiosk-waiver/submit', {
+    location: 'salem',
+    firstName: 'Dana', lastName: 'Reyes', email: 'dana@example.com', phone: '5035551212',
+    address1: '1 Main St', city: 'Salem', state: 'OR', postalCode: '973',
+    dateOfBirth: '1992-03-14', howHeard: 'Yelp',
+    photoDataUrl: 'data:image/png;base64,AA', signatureDataUrl: 'data:image/png;base64,AA',
+    agreed: true,
+  });
+
+  assert.strictEqual(res.status, 502);
+  assert.match(res.body.error, /Postal code provided is not valid/);
+});

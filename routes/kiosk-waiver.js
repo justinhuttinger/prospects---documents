@@ -50,6 +50,7 @@ const { sendWaiverConfirmation } = require('../services/waiver/sendgrid');
 const { upsertKioskContact, fireInboundWebhook, e164 } = require('../services/waiver/ghl');
 const { resolveWebhookUrl } = require('../services/waiver/integrations');
 const { suggestAddresses } = require('../services/waiver/address');
+const { announceArrival, announceCompletion } = require('../services/kiosk/tour-intake');
 
 const router = express.Router();
 
@@ -155,9 +156,25 @@ router.post('/lead', async (req, res) => {
     started_at: str(body.startedAt) || new Date().toISOString(),
   });
 
+  // Put them on the front desk's tour queue right now, while they are still
+  // standing at the kiosk filling in the rest. This fires unconditionally --
+  // it is not gated on a per-club webhook being configured, because the queue
+  // is how staff know somebody is in the lobby.
+  const tourIntake = await announceArrival({
+    club, firstName, lastName, email, phone: e164(phone),
+  });
+
   // A GHL hiccup must not stop somebody finishing a waiver at the front desk,
   // so this always answers 200. The per-integration results say what landed.
-  return res.json({ ok: true, contactId: ghl.contactId || null, ghl, webhook });
+  return res.json({
+    ok: true,
+    contactId: ghl.contactId || null,
+    // The kiosk carries this back at submit so the photo lands on the same card.
+    tourIntakeId: tourIntake.id || null,
+    ghl,
+    webhook,
+    tourIntake,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -225,7 +242,7 @@ router.post('/submit', async (req, res) => {
   // notification, so a failure is reported but never fails the submission.
   const completedWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
 
-  const [sendgrid, webhook] = await Promise.all([
+  const [sendgrid, webhook, tourIntake] = await Promise.all([
     sendWaiverConfirmation({
       email,
       firstName,
@@ -264,6 +281,18 @@ router.post('/submit', async (req, res) => {
       stage: 'completed',
       submitted_at: str(body.submittedAt) || new Date().toISOString(),
     }),
+    // Attach the photo to the card raised at the contact step. Also
+    // unconditional -- the desk should see a face regardless of GHL config.
+    announceCompletion({
+      intakeId: str(body.tourIntakeId),
+      club,
+      firstName,
+      lastName,
+      email,
+      phone: e164(phone),
+      photoDataUrl: body.photoDataUrl,
+      abcMemberId: result.prospectId,
+    }),
   ]);
 
   return res.json({
@@ -271,7 +300,7 @@ router.post('/submit', async (req, res) => {
     abcMemberId: result.prospectId,
     clubNumber: result.clubNumber,
     clubName: result.clubName,
-    steps: { ...result.steps, sendgrid, webhook },
+    steps: { ...result.steps, sendgrid, webhook, tourIntake },
   });
 });
 

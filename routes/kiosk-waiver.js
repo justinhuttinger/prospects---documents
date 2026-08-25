@@ -16,6 +16,11 @@
 //      Public club list for the kiosk's slug router and its fallback picker.
 //      -> { ok, locations: [{ slug, name, displayName, clubNumber }] }
 //
+// GET  /address-suggest?q=
+//      US address type-ahead for the address step. Server-side so no geocoding
+//      key reaches the tablet. Google Places when GOOGLE_PLACES_API_KEY is set,
+//      keyless Photon otherwise.
+//
 // POST /lead                                        <-- the halfway trigger
 //      Fired the moment name + contact info are entered, several steps before
 //      the waiver is signed. Upserts the GHL contact and fires the club's
@@ -43,6 +48,7 @@ const { processWaiverSubmission } = require('../services/waiver/flow');
 const { sendWaiverConfirmation } = require('../services/waiver/sendgrid');
 const { upsertKioskContact, fireInboundWebhook, e164 } = require('../services/waiver/ghl');
 const { resolveWebhookUrl } = require('../services/waiver/integrations');
+const { suggestAddresses } = require('../services/waiver/address');
 
 const router = express.Router();
 
@@ -65,18 +71,11 @@ function yesNo(v) {
   return str(v);
 }
 
-// The PDF template keys off these exact question strings, so they are defined
-// once here and reused by both the pipeline payload and the webhook fan-out.
+// The PDF template keys off this exact string. The health questionnaire and
+// fitness profile the kiosk used to collect are gone; the GHL trial survey still
+// sends them and the PDF still renders them when present.
 const Q = {
-  heart: 'Has a Doctor Ever Said You Have a Heart Condition & Recommended Only Medically Supervised Activity?',
-  chest: 'Do You Experience Chest Pain During Physical Activity?',
-  joint: 'Do You Have a Bone or Joint Problem that Physical Activity Could Aggravate?',
-  bloodPressure: 'Has Your Doctor Recommended Medication for your Blood Pressure?',
-  otherReason: 'Are you Aware of Any Reason you Should Not Exercise Without Medical Supervision',
-  routine: 'What is Your Current Workout Routine?',
-  diet: 'Do You Follow a Diet / Meal Plan?',
-  obstacles: 'What are your Biggest Obstacles?',
-  helpMost: 'What Would Help You the Most?',
+  howHeard: 'How Did You Hear About Us',
 };
 
 // ---------------------------------------------------------------------------
@@ -88,6 +87,27 @@ router.get('/locations', (req, res) => {
   } catch (err) {
     console.error('[kiosk-waiver/locations]', err.message);
     return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /address-suggest?q= — type-ahead for the address step
+//
+// Proxied through here so no geocoding key ships to a tablet in a gym lobby.
+// Always 200 with a (possibly empty) list: the kiosk field degrades to a plain
+// text input, and an address the provider has never heard of must not stop
+// somebody joining the gym.
+// ---------------------------------------------------------------------------
+router.get('/address-suggest', async (req, res) => {
+  try {
+    const result = await suggestAddresses(req.query.q);
+    // Suggestions for the same prefix do not change minute to minute, and the
+    // same few streets get typed all day at a given club.
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[kiosk-waiver/address-suggest]', err.message);
+    return res.json({ ok: true, suggestions: [], degraded: true });
   }
 });
 
@@ -155,25 +175,13 @@ router.post('/submit', async (req, res) => {
 
   if (!firstName || !lastName) return res.status(400).json({ ok: false, error: 'missing_name' });
   if (!email && !phone) return res.status(400).json({ ok: false, error: 'missing_contact_info' });
+  if (!body.photoDataUrl) return res.status(400).json({ ok: false, error: 'missing_photo' });
   if (!body.signatureDataUrl) return res.status(400).json({ ok: false, error: 'missing_signature' });
   if (!body.agreed) return res.status(400).json({ ok: false, error: 'waiver_not_accepted' });
 
-  const health = body.health || {};
-  const fitness = body.fitness || {};
+  const howHeard = str(body.howHeard);
 
-  const answers = {
-    [Q.heart]: yesNo(health.heartCondition),
-    [Q.chest]: yesNo(health.chestPain),
-    [Q.joint]: yesNo(health.boneOrJoint),
-    [Q.bloodPressure]: yesNo(health.bloodPressureMeds),
-    [Q.otherReason]: yesNo(health.otherReason),
-    [Q.routine]: str(fitness.routine),
-    [Q.diet]: yesNo(fitness.dietPlan),
-    [Q.obstacles]: str(fitness.obstacles),
-    [Q.helpMost]: str(fitness.helpMost),
-  };
-
-  // Flatten into the shape the shared waiver pipeline and PDF template expect.
+    // Flatten into the shape the shared waiver pipeline and PDF template expect.
   const formData = {
     first_name: firstName,
     last_name: lastName,
@@ -197,7 +205,7 @@ router.post('/submit', async (req, res) => {
     'Trial Start Date': str(body.trialStartDate) || new Date().toISOString().split('T')[0],
     'Service Employee': str(body.serviceEmployee),
 
-    ...answers,
+    [Q.howHeard]: howHeard,
   };
 
   let result;
@@ -249,16 +257,7 @@ router.post('/submit', async (req, res) => {
       trial_start_date: formData['Trial Start Date'],
       service_employee: formData['Service Employee'],
 
-      health_heart_condition: answers[Q.heart],
-      health_chest_pain: answers[Q.chest],
-      health_bone_or_joint: answers[Q.joint],
-      health_blood_pressure_meds: answers[Q.bloodPressure],
-      health_other_reason: answers[Q.otherReason],
-
-      fitness_routine: answers[Q.routine],
-      fitness_diet_plan: answers[Q.diet],
-      fitness_obstacles: answers[Q.obstacles],
-      fitness_help_most: answers[Q.helpMost],
+      how_heard: howHeard,
 
       source: 'Kiosk Waiver',
       stage: 'completed',

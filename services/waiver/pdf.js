@@ -49,6 +49,27 @@ async function generatePDF(formData) {
       signatureBase64 = formData.signature_data_url;
     }
 
+    // The GHL trial survey asks a health questionnaire and a fitness profile;
+    // the kiosk does not. Render each section only when there are answers for
+    // it -- a table of "N/A" on a signed waiver reads as a broken document, and
+    // dropping the sections outright would regress the survey path.
+    const HEALTH_KEYS = [
+      'Has a Doctor Ever Said You Have a Heart Condition & Recommended Only Medically Supervised Activity?',
+      'Do You Experience Chest Pain During Physical Activity?',
+      'Do You Have a Bone or Joint Problem that Physical Activity Could Aggravate?',
+      'Has Your Doctor Recommended Medication for your Blood Pressure?',
+      'Are you Aware of Any Reason you Should Not Exercise Without Medical Supervision',
+    ];
+    const FITNESS_KEYS = [
+      'What is Your Current Workout Routine?',
+      'Do You Follow a Diet / Meal Plan?',
+      'What are your Biggest Obstacles?',
+      'What Would Help You the Most?',
+    ];
+    const hasAny = keys => keys.some(k => String(formData[k] || '').trim());
+    const hasHealthAnswers = hasAny(HEALTH_KEYS);
+    const hasFitnessAnswers = hasAny(FITNESS_KEYS);
+
     // Create beautiful HTML with your branding
     const html = `
 <!DOCTYPE html>
@@ -193,10 +214,11 @@ async function generatePDF(formData) {
       <div class="info-item"><span class="label">City, State ZIP:</span> ${formData.city || ''}, ${formData.state || ''} ${formData.postal_code || ''}</div>
       <div class="info-item"><span class="label">Trial Start Date:</span> ${formData['Trial Start Date'] || 'N/A'}</div>
       ${formData['Service Employee'] ? `<div class="info-item"><span class="label">Service Employee:</span> ${formData['Service Employee']}</div>` : ''}
+      ${formData['How Did You Hear About Us'] ? `<div class="info-item"><span class="label">How They Heard About Us:</span> ${formData['How Did You Hear About Us']}</div>` : ''}
     </div>
   </div>
   
-  <div class="section">
+${hasHealthAnswers ? `  <div class="section">
     <div class="section-header">HEALTH QUESTIONNAIRE</div>
     <table class="health-table">
       <tr>
@@ -220,16 +242,16 @@ async function generatePDF(formData) {
         <td>${formData['Are you Aware of Any Reason you Should Not Exercise Without Medical Supervision'] || 'N/A'}</td>
       </tr>
     </table>
-  </div>
+  </div>` : ''}
   
-  <div class="section">
+${hasFitnessAnswers ? `  <div class="section">
     <div class="section-header">FITNESS PROFILE</div>
     <div class="info-grid">
       <div class="info-item"><span class="label">Current Workout Routine:</span> ${formData['What is Your Current Workout Routine?'] || 'N/A'}</div>
       <div class="info-item"><span class="label">Follows Diet/Meal Plan:</span> ${formData['Do You Follow a Diet / Meal Plan?'] || 'N/A'}</div>
       <div class="info-item"><span class="label">Biggest Obstacles:</span> ${formData['What are your Biggest Obstacles?'] || 'N/A'}</div>
       <div class="info-item"><span class="label">What Would Help Most:</span> ${formData['What Would Help You the Most?'] || 'N/A'}</div>
-    </div>
+    </div>` : ''}
   </div>
   
   <div class="section">

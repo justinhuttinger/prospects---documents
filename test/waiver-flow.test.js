@@ -191,3 +191,36 @@ test('/webhook/ghl-form uploads a photo sent under any of its three key spelling
     );
   }
 });
+
+test('the survey path still renders the health and fitness sections', async () => {
+  stubHappyPath();
+
+  await post('/webhook/ghl-form', {
+    ...SURVEY,
+    'Has a Doctor Ever Said You Have a Heart Condition & Recommended Only Medically Supervised Activity?': 'No',
+    'Do You Experience Chest Pain During Physical Activity?': 'No',
+    'What is Your Current Workout Routine?': 'Lifting three days a week',
+  });
+
+  const pdf = calls.find(c => c.url.includes('pdfshift.io'));
+  // The kiosk dropped these questions; the GHL trial survey still asks them and
+  // must keep getting them on the signed document.
+  assert.ok(pdf.body.source.includes('HEALTH QUESTIONNAIRE'));
+  assert.ok(pdf.body.source.includes('FITNESS PROFILE'));
+  assert.ok(pdf.body.source.includes('Lifting three days a week'));
+});
+
+test('a survey submission with no health answers omits the section', async () => {
+  stubHappyPath();
+
+  await post('/webhook/ghl-form', {
+    first_name: 'Dana',
+    last_name: 'Reyes',
+    email: 'dana@example.com',
+    phone: '5035551212',
+    location: { name: 'West Coast Strength - Salem' },
+  });
+
+  const pdf = calls.find(c => c.url.includes('pdfshift.io'));
+  assert.ok(!pdf.body.source.includes('HEALTH QUESTIONNAIRE'));
+});

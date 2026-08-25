@@ -103,19 +103,7 @@ const SUBMISSION = {
   photoDataUrl: PNG,
   signatureDataUrl: PNG,
   agreed: true,
-  health: {
-    heartCondition: false,
-    chestPain: false,
-    boneOrJoint: true,
-    bloodPressureMeds: false,
-    otherReason: false,
-  },
-  fitness: {
-    routine: 'Lifting three days a week',
-    dietPlan: true,
-    obstacles: 'Time',
-    helpMost: 'A plan',
-  },
+  howHeard: 'Friend or Family Referral',
 };
 
 test.before(async () => {
@@ -418,10 +406,90 @@ test('the completed webhook carries flat keys GHL can map', async () => {
     assert.strictEqual(hook.body.stage, 'completed');
     assert.strictEqual(hook.body.waiver_signed, 'yes');
     assert.strictEqual(hook.body.photo_captured, 'yes');
-    assert.strictEqual(hook.body.health_bone_or_joint, 'Yes');
-    assert.strictEqual(hook.body.health_chest_pain, 'No');
-    assert.strictEqual(hook.body.fitness_routine, 'Lifting three days a week');
+    assert.strictEqual(hook.body.how_heard, 'Friend or Family Referral');
+    // The health questionnaire and trainer questions are gone from the kiosk.
+    assert.ok(!Object.keys(hook.body).some(k => k.startsWith('health_')));
+    assert.ok(!Object.keys(hook.body).some(k => k.startsWith('fitness_')));
   } finally {
     salem.kioskWaiverCompletedWebhookUrl = '';
   }
+});
+
+// --- round 2: required photo, how-heard, address suggest --------------------
+
+test('POST /submit refuses a check-in with no photo', async () => {
+  stubFullSubmitChain();
+
+  const res = await request('POST', '/api/kiosk-waiver/submit', {
+    ...SUBMISSION,
+    photoDataUrl: '',
+  });
+
+  assert.strictEqual(res.status, 400);
+  assert.strictEqual(res.body.error, 'missing_photo');
+  assert.strictEqual(
+    calls.filter(c => c.url.includes('/prospects')).length,
+    0,
+    'nothing reaches ABC without a photo'
+  );
+});
+
+test('POST /submit carries how-they-heard into the waiver PDF', async () => {
+  stubFullSubmitChain();
+
+  await request('POST', '/api/kiosk-waiver/submit', SUBMISSION);
+
+  const pdf = calls.find(c => c.url.includes('pdfshift.io'));
+  assert.match(pdf.body.source, /How They Heard About Us/);
+  assert.match(pdf.body.source, /Friend or Family Referral/);
+});
+
+test('the kiosk waiver PDF omits the health and trainer sections entirely', async () => {
+  stubFullSubmitChain();
+
+  await request('POST', '/api/kiosk-waiver/submit', SUBMISSION);
+
+  const pdf = calls.find(c => c.url.includes('pdfshift.io'));
+  // A table of "N/A" on a signed legal document reads as a broken form.
+  assert.ok(!pdf.body.source.includes('HEALTH QUESTIONNAIRE'));
+  assert.ok(!pdf.body.source.includes('FITNESS PROFILE'));
+  assert.ok(pdf.body.source.includes('WAIVER AGREEMENT'), 'the waiver itself stays');
+});
+
+test('GET /address-suggest returns suggestions and never fails the step', async () => {
+  respond(({ url }) =>
+    url.includes('photon.komoot.io')
+      ? {
+          status: 200,
+          data: {
+            features: [
+              {
+                properties: {
+                  housenumber: '482', street: 'Liberty St NE', city: 'Salem',
+                  state: 'Oregon', postcode: '97301', countrycode: 'US',
+                },
+              },
+            ],
+          },
+        }
+      : null
+  );
+
+  const res = await request('GET', '/api/kiosk-waiver/address-suggest?q=482%20Liberty');
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.suggestions[0].line1, '482 Liberty St NE');
+  assert.strictEqual(res.body.suggestions[0].state, 'OR');
+});
+
+test('GET /address-suggest answers 200 with an empty list when the provider dies', async () => {
+  respond(({ url }) => {
+    if (url.includes('photon.komoot.io')) throw new Error('ETIMEDOUT');
+    return null;
+  });
+
+  const res = await request('GET', '/api/kiosk-waiver/address-suggest?q=482%20Liberty');
+
+  assert.strictEqual(res.status, 200, 'the field degrades to a plain input');
+  assert.deepStrictEqual(res.body.suggestions, []);
 });

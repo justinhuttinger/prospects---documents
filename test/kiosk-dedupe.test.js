@@ -281,3 +281,42 @@ test('the front-desk alert says who they actually are', async () => {
   assert.strictEqual(fresh.body.text, 'NEW PROFILE');
   assert.strictEqual(fresh.body.color, 'Purple');
 });
+
+// --- a matched member skips what we already hold -----------------------------
+
+test('a matched member can submit without a photo', async () => {
+  stubPipeline();
+
+  // The kiosk skips the camera step for them, so no photo arrives. Requiring
+  // one would make a returning member impossible to check in.
+  const { photoDataUrl, ...noPhoto } = SUBMISSION;
+  const res = await request('POST', '/api/kiosk-waiver/submit', {
+    ...noPhoto,
+    abcMemberId: 'ABC-EXISTING',
+  });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.abcMemberId, 'ABC-EXISTING');
+  assert.strictEqual(res.body.steps.picture.skipped, true, 'nothing to upload');
+});
+
+test('a new member still has to provide a photo', async () => {
+  stubPipeline();
+
+  const { photoDataUrl, ...noPhoto } = SUBMISSION;
+  const res = await request('POST', '/api/kiosk-waiver/submit', noPhoto);
+
+  assert.strictEqual(res.status, 400);
+  assert.strictEqual(res.body.error, 'missing_photo');
+});
+
+test('a matched member still gets the waiver and the check-in', async () => {
+  stubPipeline();
+
+  const { photoDataUrl, ...noPhoto } = SUBMISSION;
+  await request('POST', '/api/kiosk-waiver/submit', { ...noPhoto, abcMemberId: 'ABC-EXISTING' });
+
+  // Skipping the photo must not skip the reason they are standing here.
+  assert.ok(calls.some(c => c.url.includes('/members/documents/ABC-EXISTING')));
+  assert.ok(calls.some(c => c.url.includes('/members/checkins/ABC-EXISTING')));
+});

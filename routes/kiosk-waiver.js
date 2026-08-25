@@ -202,7 +202,13 @@ router.post('/submit', async (req, res) => {
 
   if (!firstName || !lastName) return res.status(400).json({ ok: false, error: 'missing_name' });
   if (!email && !phone) return res.status(400).json({ ok: false, error: 'missing_contact_info' });
-  if (!body.photoDataUrl) return res.status(400).json({ ok: false, error: 'missing_photo' });
+  // A photo is only required when we are creating a profile. Attaching to an
+  // existing ABC record means they already have one, and the kiosk skips the
+  // camera step entirely for them.
+  const attachingToExisting = !!str(body.abcMemberId);
+  if (!attachingToExisting && !body.photoDataUrl) {
+    return res.status(400).json({ ok: false, error: 'missing_photo' });
+  }
   if (!body.signatureDataUrl) return res.status(400).json({ ok: false, error: 'missing_signature' });
   if (!body.agreed) return res.status(400).json({ ok: false, error: 'waiver_not_accepted' });
 

@@ -42,6 +42,14 @@ async function generatePDF(formData) {
         console.error('Error downloading signature:', error.message);
       }
     }
+    // Who signed, when that is not the person the waiver is about. Empty for
+    // an adult, which leaves the block exactly as it was.
+    const guardianName = String(formData.guardian_name || '').trim();
+    const memberName = [formData.first_name, formData.last_name]
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .join(' ');
+
     // Fallback: kiosk submits the drawn signature inline as a data URL,
     // not as a hosted file URL. Use it directly when present.
     if (!signatureBase64 && typeof formData.signature_data_url === 'string'
@@ -279,9 +287,13 @@ ${hasFitnessAnswers ? `  <div class="section">
     <div class="section-header">SIGNATURE</div>
     <div class="info-item"><span class="label">Signed Date:</span> ${new Date().toLocaleDateString()}</div>
     <div class="info-item"><span class="label">Location:</span> ${formData.location?.name || 'N/A'}</div>
+    ${guardianName ? `
+      <div class="info-item"><span class="label">Signed By:</span> ${guardianName}, parent or guardian</div>
+      <div class="info-item"><span class="label">On Behalf Of:</span> ${memberName} (under 18)</div>
+    ` : ''}
     ${signatureBase64 ? `
       <div style="margin-top: 20px;">
-        <div class="label">Digital Signature:</div>
+        <div class="label">${guardianName ? `Digital Signature of ${guardianName}:` : 'Digital Signature:'}</div>
         <img src="${signatureBase64}" class="signature-img" alt="Signature">
         <div class="signature-info">Timestamp: ${formData['Legal Signature']?.meta?.timestamp ? new Date(parseInt(formData['Legal Signature'].meta.timestamp) * 1000).toLocaleString() : new Date().toLocaleString()}</div>
       </div>

@@ -238,6 +238,12 @@ router.post('/submit', async (req, res) => {
     member_profile_photo: body.photoDataUrl || '',
     signature_data_url: body.signatureDataUrl,
 
+    // A minor cannot sign their own waiver, so the adult with them does. The
+    // document has to name who actually signed, or it says a 15-year-old
+    // released us from liability on their own authority.
+    guardian_name: str(body.guardianName),
+    signed_by: str(body.signedBy),
+
     'Trial Start Date': str(body.trialStartDate) || new Date().toISOString().split('T')[0],
     'Service Employee': str(body.serviceEmployee),
 

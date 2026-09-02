@@ -31,6 +31,18 @@ const {
   sanitizeDocumentName,
 } = require('./sanitize');
 
+/**
+ * Did ABC refuse this because of a field value, as opposed to auth, a network
+ * blip, or ABC being down? Only a value problem is worth retrying with
+ * different values; retrying a 401 just calls it twice.
+ */
+function isAbcValidationFailure(err) {
+  if (!err) return false;
+  // createProspect attaches ABC's own body when it refuses a prospect.
+  if (!err.abcResponse) return false;
+  return /not valid|invalid|required|must be|cannot|length|format/i.test(err.message || '');
+}
+
 const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
 const GHL_API_VERSION = '2021-07-28';
 
@@ -53,7 +65,7 @@ function resolveClub(formData) {
   );
 }
 
-function buildProspectPersonal(formData) {
+function buildProspectPersonal(formData, club = {}) {
   const phone = formatPhoneNumber(formData.phone);
   return {
     firstName: sanitizeName(formData.first_name, 'Unknown'),
@@ -63,7 +75,10 @@ function buildProspectPersonal(formData) {
     mobilePhone: phone,
     addressLine1: sanitizeAddress(formData.address1, 'N/A'),
     city: sanitizeName(formData.city, 'Unknown'),
-    state: getStateCode(formData.state),
+    // The club's own state when the form's answer is not a state. ABC refuses
+    // the WHOLE prospect over one bad code, so guessing is worse than
+    // defaulting to the state the gym is standing in.
+    state: getStateCode(formData.state, club.state || ''),
     postalCode: formData.postal_code || '',
     birthDate: formData.date_of_birth
       ? new Date(formData.date_of_birth).toISOString().split('T')[0]
@@ -147,14 +162,56 @@ async function processWaiverSubmission(formData) {
     prospectData = { reused: true, memberId: existingMemberId };
     created = false;
   } else {
-    const result = await abc.createProspect(clubNumber, {
-      personal: buildProspectPersonal(formData),
-      agreement: {
-        beginDate: formData['Trial Start Date'] || new Date().toISOString().split('T')[0],
-      },
-    });
+    const beginDate =
+      formData['Trial Start Date'] || new Date().toISOString().split('T')[0];
+
+    let result;
+    try {
+      result = await abc.createProspect(clubNumber, {
+        personal: buildProspectPersonal(formData, club),
+        agreement: { beginDate },
+      });
+    } catch (err) {
+      // ABC rejects the entire prospect over a single unusable field and names
+      // the rule, not the field, so there is no reliable way to know in advance
+      // which value it will refuse. One retry with the optional fields dropped
+      // is worth it: the alternative is what happened on 2026-09-01, where the
+      // person never reached ABC at all and nobody noticed until the front desk
+      // went looking for them.
+      //
+      // Name, email and date of birth are kept - a prospect without them is not
+      // worth creating. Address, phone and gender are not worth losing a member
+      // over, so the retry sends the club's state and nothing else optional.
+      if (!isAbcValidationFailure(err)) throw err;
+
+      const minimal = buildProspectPersonal(formData, club);
+      const retried = {
+        ...minimal,
+        addressLine1: 'N/A',
+        city: 'Unknown',
+        state: club.state || '',
+        postalCode: '',
+        primaryPhone: '',
+        mobilePhone: '',
+        gender: '',
+      };
+      console.warn(
+        `[waiver] ABC refused the prospect for ${club.clubName}, retrying without ` +
+        `optional fields. Original refusal: ${err.message}`
+      );
+      result = await abc.createProspect(clubNumber, {
+        personal: retried,
+        agreement: { beginDate },
+      });
+      // Recorded so the caller can see the record is thinner than the form was.
+      result.degraded = true;
+      result.originalRefusal = err.message;
+    }
+
     prospectId = result.prospectId;
-    prospectData = result.data;
+    prospectData = result.degraded
+      ? { ...result.data, degraded: true, originalRefusal: result.originalRefusal }
+      : result.data;
     created = true;
   }
 
@@ -206,6 +263,7 @@ async function processWaiverSubmission(formData) {
 
 module.exports = {
   processWaiverSubmission,
+  isAbcValidationFailure,
   resolveClub,
   buildProspectPersonal,
   stampGhlContact,

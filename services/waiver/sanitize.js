@@ -42,12 +42,51 @@ function formatPhoneNumber(phone) {
   return national.length === 10 ? national : '';
 }
 
-function getStateCode(state) {
-  if (!state) return '';
-  const cleanState = String(state).trim();
-  if (!cleanState) return '';
-  if (cleanState.length === 2) return cleanState.toUpperCase();
-  return STATE_CODES[cleanState] || cleanState.substring(0, 2).toUpperCase();
+// Territories and DC are valid ABC state codes too, and somebody typing "DC"
+// or "PR" is not an error.
+const EXTRA_CODES = ['DC', 'PR', 'VI', 'GU', 'AS', 'MP'];
+
+const VALID_STATE_CODES = new Set(
+  Object.values(STATE_CODES).concat(EXTRA_CODES)
+);
+
+const STATE_NAMES_LOWER = {};
+for (const [name, code] of Object.entries(STATE_CODES)) {
+  STATE_NAMES_LOWER[name.toLowerCase()] = code;
+}
+STATE_NAMES_LOWER['district of columbia'] = 'DC';
+STATE_NAMES_LOWER['washington dc'] = 'DC';
+STATE_NAMES_LOWER['washington d.c.'] = 'DC';
+STATE_NAMES_LOWER['puerto rico'] = 'PR';
+
+/**
+ * A US state code ABC will accept, or `fallback`.
+ *
+ * The old version ended with `substring(0, 2).toUpperCase()`, which turned any
+ * unrecognised answer into a plausible-looking code: "Not Sure" became "NO",
+ * "United States" became "UN", "N/A" became "N/", a postcode became "98". ABC
+ * rejects the code AND THE WHOLE PROSPECT with "State or province code provided
+ * is not valid", so one unusable answer in a form field cost us the entire
+ * person -- three times on 2026-09-01 alone.
+ *
+ * Now nothing is invented: a value is either recognisably a state or it is not,
+ * and an unrecognised one falls back to the club's own state rather than to a
+ * guess that is certain to be refused.
+ */
+function getStateCode(state, fallback = '') {
+  const cleanState = String(state == null ? '' : state).trim();
+  if (!cleanState) return fallback;
+
+  // Trailing punctuation is common in free text ("Ore.", "OR.").
+  const bare = cleanState.replace(/[.]+$/, '').trim();
+
+  if (bare.length === 2) {
+    const upper = bare.toUpperCase();
+    return VALID_STATE_CODES.has(upper) ? upper : fallback;
+  }
+
+  const byName = STATE_NAMES_LOWER[bare.toLowerCase()];
+  return byName || fallback;
 }
 
 // Names: 1-19 alphanumerics, apostrophes, hyphens, spaces. Cannot begin with a
@@ -100,6 +139,7 @@ function sanitizeDocumentName(firstName, lastName) {
 }
 
 module.exports = {
+  VALID_STATE_CODES,
   STATE_CODES,
   formatPhoneNumber,
   getStateCode,

@@ -79,8 +79,44 @@ async function resolveWebhookUrl(club, field) {
   return dbValue || fileValue;
 }
 
+/**
+ * The club's own contact details, used ONLY to replace a prospect's value that
+ * ABC would refuse. Same table, same cache, same file fallback as the webhooks.
+ *
+ * Returns bare values, not a prospect: the caller decides which of them are
+ * worth substituting, because that judgement differs per field. A missing state
+ * is worth replacing every time; a street address is only worth replacing when
+ * the alternative is losing the record.
+ *
+ * @param {object} club a clubs-config.json club object
+ * @returns {Promise<{address1: string, city: string, state: string, postalCode: string, phone: string}>}
+ */
+async function resolveClubFallbacks(club) {
+  const overrides = await loadOverrides();
+  const row = overrides[String(club && club.clubNumber)] || {};
+
+  const pick = (column, fileKey) =>
+    String(row[column] || (club && club[fileKey]) || '').trim();
+
+  return {
+    address1: pick('fallback_address1', 'address1'),
+    city: pick('fallback_city', 'city'),
+    // clubs-config.json carries `state` for every club, so this is populated
+    // even before anyone opens the admin screen.
+    state: pick('fallback_state', 'state'),
+    postalCode: pick('fallback_postal_code', 'postalCode'),
+    phone: pick('fallback_phone', 'phone'),
+  };
+}
+
 function invalidate() {
   cache = null;
 }
 
-module.exports = { resolveWebhookUrl, invalidate, FIELD_TO_COLUMN, TTL_MS };
+module.exports = {
+  resolveWebhookUrl,
+  resolveClubFallbacks,
+  invalidate,
+  FIELD_TO_COLUMN,
+  TTL_MS,
+};

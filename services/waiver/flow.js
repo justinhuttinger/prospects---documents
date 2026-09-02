@@ -21,6 +21,7 @@
 const axios = require('axios');
 
 const clubs = require('./clubs');
+const { resolveClubFallbacks } = require('./integrations');
 const abc = require('./abc');
 const { generatePDF } = require('./pdf');
 const {
@@ -65,21 +66,29 @@ function resolveClub(formData) {
   );
 }
 
-function buildProspectPersonal(formData, club = {}) {
-  const phone = formatPhoneNumber(formData.phone);
+function buildProspectPersonal(formData, club = {}, fallbacks = {}) {
+  // The member's own number when ABC will take it, the club's when it will not.
+  // ABC accepts a prospect with no phone at all, so this is the least important
+  // of the substitutions - but a reachable club number beats a blank field.
+  const phone =
+    formatPhoneNumber(formData.phone) || formatPhoneNumber(fallbacks.phone);
   return {
     firstName: sanitizeName(formData.first_name, 'Unknown'),
     lastName: sanitizeName(formData.last_name, 'Unknown'),
     email: formData.email,
     primaryPhone: phone,
     mobilePhone: phone,
-    addressLine1: sanitizeAddress(formData.address1, 'N/A'),
-    city: sanitizeName(formData.city, 'Unknown'),
+    // 'N/A' and 'Unknown' remain the last resort. The club's address is used
+    // only when the member gave none: a real answer is never overwritten, and
+    // filing somebody at the gym's address is a cost worth paying only against
+    // losing the record entirely.
+    addressLine1: sanitizeAddress(formData.address1 || fallbacks.address1, 'N/A'),
+    city: sanitizeName(formData.city || fallbacks.city, 'Unknown'),
     // The club's own state when the form's answer is not a state. ABC refuses
     // the WHOLE prospect over one bad code, so guessing is worse than
     // defaulting to the state the gym is standing in.
-    state: getStateCode(formData.state, club.state || ''),
-    postalCode: formData.postal_code || '',
+    state: getStateCode(formData.state, fallbacks.state || club.state || ''),
+    postalCode: formData.postal_code || fallbacks.postalCode || '',
     birthDate: formData.date_of_birth
       ? new Date(formData.date_of_birth).toISOString().split('T')[0]
       : '',
@@ -144,6 +153,15 @@ async function processWaiverSubmission(formData) {
 
   const clubNumber = String(club.clubNumber);
 
+  // Admin -> Club Info, falling back to clubs-config.json. Never fatal: a
+  // Supabase blip must not stop a waiver, it just means fewer substitutions.
+  let fallbacks = {};
+  try {
+    fallbacks = await resolveClubFallbacks(club);
+  } catch (err) {
+    console.warn('[waiver] club fallbacks unavailable:', err.message);
+  }
+
   // 1. The ABC record.
   //
   // When the caller already matched this person in ABC we reuse their id
@@ -168,7 +186,7 @@ async function processWaiverSubmission(formData) {
     let result;
     try {
       result = await abc.createProspect(clubNumber, {
-        personal: buildProspectPersonal(formData, club),
+        personal: buildProspectPersonal(formData, club, fallbacks),
         agreement: { beginDate },
       });
     } catch (err) {
@@ -184,15 +202,19 @@ async function processWaiverSubmission(formData) {
       // over, so the retry sends the club's state and nothing else optional.
       if (!isAbcValidationFailure(err)) throw err;
 
-      const minimal = buildProspectPersonal(formData, club);
+      // The retry leans entirely on the club's own details rather than
+      // blanking the address: a prospect filed at the gym is still findable,
+      // and by this point the alternative is no ABC record at all.
+      const minimal = buildProspectPersonal(formData, club, fallbacks);
+      const retryPhone = formatPhoneNumber(fallbacks.phone);
       const retried = {
         ...minimal,
-        addressLine1: 'N/A',
-        city: 'Unknown',
-        state: club.state || '',
-        postalCode: '',
-        primaryPhone: '',
-        mobilePhone: '',
+        addressLine1: sanitizeAddress(fallbacks.address1, 'N/A'),
+        city: sanitizeName(fallbacks.city, 'Unknown'),
+        state: fallbacks.state || club.state || '',
+        postalCode: fallbacks.postalCode || '',
+        primaryPhone: retryPhone,
+        mobilePhone: retryPhone,
         gender: '',
       };
       console.warn(

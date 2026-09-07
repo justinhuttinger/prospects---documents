@@ -16,15 +16,33 @@
 const axios = require('axios');
 const path = require('path');
 
-async function generatePDF(formData) {
+const { brandFor } = require('./brand');
+
+// The existing WCS file is named .png but is actually WEBP, which is why the
+// original hardcoded that mime type. Deriving it from the extension would have
+// broken that file, so the real type is looked up per brand asset.
+const LOGO_MIME = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+};
+
+async function generatePDF(formData, club = null) {
   try {
+    // Which company's waiver this is. Milwaukie trades as East Side Athletic
+    // Club, and the release has to name the entity the member is actually
+    // releasing rather than whichever one the template was written for.
+    const brand = brandFor(club);
+
     // Load and encode logo
     const fs = require('fs');
-    const logoPath = path.join(__dirname, '..', '..', 'logo.png');
+    const logoPath = path.join(__dirname, '..', '..', brand.pdfLogo);
     let logoBase64 = '';
     try {
       const logoBuffer = fs.readFileSync(logoPath);
-      logoBase64 = `data:image/webp;base64,${logoBuffer.toString('base64')}`;
+      logoBase64 = `data:${brand.pdfLogoMime};base64,${logoBuffer.toString('base64')}`;
     } catch (error) {
       console.error('Logo not found, using placeholder');
       logoBase64 = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIGZpbGw9IiNkZGQiLz48L3N2Zz4=';
@@ -128,7 +146,7 @@ async function generatePDF(formData) {
     
     .red-line {
       height: 3px;
-      background-color: #E31837;
+      background-color: ${brand.accent};
       margin: 15px 0 20px 0;
     }
     
@@ -203,9 +221,9 @@ async function generatePDF(formData) {
 </head>
 <body>
   <div class="header">
-    <img src="${logoBase64}" class="logo" alt="WCS Logo">
+    <img src="${logoBase64}" class="logo" alt="${brand.name} logo">
     <div>
-      <h1>WEST COAST STRENGTH</h1>
+      <h1>${brand.pdfTitle}</h1>
       <h2>LIABILITY WAIVER</h2>
     </div>
   </div>
@@ -265,7 +283,7 @@ ${hasFitnessAnswers ? `  <div class="section">
   <div class="section">
     <div class="section-header">WAIVER AGREEMENT</div>
     <div class="waiver-text">
-      I have enrolled for a tour and/or membership offered by West Coast Strength, LLC. West Coast Strength is a strength and conditioning facility with various programs and training options, including but not limited to personal training and strength training.<br><br>
+      I have enrolled for a tour and/or membership offered by ${brand.legalName}. ${brand.legalShortName} is a strength and conditioning facility with various programs and training options, including but not limited to personal training and strength training.<br><br>
       
       I recognize that the program may involve strenuous physical activity including, but not limited to, muscle strength and endurance training, cardiovascular conditioning and training, and other various fitness activities. I hereby affirm that I am in good physical condition and do not suffer from any known disability or condition which would prevent or otherwise limit my full participation in this physical program.<br><br>
       
@@ -273,11 +291,11 @@ ${hasFitnessAnswers ? `  <div class="section">
       
       <strong>I ASSUME FULL RESPONSIBILITY FOR ANY RISKS OR LOSS, PROPERTY DAMAGE, OR PERSONAL INJURY, INCLUDING DEATH</strong>, that may be sustained by me, or loss or damage to property owned by me, as a result of participation in this program.<br><br>
       
-      I hereby release, waive, discharge, and covenant not to sue West Coast Strength, LLC and/or any of its officers, servants, agents, consultants, volunteers, and/or employees from any and all liability, claims, demands, actions, and causes of action whatsoever arising out of or related to any loss, damage, or injury (including, but not limited to, death) that may be sustained by me, or to any property belonging to me, while participating in this program, or while on or upon the premises where the event is being conducted including, but not limited to, any claims arising under negligence.<br><br>
+      I hereby release, waive, discharge, and covenant not to sue ${brand.legalName} and/or any of its officers, servants, agents, consultants, volunteers, and/or employees from any and all liability, claims, demands, actions, and causes of action whatsoever arising out of or related to any loss, damage, or injury (including, but not limited to, death) that may be sustained by me, or to any property belonging to me, while participating in this program, or while on or upon the premises where the event is being conducted including, but not limited to, any claims arising under negligence.<br><br>
       
       It is my expressed intent that this waiver and release shall bind any and all members of my family including, but not limited to, my spouse, if I am alive, and my heirs, assigns, and personal representatives, if I am deceased. It is also my expressed intent that this waiver and release shall also be deemed a full release, waiver, discharge, and covenant not to sue insofar as my aforementioned family members, heirs, assigns, and personal representatives are concerned.<br><br>
       
-      I hereby further agree that this waiver and release shall be constructed in accordance with the laws of the State of Oregon.<br><br>
+      I hereby further agree that this waiver and release shall be constructed in accordance with the laws of the State of ${brand.governingState}.<br><br>
       
       <strong>I HAVE READ THIS AGREEMENT, FULLY UNDERSTAND ITS TERMS, UNDERSTAND THAT I HAVE GIVEN UP SUBSTANTIAL RIGHTS BY SIGNING IT, AND HAVE SIGNED IT FREELY AND VOLUNTARILY WITHOUT ANY INDUCEMENT, ASSURANCE OR GUARANTEE BEING MADE TO ME AND INTEND MY SIGNATURE TO BE A COMPLETE AND UNCONDITIONAL RELEASE OF ALL LIABILITY TO THE GREATEST EXTENT ALLOWED BY LAW.</strong>
     </div>

@@ -238,7 +238,7 @@ async function processWaiverSubmission(formData) {
   }
 
   // 2. Waiver PDF — fatal on failure; the signed document is the deliverable.
-  const pdfBuffer = await generatePDF(formData);
+  const pdfBuffer = await generatePDF(formData, club);
 
   // 3. Document + alert together: neither depends on the other.
   const [document, alert] = await Promise.all([

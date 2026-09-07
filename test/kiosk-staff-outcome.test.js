@@ -176,6 +176,9 @@ test('locations carry the brand and the per-club kiosk behaviour', async () => {
   const milwaukie = by('milwaukie');
   assert.strictEqual(milwaukie.brand.name, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.brand.accent, '#111111');
+  // The East Side lockup is over 3x as wide as it is tall, so it cannot share
+  // the square badge's width and still be legible across a lobby.
+  assert.strictEqual(milwaukie.brand.logoWidth, 'clamp(280px, 46vh, 520px)');
   assert.strictEqual(milwaukie.displayName, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.kiosk.staffOutcome, true);
   assert.strictEqual(milwaukie.kiosk.tourQueue, false);
@@ -183,6 +186,7 @@ test('locations carry the brand and the per-club kiosk behaviour', async () => {
   const salem = by('salem');
   assert.strictEqual(salem.brand.name, 'West Coast Strength');
   assert.strictEqual(salem.brand.accent, '#e31e24');
+  assert.strictEqual(salem.brand.logoWidth, 'clamp(150px, 26vh, 260px)', 'the badge is unchanged');
   assert.strictEqual(salem.displayName, 'West Coast Strength Salem');
   assert.strictEqual(salem.kiosk.staffOutcome, false, 'unchanged for every other club');
   assert.strictEqual(salem.kiosk.tourQueue, true);

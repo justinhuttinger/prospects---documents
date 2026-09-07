@@ -122,9 +122,14 @@ async function generatePDF(formData, club = null) {
       padding-bottom: 10px;
     }
     
+    /* Height-driven, so a wide lockup keeps its proportions. The old fixed
+       80x80 was fine for the square WCS badge and would have squashed East
+       Side's, which is over three times as wide as it is tall. A square mark
+       still renders 80x80. */
     .logo {
-      width: 80px;
       height: 80px;
+      width: auto;
+      max-width: 320px;
       margin-right: 20px;
     }
     

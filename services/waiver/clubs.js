@@ -15,7 +15,6 @@ const fs = require('fs');
 const path = require('path');
 
 const { brandFor, displayNameFor } = require('./brand');
-const { DEFAULT_PASS_DAYS } = require('../kiosk/outcome');
 
 const CLUBS_FILE = path.join(__dirname, '..', '..', 'clubs-config.json');
 
@@ -68,9 +67,6 @@ function kioskFlags(club) {
   return {
     tourQueue: k.tourQueue !== false,
     staffOutcome: k.staffOutcome === true,
-    // Outcome -> days of ABC access it grants. A club can lengthen a trial, or
-    // drop an outcome out of the map entirely so it writes nothing.
-    passDays: { ...DEFAULT_PASS_DAYS, ...(k.passDays || {}) },
   };
 }
 
@@ -86,7 +82,7 @@ function publicList() {
     brand: (({ name, displayName, logo, logoWidth, accent, accentHot }) => ({
       name, displayName, logo, logoWidth, accent, accentHot,
     }))(brandFor(c)),
-    kiosk: (({ tourQueue, staffOutcome }) => ({ tourQueue, staffOutcome }))(kioskFlags(c)),
+    kiosk: kioskFlags(c),
   }));
 }
 

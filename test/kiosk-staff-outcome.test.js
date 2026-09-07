@@ -25,21 +25,53 @@ const SUPABASE_MODULE = path.join(ROOT, 'lib', 'supabase.js');
 let integrationRows = [];
 let tourConfigRow = null;
 let rpcRows = [];
+let outcomeRows = null;      // null = serve the live vocabulary below
+let insertedTours = [];
+let insertFails = false;
 
-// A query builder thin enough to satisfy the three call shapes in play:
-// .select() awaited directly, .select().eq().eq() awaited, and .maybeSingle().
+// The live tour_outcomes rows. VIP is 14 days, not 7 -- and Only Tour and
+// Custom Pass both have a null length while meaning opposite things, which is
+// why grants_pass has to be read instead of the number.
+const OUTCOME_ROWS = [
+  { outcome: 'Membership Sale', label: 'Membership Sale', is_sale: true, grants_pass: false, default_pass_days: null, sort_order: 10 },
+  { outcome: 'Started Trial', label: 'Started Trial', is_sale: false, grants_pass: true, default_pass_days: 7, sort_order: 20 },
+  { outcome: 'Started VIP Pass', label: 'Started VIP Pass', is_sale: false, grants_pass: true, default_pass_days: 14, sort_order: 30 },
+  { outcome: 'Only Tour', label: 'Only Tour', is_sale: false, grants_pass: false, default_pass_days: null, sort_order: 40 },
+  { outcome: 'Custom Pass', label: 'Custom Pass', is_sale: false, grants_pass: true, default_pass_days: null, sort_order: 50 },
+];
+
+// A query builder thin enough for the call shapes in play: .select() awaited
+// directly, .select().eq().eq(), .maybeSingle(), .order(), and the insert chain.
 function table(name) {
   const result = () => {
     if (name === 'club_integrations') return { data: integrationRows, error: null };
     if (name === 'tour_location_config') return { data: tourConfigRow, error: null };
+    if (name === 'tour_outcomes') return { data: outcomeRows === null ? OUTCOME_ROWS : outcomeRows, error: null };
+    if (name === 'locations') return { data: { id: 'LOC-UUID-1' }, error: null };
+    if (name === 'abc_employees') {
+      return { data: [{ employee_id: 'EMP-77', full_name: 'Felix Reyes', status: 'active' }], error: null };
+    }
     return { data: [], error: null };
   };
   const chain = {
     eq: () => chain,
+    order: () => chain,
     maybeSingle: async () => result(),
+    single: async () => result(),
     then: (resolve, reject) => Promise.resolve(result()).then(resolve, reject),
   };
-  return { select: () => chain };
+  return {
+    select: () => chain,
+    insert: row => {
+      if (name === 'tour_intakes') {
+        if (insertFails) {
+          return { select: () => ({ single: async () => ({ data: null, error: { message: 'insert refused' } }) }) };
+        }
+        insertedTours.push(row);
+      }
+      return { select: () => ({ single: async () => ({ data: { id: 'TOUR-1' }, error: null }) }) };
+    },
+  };
 }
 
 require.cache[require.resolve(SUPABASE_MODULE)] = {
@@ -116,7 +148,11 @@ test.beforeEach(() => {
   }];
   tourConfigRow = null;
   rpcRows = [];
+  outcomeRows = null;
+  insertedTours = [];
+  insertFails = false;
   require('../services/waiver/integrations').invalidate();
+  require('../services/kiosk/outcomes').invalidate();
 });
 
 function request(method, urlPath, body) {
@@ -470,7 +506,12 @@ const afterOutcome = () => calls.slice(outcomeStart);
 async function submitThenOutcome(outcomeBody) {
   stubProspect();
   stubAbc();
-  const submit = await request('POST', '/api/kiosk-waiver/submit', MILWAUKIE);
+  // A real session always carries the contact id /lead returned, and the
+  // reporting row needs it to join the tour to the GHL contact.
+  const submit = await request('POST', '/api/kiosk-waiver/submit', {
+    ...MILWAUKIE,
+    contactId: 'GHL-9',
+  });
   outcomeStart = calls.length;
   return request('POST', '/api/kiosk-waiver/outcome', {
     outcomeTicket: submit.body.outcomeTicket,
@@ -570,4 +611,145 @@ test('an ABC outage costs the pass, never the outcome', async () => {
   assert.strictEqual(res.body.pass.granted, false);
   assert.strictEqual(hookCalls().length, 1, 'the tour still reached GHL');
   assert.strictEqual(hookCalls()[0].body.tour_outcome, 'Started Trial');
+});
+
+// --- the vocabulary ---------------------------------------------------------
+//
+// tour_outcomes is the portal's source of truth: which outcomes exist, which
+// grant ABC access, and for how long. Hardcoding any of it here is how the two
+// halves drift, and is how a VIP pass ended up seven days instead of fourteen.
+
+test('the outcome list and its rules come from the table', async () => {
+  const res = await request('GET', '/api/kiosk-waiver/staff?location=milwaukie');
+
+  assert.deepStrictEqual(res.body.outcomes, [
+    'Membership Sale', 'Started Trial', 'Started VIP Pass', 'Only Tour', 'Custom Pass',
+  ], 'in the order sort_order asks for');
+
+  const vip = res.body.outcomeRules.find(r => r.outcome === 'Started VIP Pass');
+  assert.strictEqual(vip.defaultPassDays, 14, 'a VIP pass is fourteen days');
+  assert.strictEqual(vip.grantsPass, true);
+
+  const sale = res.body.outcomeRules.find(r => r.outcome === 'Membership Sale');
+  assert.strictEqual(sale.isSale, true, 'the only outcome Tour Conversion counts');
+});
+
+test('a VIP pass grants fourteen days, not a trial seven', async () => {
+  const res = await submitThenOutcome({ outcome: 'Started VIP Pass' });
+
+  assert.strictEqual(res.body.pass.days, 14);
+  const put = afterOutcome().find(c => c.method === 'put' && c.url.includes('/prospects/'));
+  assert.strictEqual(put.body.prospect.agreement.visitsAllowed, '14');
+});
+
+test('granting reads grants_pass, never a missing day count', async () => {
+  // The trap the API doc calls out: Only Tour and Custom Pass BOTH have a null
+  // default and mean opposite things. Inferring from the number would hand a
+  // pass to everybody who merely toured.
+  const onlyTour = OUTCOME_ROWS.find(r => r.outcome === 'Only Tour');
+  const customPass = OUTCOME_ROWS.find(r => r.outcome === 'Custom Pass');
+  assert.strictEqual(onlyTour.default_pass_days, customPass.default_pass_days);
+  assert.notStrictEqual(onlyTour.grants_pass, customPass.grants_pass);
+
+  const res = await submitThenOutcome({ outcome: 'Only Tour', passDays: 30 });
+  assert.strictEqual(res.body.pass.granted, false, 'a length sent for it changes nothing');
+  assert.strictEqual(afterOutcome().filter(c => c.url.includes('/members/alerts/')).length, 0);
+});
+
+test('a new outcome in the table needs no deploy here', async () => {
+  outcomeRows = [
+    ...OUTCOME_ROWS,
+    { outcome: 'Started Punch Card', label: 'Started Punch Card', is_sale: false, grants_pass: true, default_pass_days: 30, sort_order: 60 },
+  ];
+  require('../services/kiosk/outcomes').invalidate();
+
+  const res = await submitThenOutcome({ outcome: 'Started Punch Card' });
+  assert.strictEqual(res.body.pass.days, 30);
+  assert.strictEqual(res.body.tour.recorded, true);
+});
+
+test('an unreachable table still takes the check-in', async () => {
+  outcomeRows = [];
+  require('../services/kiosk/outcomes').invalidate();
+
+  // Falls back to the built-in copy rather than offering no outcomes at all.
+  const res = await request('GET', '/api/kiosk-waiver/staff?location=milwaukie');
+  assert.ok(res.body.outcomes.includes('Started Trial'));
+  assert.strictEqual(
+    res.body.outcomeRules.find(r => r.outcome === 'Started VIP Pass').defaultPassDays,
+    14,
+    'the fallback is a copy of the live rows, VIP included'
+  );
+});
+
+// --- the reporting row ------------------------------------------------------
+//
+// Milwaukie raises no card on the tour queue, so without this write its tours
+// live in ABC and GHL and nowhere the reports can see them.
+
+test('a recorded tour lands where the reports read it', async () => {
+  const res = await submitThenOutcome({
+    outcome: 'Started Trial',
+    tourMember: 'Felix Reyes',
+    notes: 'Liked the turf.',
+  });
+
+  assert.strictEqual(res.body.tour.recorded, true);
+  assert.strictEqual(insertedTours.length, 1);
+
+  const row = insertedTours[0];
+  // Only status 'completed' is counted; 'ready' is a check-in nobody closed out.
+  assert.strictEqual(row.status, 'completed');
+  assert.strictEqual(row.outcome, 'Started Trial');
+  assert.strictEqual(row.club_number, '31601');
+  assert.strictEqual(row.pass_days, 7);
+  assert.strictEqual(row.notes, 'Liked the turf.');
+  // The only field joining a tour to a membership, so the only way tours-given
+  // to members-signed can ever be measured.
+  assert.strictEqual(row.abc_member_id, 'ABC-9');
+  assert.strictEqual(row.ghl_contact_id, 'GHL-9');
+  assert.strictEqual(row.contact_name, 'Dana Reyes');
+  assert.strictEqual(row.location_id, 'LOC-UUID-1');
+});
+
+test('credit goes to whoever walked them around', async () => {
+  await submitThenOutcome({ outcome: 'Only Tour', tourMember: 'Felix Reyes' });
+
+  const row = insertedTours[0];
+  assert.strictEqual(row.given_by_name, 'Felix Reyes');
+  assert.strictEqual(row.given_by_employee_id, 'EMP-77', 'resolved from the club roster');
+  // Nobody logs into the kiosk, so there is no session to credit. Filling this
+  // with the tour giver would be the booking-vs-servicing confusion again.
+  assert.strictEqual(row.completed_by, null);
+});
+
+test('an unknown name still records the tour under that name', async () => {
+  await submitThenOutcome({ outcome: 'Only Tour', tourMember: 'Someone Not On The Roster' });
+
+  const row = insertedTours[0];
+  assert.strictEqual(row.given_by_name, 'Someone Not On The Roster');
+  assert.strictEqual(row.given_by_employee_id, null, 'a name is an accepted fallback');
+});
+
+test('an abandoned tablet reports a check-in, never a tour', async () => {
+  // What the idle timeout sends. Recording this as a tour would overstate
+  // Tours Given for every tablet nobody came back to.
+  const res = await submitThenOutcome({});
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(insertedTours.length, 0);
+  assert.strictEqual(res.body.tour.skipped, true);
+  assert.strictEqual(hookCalls().length, 1, 'GHL still hears about the check-in');
+});
+
+test('a reporting write that fails costs the row, never the outcome', async () => {
+  insertFails = true;
+
+  const res = await submitThenOutcome({ outcome: 'Started Trial' });
+
+  assert.strictEqual(res.status, 200, 'staff are standing there');
+  assert.strictEqual(res.body.tour.recorded, false);
+  assert.ok(res.body.tour.error);
+  assert.strictEqual(res.body.pass.granted, true, 'they still got their pass');
+  assert.strictEqual(hookCalls().length, 1, 'GHL still heard about it');
 });

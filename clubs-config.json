@@ -54,7 +54,24 @@
       "kioskWaiverLeadWebhookUrl": "",
       "kioskWaiverCompletedWebhookUrl": "",
       "enabled": true,
-      "state": "OR"
+      "state": "OR",
+      "brand": {
+        "name": "East Side Athletic Club",
+        "displayName": "East Side Athletic Club",
+        "legalName": "East Side Athletic Clubs",
+        "legalShortName": "East Side Athletic Clubs",
+        "logo": "/east-side-logo.png",
+        "pdfLogo": "east-side-logo.png",
+        "pdfLogoMime": "image/png",
+        "pdfTitle": "EAST SIDE ATHLETIC CLUBS",
+        "accent": "#111111",
+        "accentHot": "#000000",
+        "governingState": "Oregon"
+      },
+      "kiosk": {
+        "tourQueue": false,
+        "staffOutcome": true
+      }
     },
     {
       "clubNumber": "31600",

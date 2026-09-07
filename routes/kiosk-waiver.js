@@ -35,13 +35,37 @@
 //      photo, check-in, GHL write-back), then the club's "kiosk waiver
 //      completed" inbound webhook and the tour-queue update. No email: the
 //      member is standing in front of a coach.
-//      -> { ok, abcMemberId, clubNumber, steps }
+//      -> { ok, abcMemberId, clubNumber, outcomeTicket, steps }
+//
+//      A club with kiosk.staffOutcome set HOLDS the completed webhook and
+//      returns an outcomeTicket instead. Nothing else about /submit changes:
+//      ABC still has the signed waiver before this route answers.
+//
+// GET  /staff?location=
+//      Staff names for the outcome dropdown, the four outcomes, and the club's
+//      Day One booking link. -> { ok, staff, outcomes, dayOneUrl }
+//
+// GET  /member-search?q=
+//      Active members across every club, for the VIP referral field.
+//
+// POST /outcome                            <-- the deferred final trigger
+//      Fires the held completed webhook with the staff member's answers merged
+//      in. Everything about the MEMBER comes from the signed ticket, so this
+//      public route cannot put anything else into a club's GHL.
+//      body: { outcomeTicket, tourMember, outcome, notes, dayOneBooked,
+//              referringMemberId, referringMemberName }
 //
 // Per-club webhook URLs come from the club_integrations table, which Admin ->
 // Club Integrations edits in the staff portal, and fall back to the matching
 // keys in clubs-config.json:
 //   kioskWaiverLeadWebhookUrl       GHL inbound webhook, halfway
 //   kioskWaiverCompletedWebhookUrl  GHL inbound webhook, on completion
+//
+// Per-club BEHAVIOUR comes from the `kiosk` block in clubs-config.json, and an
+// absent block means what every club did before Milwaukie:
+//   tourQueue      raise a card on the portal's Tour Check-In queue (default on)
+//   staffOutcome   ask staff for the tour outcome on the kiosk, and hold the
+//                  completed webhook until they answer (default off)
 
 const express = require('express');
 
@@ -52,6 +76,9 @@ const { resolveWebhookUrl } = require('../services/waiver/integrations');
 const { suggestAddresses } = require('../services/waiver/address');
 const { announceArrival, announceCompletion } = require('../services/kiosk/tour-intake');
 const { findExistingMember } = require('../services/kiosk/match');
+const { issueTicket, readTicket, OUTCOMES } = require('../services/kiosk/outcome');
+const { rosterFor, searchMembers } = require('../services/kiosk/staff');
+const { dayOneUrlFor } = require('../services/kiosk/day-one');
 
 const router = express.Router();
 
@@ -164,12 +191,14 @@ router.post('/lead', async (req, res) => {
   });
 
   // Put them on the front desk's tour queue right now, while they are still
-  // standing at the kiosk filling in the rest. This fires unconditionally --
-  // it is not gated on a per-club webhook being configured, because the queue
-  // is how staff know somebody is in the lobby.
-  const tourIntake = await announceArrival({
-    club, firstName, lastName, email, phone: e164(phone),
-  });
+  // standing at the kiosk filling in the rest. Not gated on a per-club webhook
+  // being configured, because the queue is how staff know somebody is in the
+  // lobby -- but a club that records its outcome on the kiosk itself has no
+  // queue to raise a card on, and would only be filling a list nobody reads.
+  const flags = clubs.kioskFlags(club);
+  const tourIntake = flags.tourQueue
+    ? await announceArrival({ club, firstName, lastName, email, phone: e164(phone) })
+    : { ok: true, skipped: true, reason: 'tour queue disabled for this club' };
 
   // A GHL hiccup must not stop somebody finishing a waiver at the front desk,
   // so this always answers 200. The per-integration results say what landed.
@@ -270,57 +299,68 @@ router.post('/submit', async (req, res) => {
 
   // ABC has the signed waiver on file from here on. Everything below is a
   // notification, so a failure is reported but never fails the submission.
+  const flags = clubs.kioskFlags(club);
   const completedWebhookUrl = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
 
   // No confirmation email. The member is standing at the front desk with a
   // coach; a receipt in their inbox adds nothing and reads as spam to somebody
   // who has not joined anything yet.
-  const [webhook, tourIntake] = await Promise.all([
-    fireInboundWebhook(completedWebhookUrl, {
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone: e164(phone),
-      address1: formData.address1,
-      city: formData.city,
-      state: formData.state,
-      postal_code: formData.postal_code,
-      date_of_birth: formData.date_of_birth,
-      gender: formData.Gender,
+  const completedPayload = {
+    first_name: firstName,
+    last_name: lastName,
+    email,
+    phone: e164(phone),
+    address1: formData.address1,
+    city: formData.city,
+    state: formData.state,
+    postal_code: formData.postal_code,
+    date_of_birth: formData.date_of_birth,
+    gender: formData.Gender,
 
-      abc_member_id: String(result.prospectId),
-      // Lets a GHL workflow greet a returning member differently from a new one.
-      is_new_profile: result.created ? 'yes' : 'no',
-      ghl_contact_id: formData.contact_id,
-      abc_club_number: String(club.clubNumber),
-      club: club.clubName,
-      location_slug: slug,
-      ghl_location_id: club.ghlLocationId,
+    abc_member_id: String(result.prospectId),
+    // Lets a GHL workflow greet a returning member differently from a new one.
+    is_new_profile: result.created ? 'yes' : 'no',
+    ghl_contact_id: formData.contact_id,
+    abc_club_number: String(club.clubNumber),
+    club: club.clubName,
+    location_slug: slug,
+    ghl_location_id: club.ghlLocationId,
 
-      waiver_signed: 'yes',
-      photo_captured: formData.member_profile_photo ? 'yes' : 'no',
-      trial_start_date: formData['Trial Start Date'],
-      service_employee: formData['Service Employee'],
+    waiver_signed: 'yes',
+    photo_captured: formData.member_profile_photo ? 'yes' : 'no',
+    trial_start_date: formData['Trial Start Date'],
+    service_employee: formData['Service Employee'],
 
-      how_heard: howHeard,
+    how_heard: howHeard,
 
-      source: 'Kiosk Waiver',
-      stage: 'completed',
-      submitted_at: str(body.submittedAt) || new Date().toISOString(),
-    }),
-    // Attach the photo to the card raised at the contact step. Also
-    // unconditional -- the desk should see a face regardless of GHL config.
-    announceCompletion({
-      intakeId: str(body.tourIntakeId),
-      club,
-      firstName,
-      lastName,
-      email,
-      phone: e164(phone),
-      photoDataUrl: body.photoDataUrl,
-      abcMemberId: result.prospectId,
-    }),
-  ]);
+    source: 'Kiosk Waiver',
+    stage: 'completed',
+    submitted_at: str(body.submittedAt) || new Date().toISOString(),
+  };
+
+  // A club that asks its own staff for the tour outcome holds this webhook back
+  // until they answer, so GHL receives ONE event carrying the check-in and its
+  // result rather than two a workflow has to correlate. The payload rides back
+  // to the tablet as a signed ticket -- see services/kiosk/outcome.js for why it
+  // cannot simply be parked in memory here.
+  const webhook = flags.staffOutcome
+    ? { ok: true, deferred: true, reason: 'awaiting staff outcome' }
+    : await fireInboundWebhook(completedWebhookUrl, completedPayload);
+
+  // Attach the photo to the card raised at the contact step, for the clubs that
+  // have one. Otherwise there is no card and nothing to update.
+  const tourIntake = flags.tourQueue
+    ? await announceCompletion({
+        intakeId: str(body.tourIntakeId),
+        club,
+        firstName,
+        lastName,
+        email,
+        phone: e164(phone),
+        photoDataUrl: body.photoDataUrl,
+        abcMemberId: result.prospectId,
+      })
+    : { ok: true, skipped: true, reason: 'tour queue disabled for this club' };
 
   return res.json({
     ok: true,
@@ -329,8 +369,100 @@ router.post('/submit', async (req, res) => {
     created: result.created,
     clubNumber: result.clubNumber,
     clubName: result.clubName,
+    // Present only when the kiosk still has to collect an outcome. The tablet
+    // hands it straight back to /outcome and never inspects it.
+    outcomeTicket: flags.staffOutcome ? issueTicket(completedPayload) : null,
     steps: { ...result.steps, webhook, tourIntake },
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /staff?location=  — the outcome step's dropdown and its Day One link
+// ---------------------------------------------------------------------------
+router.get('/staff', async (req, res) => {
+  const slug = str(req.query.location).toLowerCase();
+  const club = clubs.bySlug(slug);
+  if (!club) return res.status(400).json({ ok: false, error: 'unknown_location', location: slug });
+
+  // Both are optional decoration on a step whose real job is recording an
+  // outcome, so neither failure is allowed to fail the request.
+  const [roster, dayOneUrl] = await Promise.all([
+    rosterFor(club, slug).catch(() => ({ names: [], source: 'error' })),
+    dayOneUrlFor(club).catch(() => ''),
+  ]);
+
+  return res.json({
+    ok: true,
+    staff: roster.names,
+    source: roster.source,
+    outcomes: OUTCOMES,
+    dayOneUrl,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /member-search?q=  — who referred a VIP pass
+// ---------------------------------------------------------------------------
+router.get('/member-search', async (req, res) => {
+  const q = str(req.query.q);
+  if (q.length < 2) return res.json({ ok: true, members: [] });
+
+  try {
+    return res.json({ ok: true, members: await searchMembers(q) });
+  } catch (err) {
+    console.warn('[kiosk-waiver/member-search]', err.message);
+    // An empty list reads as "no match" on the tablet, which is the right
+    // outcome for a lookup that is a convenience on an optional field.
+    return res.json({ ok: true, members: [], error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /outcome — the deferred final trigger
+// ---------------------------------------------------------------------------
+//
+// Fires the "kiosk waiver completed" webhook that /submit held back, with the
+// staff member's answers merged in. Everything describing the member comes from
+// the signed ticket rather than from this request, so the only thing the tablet
+// can put into GHL here is the outcome itself.
+router.post('/outcome', async (req, res) => {
+  const body = req.body || {};
+
+  const ticket = readTicket(body.outcomeTicket);
+  if (!ticket.ok) {
+    // 410 rather than 400 for an expired ticket: the request was well formed,
+    // the window closed. The kiosk shows a different message for each.
+    const gone = ticket.error === 'expired_ticket';
+    return res.status(gone ? 410 : 400).json({ ok: false, error: ticket.error });
+  }
+
+  const club = clubs.bySlug(str(ticket.payload.location_slug).toLowerCase());
+  if (!club) return res.status(400).json({ ok: false, error: 'unknown_location' });
+
+  const outcome = str(body.outcome);
+  if (outcome && !OUTCOMES.includes(outcome)) {
+    return res.status(400).json({ ok: false, error: 'unknown_outcome', outcome });
+  }
+
+  // A blank outcome is legitimate: the idle timeout fires this so a tour nobody
+  // recorded still reaches GHL as a check-in. `tour_recorded` is what a workflow
+  // branches on, so it never has to infer intent from an empty string.
+  const url = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
+  const webhook = await fireInboundWebhook(url, {
+    ...ticket.payload,
+    tour_member: str(body.tourMember),
+    tour_outcome: outcome,
+    tour_notes: str(body.notes),
+    day_one_booked: body.dayOneBooked ? 'yes' : 'no',
+    // Only ever set alongside a VIP pass, and only when staff picked somebody.
+    referring_member_id: str(body.referringMemberId),
+    referring_member_name: str(body.referringMemberName),
+    tour_recorded: outcome ? 'yes' : 'no',
+    // Distinct from submitted_at: the gap between them is the tour.
+    outcome_at: str(body.outcomeAt) || new Date().toISOString(),
+  });
+
+  return res.json({ ok: true, webhook });
 });
 
 module.exports = router;

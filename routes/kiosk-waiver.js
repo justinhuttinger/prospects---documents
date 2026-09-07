@@ -76,7 +76,9 @@ const { resolveWebhookUrl } = require('../services/waiver/integrations');
 const { suggestAddresses } = require('../services/waiver/address');
 const { announceArrival, announceCompletion } = require('../services/kiosk/tour-intake');
 const { findExistingMember } = require('../services/kiosk/match');
-const { issueTicket, readTicket, OUTCOMES } = require('../services/kiosk/outcome');
+const { issueTicket, readTicket } = require('../services/kiosk/outcome');
+const { rulesForClub, ruleFor } = require('../services/kiosk/outcomes');
+const { recordTour } = require('../services/kiosk/tour-record');
 const { grantTrialDays, MAX_DAYS } = require('../services/kiosk/trial');
 const { rosterFor, searchMembers } = require('../services/kiosk/staff');
 const { dayOneUrlFor } = require('../services/kiosk/day-one');
@@ -387,20 +389,27 @@ router.get('/staff', async (req, res) => {
 
   // Both are optional decoration on a step whose real job is recording an
   // outcome, so neither failure is allowed to fail the request.
-  const [roster, dayOneUrl] = await Promise.all([
+  const [roster, dayOneUrl, rules] = await Promise.all([
     rosterFor(club, slug).catch(() => ({ names: [], source: 'error' })),
     dayOneUrlFor(club).catch(() => ''),
+    rulesForClub(club),
   ]);
 
   return res.json({
     ok: true,
     staff: roster.names,
     source: roster.source,
-    outcomes: OUTCOMES,
-    // Outcome -> days it grants. `null` means the tablet has to ask, which is
-    // how it knows to show a day count for a custom pass without hardcoding
-    // which outcome that is.
-    passDays: clubs.kioskFlags(club).passDays,
+    outcomes: rules.map(r => r.outcome),
+    // The whole vocabulary, so the tablet reads grantsPass rather than
+    // inferring it from a missing day count -- Only Tour and Custom Pass both
+    // have no default length and mean opposite things.
+    outcomeRules: rules,
+    // Kept for the tablet build that shipped before outcomeRules existed. Only
+    // pass-granting outcomes appear, so its "in the map" test still means
+    // "grants something" and its null test still means "ask for a length".
+    passDays: Object.fromEntries(
+      rules.filter(r => r.grantsPass).map(r => [r.outcome, r.defaultPassDays])
+    ),
     dayOneUrl,
   });
 });
@@ -444,8 +453,10 @@ router.post('/outcome', async (req, res) => {
   const club = clubs.bySlug(str(ticket.payload.location_slug).toLowerCase());
   if (!club) return res.status(400).json({ ok: false, error: 'unknown_location' });
 
+  const rules = await rulesForClub(club);
   const outcome = str(body.outcome);
-  if (outcome && !OUTCOMES.includes(outcome)) {
+  const rule = outcome ? ruleFor(rules, outcome) : null;
+  if (outcome && !rule) {
     return res.status(400).json({ ok: false, error: 'unknown_outcome', outcome });
   }
 
@@ -457,7 +468,24 @@ router.post('/outcome', async (req, res) => {
   // told they have a pass and then bounces off the door. A real member rather
   // than a prospect gets the alert only -- ABC exposes no writable member
   // agreement route -- and says so in `mode`.
-  const pass = await grantPass({ club, ticket: ticket.payload, outcome, body });
+  const pass = await grantPass({ rule, ticket: ticket.payload, body });
+
+  // Where the reports read tours from. Milwaukie raises no card on the tour
+  // queue, so without this row its tours exist in ABC and GHL and nowhere the
+  // Membership Snapshot or Salesperson Performance reports can see them.
+  const tourMember = str(body.tourMember);
+  const tour = await recordTour({
+    club,
+    ticket: ticket.payload,
+    outcome,
+    tourMember,
+    notes: str(body.notes),
+    passDays: pass.granted ? pass.days : null,
+    // 'full' wrote the agreement, so they were a prospect; 'alert_only' means
+    // ABC would not take the write, which only happens for a real member.
+    memberStatus: pass.mode === 'alert_only' ? 'member' : (pass.mode ? 'prospect' : null),
+    completedAt: str(body.outcomeAt) || undefined,
+  });
 
   // A blank outcome is legitimate: the idle timeout fires this so a tour nobody
   // recorded still reaches GHL as a check-in. `tour_recorded` is what a workflow
@@ -465,7 +493,7 @@ router.post('/outcome', async (req, res) => {
   const url = await resolveWebhookUrl(club, 'kioskWaiverCompletedWebhookUrl');
   const webhook = await fireInboundWebhook(url, {
     ...ticket.payload,
-    tour_member: str(body.tourMember),
+    tour_member: tourMember,
     tour_outcome: outcome,
     tour_notes: str(body.notes),
     day_one_booked: body.dayOneBooked ? 'yes' : 'no',
@@ -486,7 +514,7 @@ router.post('/outcome', async (req, res) => {
     pass_mode: pass.mode || '',
   });
 
-  return res.json({ ok: true, webhook, pass });
+  return res.json({ ok: true, webhook, pass, tour });
 });
 
 /**
@@ -498,13 +526,16 @@ router.post('/outcome', async (req, res) => {
  * the outcome as well. The failure is reported back so it is visible rather
  * than silent.
  */
-async function grantPass({ club, ticket, outcome, body }) {
-  const passDays = clubs.kioskFlags(club).passDays;
-  if (!outcome || !(outcome in passDays)) return { granted: false };
+async function grantPass({ rule, ticket, body }) {
+  // The flag, never the day count. Only Tour and Custom Pass both have no
+  // default length and mean opposite things, so inferring from the number
+  // would hand a pass to everyone who merely toured.
+  if (!rule || !rule.grantsPass) return { granted: false };
 
-  // A configured number, or the staff member's own for a custom pass.
-  const configured = passDays[outcome];
-  const days = configured == null ? Number(body.passDays) : Number(configured);
+  // The outcome's own length, or the staff member's for a custom pass.
+  const days = rule.defaultPassDays == null
+    ? Number(body.passDays)
+    : Number(rule.defaultPassDays);
 
   if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) {
     return { granted: false, error: 'invalid_days', days: body.passDays, maxDays: MAX_DAYS };

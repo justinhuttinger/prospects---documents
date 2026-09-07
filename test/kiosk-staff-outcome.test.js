@@ -176,10 +176,10 @@ test('locations carry the brand and the per-club kiosk behaviour', async () => {
   const milwaukie = by('milwaukie');
   assert.strictEqual(milwaukie.brand.name, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.brand.accent, '#111111');
-  // The East Side lockup fills the attract screen: 86vw is all the width the
-  // stylesheet allows, and the 104vh term is what keeps a 3:1 mark from pushing
-  // the headline and the tap prompt off a landscape tablet.
-  assert.strictEqual(milwaukie.brand.logoWidth, 'min(86vw, 104vh)');
+  // Both terms are 60% of the full-bleed pair they replaced, so the mark keeps
+  // its proportions and the vh term still caps how tall it can get on a
+  // landscape tablet.
+  assert.strictEqual(milwaukie.brand.logoWidth, 'min(52vw, 62vh)');
   assert.strictEqual(milwaukie.displayName, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.kiosk.staffOutcome, true);
   assert.strictEqual(milwaukie.kiosk.tourQueue, false);

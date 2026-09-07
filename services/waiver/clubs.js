@@ -79,8 +79,8 @@ function publicList() {
     clubNumber: String(c.clubNumber),
     // Only what a browser needs to paint itself. The legal entity and the PDF
     // assets stay server-side; nothing on the tablet renders them.
-    brand: (({ name, displayName, logo, accent, accentHot }) => ({
-      name, displayName, logo, accent, accentHot,
+    brand: (({ name, displayName, logo, logoWidth, accent, accentHot }) => ({
+      name, displayName, logo, logoWidth, accent, accentHot,
     }))(brandFor(c)),
     kiosk: kioskFlags(c),
   }));

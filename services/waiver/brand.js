@@ -33,6 +33,11 @@ const WCS = {
   // .png but holds WEBP, so its type is stated rather than inferred.
   pdfLogo: 'logo.png',
   pdfLogoMime: 'image/webp',
+  // How wide the kiosk paints the logo, as a CSS length. The WCS mark is a
+  // square badge; East Side is a lockup over three times as wide, and a value
+  // that suits one makes the other either tiny or overbearing. Sizing by width
+  // rather than height keeps the badge exactly as it has always been.
+  logoWidth: 'clamp(150px, 26vh, 260px)',
   // Heading above the waiver PDF.
   pdfTitle: 'WEST COAST STRENGTH',
   accent: '#e31e24',

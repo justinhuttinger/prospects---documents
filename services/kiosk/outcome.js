@@ -88,13 +88,36 @@ function readTicket(ticket) {
   return { ok: true, payload: decoded.payload || {} };
 }
 
-// What a staff member can pick. Same four the portal's tour queue offers, so
-// Milwaukie's tours land in the vocabulary every other club reports in.
+// What a staff member can pick. The first four are the portal tour queue's own
+// vocabulary, so Milwaukie's tours report alongside every other club's.
+//
+// 'Custom Pass' is the exception and is kiosk-only: it exists because a pass is
+// sometimes a length nobody planned for. The portal's queue does not offer it,
+// so a report that groups by outcome will show it as its own bucket rather than
+// folding it in with trials.
 const OUTCOMES = [
   'Membership Sale',
   'Started Trial',
   'Started VIP Pass',
+  'Custom Pass',
   'Only Tour',
 ];
 
-module.exports = { issueTicket, readTicket, OUTCOMES, TICKET_TTL_MS };
+/**
+ * How long a pass each outcome grants in ABC, in days.
+ *
+ * A number grants that many without asking. `null` means the length is the
+ * staff member's to enter, which is the whole point of a custom pass. An
+ * outcome absent from this map writes nothing to ABC at all -- a membership
+ * sale has no trial window left to matter, and a tour that went nowhere should
+ * not touch the record.
+ *
+ * Per-club overrides live under `kiosk.passDays` in clubs-config.json.
+ */
+const DEFAULT_PASS_DAYS = {
+  'Started Trial': 7,
+  'Started VIP Pass': 7,
+  'Custom Pass': null,
+};
+
+module.exports = { issueTicket, readTicket, OUTCOMES, DEFAULT_PASS_DAYS, TICKET_TTL_MS };

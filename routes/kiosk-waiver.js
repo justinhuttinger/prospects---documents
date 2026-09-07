@@ -77,6 +77,7 @@ const { suggestAddresses } = require('../services/waiver/address');
 const { announceArrival, announceCompletion } = require('../services/kiosk/tour-intake');
 const { findExistingMember } = require('../services/kiosk/match');
 const { issueTicket, readTicket, OUTCOMES } = require('../services/kiosk/outcome');
+const { grantTrialDays, MAX_DAYS } = require('../services/kiosk/trial');
 const { rosterFor, searchMembers } = require('../services/kiosk/staff');
 const { dayOneUrlFor } = require('../services/kiosk/day-one');
 
@@ -396,6 +397,10 @@ router.get('/staff', async (req, res) => {
     staff: roster.names,
     source: roster.source,
     outcomes: OUTCOMES,
+    // Outcome -> days it grants. `null` means the tablet has to ask, which is
+    // how it knows to show a day count for a custom pass without hardcoding
+    // which outcome that is.
+    passDays: clubs.kioskFlags(club).passDays,
     dayOneUrl,
   });
 });
@@ -444,6 +449,16 @@ router.post('/outcome', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'unknown_outcome', outcome });
   }
 
+  // Give them their access in ABC BEFORE telling GHL about it, so the webhook
+  // can carry the real expiration date rather than a promise of one.
+  //
+  // grantTrialDays writes the agreement AND posts the desk alert: extending
+  // expirationDate is what flips ABC's isActive, so without this a member is
+  // told they have a pass and then bounces off the door. A real member rather
+  // than a prospect gets the alert only -- ABC exposes no writable member
+  // agreement route -- and says so in `mode`.
+  const pass = await grantPass({ club, ticket: ticket.payload, outcome, body });
+
   // A blank outcome is legitimate: the idle timeout fires this so a tour nobody
   // recorded still reaches GHL as a check-in. `tour_recorded` is what a workflow
   // branches on, so it never has to infer intent from an empty string.
@@ -460,9 +475,52 @@ router.post('/outcome', async (req, res) => {
     tour_recorded: outcome ? 'yes' : 'no',
     // Distinct from submitted_at: the gap between them is the tour.
     outcome_at: str(body.outcomeAt) || new Date().toISOString(),
+
+    // Empty for an outcome that grants nothing, so a workflow can send a
+    // "your pass runs to..." message without first working out whether there
+    // is a pass.
+    pass_days: pass.days ? String(pass.days) : '',
+    pass_expiration_date: pass.expirationDate || '',
+    // 'full' wrote the ABC agreement; 'alert_only' could not, so the door does
+    // not know. Worth a different follow-up.
+    pass_mode: pass.mode || '',
   });
 
-  return res.json({ ok: true, webhook });
+  return res.json({ ok: true, webhook, pass });
 });
+
+/**
+ * Turn an outcome into ABC access, when it is the kind of outcome that grants
+ * any.
+ *
+ * Never throws and never fails the request. The tour happened, the waiver is
+ * filed, and a staff member is standing there: an ABC outage must not cost us
+ * the outcome as well. The failure is reported back so it is visible rather
+ * than silent.
+ */
+async function grantPass({ club, ticket, outcome, body }) {
+  const passDays = clubs.kioskFlags(club).passDays;
+  if (!outcome || !(outcome in passDays)) return { granted: false };
+
+  // A configured number, or the staff member's own for a custom pass.
+  const configured = passDays[outcome];
+  const days = configured == null ? Number(body.passDays) : Number(configured);
+
+  if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) {
+    return { granted: false, error: 'invalid_days', days: body.passDays, maxDays: MAX_DAYS };
+  }
+
+  const memberId = str(ticket.abc_member_id);
+  const clubNumber = str(ticket.abc_club_number);
+  if (!memberId || !clubNumber) return { granted: false, error: 'no_abc_member' };
+
+  try {
+    const result = await grantTrialDays(clubNumber, memberId, days);
+    return { granted: !!result.ok, days, ...result };
+  } catch (err) {
+    console.error('[kiosk-waiver/outcome] ABC pass failed:', err.message);
+    return { granted: false, days, error: err.message };
+  }
+}
 
 module.exports = router;

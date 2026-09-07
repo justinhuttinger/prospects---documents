@@ -401,6 +401,11 @@ test('the staff dropdown comes from the GHL Day One team-member field', async ()
   assert.strictEqual(res.body.source, 'ghl');
   assert.strictEqual(res.body.dayOneUrl, 'https://book.example.test/day-one');
   assert.ok(res.body.outcomes.includes('Started VIP Pass'));
+  // How the tablet knows a custom pass needs a length without hardcoding which
+  // outcome that is.
+  assert.strictEqual(res.body.passDays['Started Trial'], 7);
+  assert.strictEqual(res.body.passDays['Custom Pass'], null);
+  assert.ok(!('Only Tour' in res.body.passDays), 'a tour that went nowhere writes nothing');
 });
 
 test('an unknown club is refused rather than answered with an empty roster', async () => {
@@ -433,4 +438,136 @@ test('a referral search returns members from every club', async () => {
   assert.strictEqual(res.body.members.length, 1);
   assert.strictEqual(res.body.members[0].name, 'Sam Okafor');
   assert.strictEqual(res.body.members[0].club, 'Salem', 'a referrer often trains elsewhere');
+});
+
+
+// --- the ABC pass -----------------------------------------------------------
+//
+// The gap this closes: recording "Started Trial" used to fire the GHL webhook
+// and nothing else, so ABC never heard about the trial, isActive stayed false,
+// and the member was told they had access and then bounced off the door.
+
+const abcCalls = () => calls.filter(c => c.url.includes('/prospects/') || c.url.includes('/members/'));
+
+function stubProspect() {
+  respond(({ method, url }) => {
+    if (method === 'get' && url.includes('/prospects/')) {
+      return { status: 200, data: { prospects: [{ personal: { firstName: 'Dana', lastName: 'Reyes' }, agreement: {} }] } };
+    }
+    if (method === 'put' && url.includes('/prospects/')) return { status: 200, data: { status: { message: 'success' } } };
+    if (method === 'post' && url.includes('/members/alerts/')) {
+      return { status: 200, data: { status: { message: 'success' } } };
+    }
+    return null;
+  });
+}
+
+// /submit posts its own NEW PROFILE alert as part of the waiver pipeline, so
+// anything asserting about alerts has to look only at what the OUTCOME did.
+let outcomeStart = 0;
+const afterOutcome = () => calls.slice(outcomeStart);
+
+async function submitThenOutcome(outcomeBody) {
+  stubProspect();
+  stubAbc();
+  const submit = await request('POST', '/api/kiosk-waiver/submit', MILWAUKIE);
+  outcomeStart = calls.length;
+  return request('POST', '/api/kiosk-waiver/outcome', {
+    outcomeTicket: submit.body.outcomeTicket,
+    ...outcomeBody,
+  });
+}
+
+test('a trial grants seven days in ABC and alerts the front desk', async () => {
+  const res = await submitThenOutcome({ outcome: 'Started Trial' });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.pass.granted, true);
+  assert.strictEqual(res.body.pass.days, 7);
+
+  const put = afterOutcome().find(c => c.method === 'put' && c.url.includes('/prospects/'));
+  assert.ok(put, 'the agreement write is what flips isActive, not the alert');
+  assert.strictEqual(put.body.prospect.agreement.visitsAllowed, '7');
+  assert.ok(put.body.prospect.agreement.expirationDate, 'the door checks this');
+  // ABC 500s on a prospect PUT with no `personal`, however little of it changes.
+  assert.ok(put.body.prospect.personal.firstName);
+
+  const alert = afterOutcome().find(c => c.url.includes('/members/alerts/'));
+  assert.ok(alert, 'the desk needs to see the pass on the next scan');
+  assert.match(alert.body.text, /^PASS ACTIVE TO /);
+  // Alerts cannot be listed, edited or deleted through the API, so one without
+  // an expiry is permanent clutter only DataTrak can clear.
+  assert.ok(alert.body.expirationDate, 'a persistent alert MUST expire');
+});
+
+test('the expiration reaches GHL, so a workflow can quote the date', async () => {
+  const res = await submitThenOutcome({ outcome: 'Started Trial' });
+
+  assert.strictEqual(res.status, 200);
+  const sent = hookCalls()[0].body;
+  assert.strictEqual(sent.pass_days, '7');
+  assert.match(sent.pass_expiration_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.strictEqual(sent.pass_mode, 'full');
+});
+
+test('a custom pass uses the number staff entered', async () => {
+  const res = await submitThenOutcome({ outcome: 'Custom Pass', passDays: 21 });
+
+  assert.strictEqual(res.body.pass.days, 21);
+  const put = afterOutcome().find(c => c.method === 'put' && c.url.includes('/prospects/'));
+  assert.strictEqual(put.body.prospect.agreement.visitsAllowed, '21');
+});
+
+test('a custom pass with no number writes nothing rather than guessing', async () => {
+  const res = await submitThenOutcome({ outcome: 'Custom Pass' });
+
+  assert.strictEqual(res.status, 200, 'the outcome is still recorded');
+  assert.strictEqual(res.body.pass.granted, false);
+  assert.strictEqual(res.body.pass.error, 'invalid_days');
+  assert.strictEqual(hookCalls().length, 1, 'GHL still hears about the tour');
+  assert.strictEqual(hookCalls()[0].body.pass_days, '');
+});
+
+test('a wildly long pass is refused', async () => {
+  const res = await submitThenOutcome({ outcome: 'Custom Pass', passDays: 9999 });
+  assert.strictEqual(res.body.pass.error, 'invalid_days');
+});
+
+test('a tour that went nowhere leaves the ABC record alone', async () => {
+  const res = await submitThenOutcome({ outcome: 'Only Tour' });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.pass.granted, false);
+  assert.strictEqual(
+    afterOutcome().filter(c => c.url.includes('/members/alerts/')).length,
+    0,
+    'an undeletable alert for a tour nobody acted on is permanent clutter'
+  );
+});
+
+test('a membership sale grants no pass: there is no trial window left to matter', async () => {
+  const res = await submitThenOutcome({ outcome: 'Membership Sale' });
+  assert.strictEqual(res.body.pass.granted, false);
+  assert.strictEqual(hookCalls()[0].body.tour_outcome, 'Membership Sale');
+});
+
+test('an ABC outage costs the pass, never the outcome', async () => {
+  stubAbc();
+  respond(({ url }) => {
+    if (url.includes('/prospects/') || url.includes('/members/alerts/')) {
+      throw new Error('ECONNREFUSED');
+    }
+    return null;
+  });
+
+  const submit = await request('POST', '/api/kiosk-waiver/submit', MILWAUKIE);
+  const res = await request('POST', '/api/kiosk-waiver/outcome', {
+    outcomeTicket: submit.body.outcomeTicket,
+    outcome: 'Started Trial',
+  });
+
+  assert.strictEqual(res.status, 200, 'staff are standing there; do not fail on them');
+  assert.strictEqual(res.body.pass.granted, false);
+  assert.strictEqual(hookCalls().length, 1, 'the tour still reached GHL');
+  assert.strictEqual(hookCalls()[0].body.tour_outcome, 'Started Trial');
 });

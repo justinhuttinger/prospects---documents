@@ -176,9 +176,10 @@ test('locations carry the brand and the per-club kiosk behaviour', async () => {
   const milwaukie = by('milwaukie');
   assert.strictEqual(milwaukie.brand.name, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.brand.accent, '#111111');
-  // The East Side lockup is over 3x as wide as it is tall, so it cannot share
-  // the square badge's width and still be legible across a lobby.
-  assert.strictEqual(milwaukie.brand.logoWidth, 'clamp(280px, 46vh, 520px)');
+  // The East Side lockup fills the attract screen: 86vw is all the width the
+  // stylesheet allows, and the 104vh term is what keeps a 3:1 mark from pushing
+  // the headline and the tap prompt off a landscape tablet.
+  assert.strictEqual(milwaukie.brand.logoWidth, 'min(86vw, 104vh)');
   assert.strictEqual(milwaukie.displayName, 'East Side Athletic Club');
   assert.strictEqual(milwaukie.kiosk.staffOutcome, true);
   assert.strictEqual(milwaukie.kiosk.tourQueue, false);

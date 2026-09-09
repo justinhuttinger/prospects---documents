@@ -112,6 +112,21 @@ const hookCalls = () => calls.filter(c => c.url.includes('hooks.example.test'));
 
 const COMPLETED_HOOK = 'https://hooks.example.test/milwaukie-completed';
 
+// Today plus N days on the club's clock, as MM-DD-YYYY. Derived here from Intl
+// rather than from the code under test, so the assertion is an independent
+// check of the sum and not a restatement of it.
+function expectedEnd(days) {
+  const p = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date())) p[type] = value;
+
+  const d = new Date(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)));
+  d.setUTCDate(d.getUTCDate() + days);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${d.getUTCFullYear()}`;
+}
+
 function stubAbc() {
   respond(({ url }) => {
     if (url.includes('/prospects')) return { status: 200, data: { result: { memberId: 'ABC-9' } } };
@@ -551,8 +566,41 @@ test('the expiration reaches GHL, so a workflow can quote the date', async () =>
   assert.strictEqual(res.status, 200);
   const sent = hookCalls()[0].body;
   assert.strictEqual(sent.pass_days, '7');
-  assert.match(sent.pass_expiration_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(sent.pass_expiration_date, /^\d{2}-\d{2}-\d{4}$/);
   assert.strictEqual(sent.pass_mode, 'full');
+
+  // The sum, not just the shape: seven days from today on the club's clock.
+  assert.strictEqual(sent.pass_expiration_date, expectedEnd(7));
+});
+
+test('a pass ABC refused still quotes the date staff promised', async () => {
+  // The window a workflow tells the member about cannot depend on ABC being
+  // up. Without the fallback this went out empty and a "your pass ends on"
+  // message would have quoted nothing.
+  stubAbc();
+  // Only the outcome's write fails. The trailing slash matches the PUT to
+  // /prospects/{id}, never the POST that creates one during submit.
+  respond(({ url }) => {
+    if (url.includes('/prospects/') || url.includes('/members/alerts/')) {
+      throw new Error('ECONNREFUSED');
+    }
+    return null;
+  });
+
+  const res = await submitThenOutcome({ outcome: 'Custom Pass', passDays: 14 });
+
+  assert.strictEqual(res.status, 200, 'the outcome is still recorded');
+  assert.strictEqual(res.body.pass.granted, false, 'ABC really did refuse');
+  const sent = hookCalls()[0].body;
+  assert.strictEqual(sent.pass_days, '14');
+  assert.strictEqual(sent.pass_expiration_date, expectedEnd(14));
+});
+
+test('an outcome that grants nothing sends no end date', async () => {
+  const res = await submitThenOutcome({ outcome: 'Only Tour', passDays: 30 });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(hookCalls()[0].body.pass_expiration_date, '');
 });
 
 test('a custom pass uses the number staff entered', async () => {

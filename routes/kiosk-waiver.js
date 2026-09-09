@@ -79,10 +79,10 @@ const { findExistingMember } = require('../services/kiosk/match');
 const { issueTicket, readTicket } = require('../services/kiosk/outcome');
 const { rulesForClub, ruleFor } = require('../services/kiosk/outcomes');
 const { recordTour } = require('../services/kiosk/tour-record');
-const { grantTrialDays, MAX_DAYS } = require('../services/kiosk/trial');
+const { grantTrialDays, expirationDateFrom, MAX_DAYS } = require('../services/kiosk/trial');
 const { rosterFor, searchMembers } = require('../services/kiosk/staff');
 const { dayOneUrlFor } = require('../services/kiosk/day-one');
-const { formatPacific } = require('../lib/human-time');
+const { formatPacific, toMonthDayYear } = require('../lib/human-time');
 
 const router = express.Router();
 
@@ -509,7 +509,17 @@ router.post('/outcome', async (req, res) => {
     // "your pass runs to..." message without first working out whether there
     // is a pass.
     pass_days: pass.days ? String(pass.days) : '',
-    pass_expiration_date: pass.expirationDate || '',
+    // The day the pass runs out, as MM-DD-YYYY.
+    //
+    // ABC's own answer when the write landed, so the webhook agrees with the
+    // door. Worked out here from the day count when it did not: an ABC outage
+    // still leaves a staff member who granted 14 days and a member who expects
+    // them, and sending nothing would have a workflow tell them their pass ends
+    // today. Both are the same sum -- today plus N on the club's clock.
+    pass_expiration_date: toMonthDayYear(
+      pass.expirationDate
+        || (Number.isInteger(pass.days) && pass.days >= 1 ? expirationDateFrom(pass.days) : '')
+    ),
     // 'full' wrote the ABC agreement; 'alert_only' could not, so the door does
     // not know. Worth a different follow-up.
     pass_mode: pass.mode || '',

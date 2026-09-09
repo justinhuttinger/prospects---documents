@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { formatPacific } = require('../lib/human-time');
+const { formatPacific, toMonthDayYear } = require('../lib/human-time');
 
 test('renders a UTC instant on the club clock', () => {
   // 23:05 UTC on 9 Sep is 4:05pm Pacific the same day.
@@ -41,5 +41,23 @@ test('accepts a Date as well as a string', () => {
 test('yields an empty string for anything that is not an instant', () => {
   for (const bad of [null, undefined, '', 'not a date', NaN]) {
     assert.strictEqual(formatPacific(bad), '', `expected '' for ${String(bad)}`);
+  }
+});
+
+test('reformats a calendar date to MM-DD-YYYY', () => {
+  assert.strictEqual(toMonthDayYear('2026-09-23'), '09-23-2026');
+});
+
+test('keeps the day it was given, with no timezone round trip', () => {
+  // "2026-01-01" parsed as a Date is UTC midnight, which is 31 Dec in Pacific.
+  // Converting via a Date would report the pass ending a day early, and in the
+  // wrong year.
+  assert.strictEqual(toMonthDayYear('2026-01-01'), '01-01-2026');
+});
+
+test('refuses anything that is not a calendar date', () => {
+  for (const bad of [null, undefined, '', '9/23/2026', '2026-9-3', 'tomorrow',
+                     '2026-09-23T00:00:00Z']) {
+    assert.strictEqual(toMonthDayYear(bad), '', `expected '' for ${String(bad)}`);
   }
 });

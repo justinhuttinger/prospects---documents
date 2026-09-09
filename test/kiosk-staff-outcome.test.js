@@ -534,6 +534,9 @@ async function submitThenOutcome(outcomeBody) {
   outcomeStart = calls.length;
   return request('POST', '/api/kiosk-waiver/outcome', {
     outcomeTicket: submit.body.outcomeTicket,
+    // An outcome now requires a name, so every case that records one supplies
+    // it by default. A test that cares about its absence passes tourMember: ''.
+    tourMember: 'Felix Reyes',
     ...outcomeBody,
   });
 }
@@ -644,6 +647,26 @@ test('a membership sale grants no pass: there is no trial window left to matter'
   assert.strictEqual(hookCalls()[0].body.tour_outcome, 'Membership Sale');
 });
 
+test('an outcome with nobody credited is refused', async () => {
+  // A tour nobody is credited with cannot be attributed by Salesperson
+  // Performance, and this route writes the row those reports read.
+  const res = await submitThenOutcome({ outcome: 'Started Trial', tourMember: '' });
+
+  assert.strictEqual(res.status, 400);
+  assert.strictEqual(res.body.error, 'tour_member_required');
+  assert.strictEqual(hookCalls().length, 0, 'nothing reaches GHL either');
+});
+
+test('the idle timeout still reports the check-in with no staff member', async () => {
+  // The exemption that has to survive: an abandoned tablet fires this with both
+  // blank, and demanding a name would lose the visit as well as the tour.
+  const res = await submitThenOutcome({ outcome: '', tourMember: '' });
+
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(hookCalls().length, 1);
+  assert.strictEqual(hookCalls()[0].body.tour_recorded, 'no');
+});
+
 test('an ABC outage costs the pass, never the outcome', async () => {
   stubAbc();
   respond(({ url }) => {
@@ -657,6 +680,7 @@ test('an ABC outage costs the pass, never the outcome', async () => {
   const res = await request('POST', '/api/kiosk-waiver/outcome', {
     outcomeTicket: submit.body.outcomeTicket,
     outcome: 'Started Trial',
+    tourMember: 'Felix Reyes',
   });
 
   assert.strictEqual(res.status, 200, 'staff are standing there; do not fail on them');

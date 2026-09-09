@@ -82,6 +82,7 @@ const { recordTour } = require('../services/kiosk/tour-record');
 const { grantTrialDays, MAX_DAYS } = require('../services/kiosk/trial');
 const { rosterFor, searchMembers } = require('../services/kiosk/staff');
 const { dayOneUrlFor } = require('../services/kiosk/day-one');
+const { formatPacific } = require('../lib/human-time');
 
 const router = express.Router();
 
@@ -190,7 +191,7 @@ router.post('/lead', async (req, res) => {
     abc_club_number: String(club.clubNumber),
     source: 'Kiosk Waiver',
     stage: 'started',
-    started_at: str(body.startedAt) || new Date().toISOString(),
+    started_at: formatPacific(str(body.startedAt) || new Date()),
   });
 
   // Put them on the front desk's tour queue right now, while they are still
@@ -338,7 +339,7 @@ router.post('/submit', async (req, res) => {
 
     source: 'Kiosk Waiver',
     stage: 'completed',
-    submitted_at: str(body.submittedAt) || new Date().toISOString(),
+    submitted_at: formatPacific(str(body.submittedAt) || new Date()),
   };
 
   // A club that asks its own staff for the tour outcome holds this webhook back
@@ -502,7 +503,7 @@ router.post('/outcome', async (req, res) => {
     referring_member_name: str(body.referringMemberName),
     tour_recorded: outcome ? 'yes' : 'no',
     // Distinct from submitted_at: the gap between them is the tour.
-    outcome_at: str(body.outcomeAt) || new Date().toISOString(),
+    outcome_at: formatPacific(str(body.outcomeAt) || new Date()),
 
     // Empty for an outcome that grants nothing, so a workflow can send a
     // "your pass runs to..." message without first working out whether there

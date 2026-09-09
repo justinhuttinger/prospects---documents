@@ -327,7 +327,11 @@ test('the outcome fires the held webhook with the member and the result together
   assert.strictEqual(sent.day_one_booked, 'yes');
   assert.strictEqual(sent.referring_member_name, 'Sam Okafor');
   assert.strictEqual(sent.tour_recorded, 'yes');
-  assert.ok(sent.outcome_at, 'the gap from submitted_at is the tour');
+  // The gap from submitted_at is the tour. Both go out on the club's clock in
+  // the shape a person writes a time, because GHL shows them to one.
+  const HUMAN = /^\d{2}\/\d{2}\/\d{4} \| \d{1,2}:\d{2} (AM|PM)$/;
+  assert.match(sent.outcome_at, HUMAN);
+  assert.match(sent.submitted_at, HUMAN);
 });
 
 test('an abandoned tablet still reports the check-in, marked as unrecorded', async () => {

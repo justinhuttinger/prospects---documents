@@ -461,6 +461,17 @@ router.post('/outcome', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'unknown_outcome', outcome });
   }
 
+  // Who GAVE the tour, required alongside an outcome. A tour nobody is credited
+  // with cannot be attributed by Salesperson Performance, and the row this
+  // writes is what those reports read.
+  //
+  // Only alongside an outcome: the idle timeout fires this route with both
+  // blank so an abandoned tablet still reports the check-in, and demanding a
+  // name there would lose the visit as well as the tour.
+  if (outcome && !str(body.tourMember)) {
+    return res.status(400).json({ ok: false, error: 'tour_member_required' });
+  }
+
   // Give them their access in ABC BEFORE telling GHL about it, so the webhook
   // can carry the real expiration date rather than a promise of one.
   //

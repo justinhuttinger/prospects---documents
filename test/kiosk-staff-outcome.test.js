@@ -744,6 +744,37 @@ test('a new outcome in the table needs no deploy here', async () => {
   assert.strictEqual(res.body.tour.recorded, true);
 });
 
+test('NLPT and Swim show only at the clubs that offer them', async () => {
+  outcomeRows = [
+    ...OUTCOME_ROWS,
+    { outcome: 'NLPT', label: 'NLPT', is_sale: false, grants_pass: false, default_pass_days: null, sort_order: 42, location_slugs: ['milwaukie', 'clackamas'] },
+    { outcome: 'Swim', label: 'Swim', is_sale: false, grants_pass: false, default_pass_days: null, sort_order: 44, location_slugs: ['milwaukie', 'clackamas'] },
+  ];
+  require('../services/kiosk/outcomes').invalidate();
+
+  const milwaukie = await request('GET', '/api/kiosk-waiver/staff?location=milwaukie');
+  assert.ok(milwaukie.body.outcomes.includes('NLPT'));
+  assert.ok(milwaukie.body.outcomes.includes('Swim'));
+
+  const salem = await request('GET', '/api/kiosk-waiver/staff?location=salem');
+  assert.ok(!salem.body.outcomes.includes('NLPT'), 'not offered at Salem');
+  assert.ok(!salem.body.outcomes.includes('Swim'), 'not offered at Salem');
+  assert.ok(salem.body.outcomes.includes('Only Tour'), 'the shared outcomes are unchanged');
+});
+
+test('NLPT records the visit and grants no pass', async () => {
+  outcomeRows = [
+    ...OUTCOME_ROWS,
+    { outcome: 'NLPT', label: 'NLPT', is_sale: false, grants_pass: false, default_pass_days: null, sort_order: 42, location_slugs: ['milwaukie', 'clackamas'] },
+  ];
+  require('../services/kiosk/outcomes').invalidate();
+
+  const res = await submitThenOutcome({ outcome: 'NLPT' });
+  assert.strictEqual(res.body.pass.granted, false);
+  assert.strictEqual(res.body.tour.recorded, true);
+  assert.strictEqual(afterOutcome().filter(c => c.url.includes('/members/alerts/')).length, 0);
+});
+
 test('an unreachable table still takes the check-in', async () => {
   outcomeRows = [];
   require('../services/kiosk/outcomes').invalidate();

@@ -22,13 +22,18 @@ const { getSupabaseAdmin } = require('../../lib/supabase');
 
 const TTL_MS = 10 * 60 * 1000;
 
-// Mirrors the live tour_outcomes rows as of 2026-09-07.
+// Mirrors the live tour_outcomes rows as of 2026-09-11 (portal migration 200).
+// `locations` null means every club.
+const NLPT_SWIM_CLUBS = ['milwaukie', 'clackamas'];
 const FALLBACK = [
-  { outcome: 'Membership Sale', label: 'Membership Sale', isSale: true, grantsPass: false, defaultPassDays: null, sortOrder: 10 },
-  { outcome: 'Started Trial', label: 'Started Trial', isSale: false, grantsPass: true, defaultPassDays: 7, sortOrder: 20 },
-  { outcome: 'Started VIP Pass', label: 'Started VIP Pass', isSale: false, grantsPass: true, defaultPassDays: 14, sortOrder: 30 },
-  { outcome: 'Only Tour', label: 'Only Tour', isSale: false, grantsPass: false, defaultPassDays: null, sortOrder: 40 },
-  { outcome: 'Custom Pass', label: 'Custom Pass', isSale: false, grantsPass: true, defaultPassDays: null, sortOrder: 50 },
+  { outcome: 'Membership Sale', label: 'Membership Sale', isSale: true, grantsPass: false, defaultPassDays: null, sortOrder: 10, locations: null },
+  { outcome: 'Started Trial', label: 'Started Trial', isSale: false, grantsPass: true, defaultPassDays: 7, sortOrder: 20, locations: null },
+  { outcome: 'Started VIP Pass', label: 'Started VIP Pass', isSale: false, grantsPass: true, defaultPassDays: 14, sortOrder: 30, locations: null },
+  { outcome: 'Day Pass', label: 'Day Pass', isSale: false, grantsPass: true, defaultPassDays: 1, sortOrder: 35, locations: null },
+  { outcome: 'Only Tour', label: 'Only Tour', isSale: false, grantsPass: false, defaultPassDays: null, sortOrder: 40, locations: null },
+  { outcome: 'NLPT', label: 'NLPT', isSale: false, grantsPass: false, defaultPassDays: null, sortOrder: 42, locations: NLPT_SWIM_CLUBS },
+  { outcome: 'Swim', label: 'Swim', isSale: false, grantsPass: false, defaultPassDays: null, sortOrder: 44, locations: NLPT_SWIM_CLUBS },
+  { outcome: 'Custom Pass', label: 'Custom Pass', isSale: false, grantsPass: true, defaultPassDays: null, sortOrder: 50, locations: null },
 ];
 
 let cache = null; // { at, rules }
@@ -41,6 +46,10 @@ function normalize(row) {
     grantsPass: row.grants_pass === true,
     defaultPassDays: row.default_pass_days == null ? null : Number(row.default_pass_days),
     sortOrder: Number(row.sort_order || 0),
+    // The clubs that offer it, or null for every club.
+    locations: Array.isArray(row.location_slugs) && row.location_slugs.length
+      ? row.location_slugs.map(s => String(s).toLowerCase().trim())
+      : null,
   };
 }
 
@@ -52,7 +61,7 @@ async function outcomeRules() {
   try {
     const { data, error } = await getSupabaseAdmin()
       .from('tour_outcomes')
-      .select('outcome, label, is_sale, grants_pass, default_pass_days, sort_order')
+      .select('outcome, label, is_sale, grants_pass, default_pass_days, sort_order, location_slugs')
       .order('sort_order');
     if (error) throw new Error(error.message);
     const rows = (data || []).map(normalize).filter(r => r.outcome);
@@ -67,7 +76,8 @@ async function outcomeRules() {
 }
 
 /**
- * The rules for one club, with any per-club pass length applied.
+ * The rules for one club: only the outcomes it offers (NLPT and Swim are
+ * Milwaukie and Clackamas only), with any per-club pass length applied.
  *
  * `kiosk.passDays` in clubs-config.json overrides a length, never the
  * grantsPass flag: whether an outcome hands out access is the vocabulary's to
@@ -76,7 +86,10 @@ async function outcomeRules() {
  */
 async function rulesForClub(club) {
   const overrides = ((club && club.kiosk) || {}).passDays || {};
-  return (await outcomeRules()).map(r =>
+  // Same slug the kiosk URL carries (see services/waiver/clubs.js).
+  const slug = String((club && club.clubName) || '').toLowerCase().trim();
+  const offered = (await outcomeRules()).filter(r => !r.locations || r.locations.includes(slug));
+  return offered.map(r =>
     Object.prototype.hasOwnProperty.call(overrides, r.outcome)
       ? { ...r, defaultPassDays: overrides[r.outcome] == null ? null : Number(overrides[r.outcome]) }
       : r

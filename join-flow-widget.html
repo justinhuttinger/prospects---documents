@@ -1357,6 +1357,24 @@
     if (mi < 1 || mi > 12 || di < 1 || di > 31 || yi < 1900 || yi > 2200) return '';
     return `${yyyy}-${mm}-${dd}`;
   }
+  // Same sums as ageFromBirthday / ageMatchesRule in
+  // services/online-join/eligibility.js, which still has the final say.
+  function ageFromIso(iso) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    const today = new Date();
+    let age = today.getUTCFullYear() - y;
+    const monthDiff = (today.getUTCMonth() + 1) - mo;
+    if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < d)) age -= 1;
+    return age;
+  }
+  function ageFitsRule(age, rule) {
+    if (!rule) return true;
+    if (rule.min_age != null && age < rule.min_age) return false;
+    if (rule.max_age != null && age > rule.max_age) return false;
+    return true;
+  }
   function money(n) {
     const num = Number(n);
     if (Number.isNaN(num)) return '';
@@ -2678,37 +2696,19 @@
     if (action === 'confirm-membership') {
       return confirmMembership();
     }
-    if (action === 'pick-suggested') {
-      // From the ineligible view — server already vetted this plan's age rule,
-      // so just select it and return to the contact step.
-      const found = findTermByPlanId(el.dataset.planId);
-      if (found) {
-        state.selectedType = found.type;
-        state.selectedPlan = planFromTerm(found.type, found.term);
-        state.inlineErrors = {};
-        saveState();
-        flash('info', `Switched to ${found.type.type_label}.`);
-        goto(4);
-      } else {
-        goto(2);
-      }
-      return;
-    }
     if (action === 'back-to-types') return goto(2);
   }
 
   function handleIneligible(elig) {
-    const suggested = (elig.suggested_plans || []).map(p => `
-      <div class="wcs-plan-card" data-action="pick-suggested" data-plan-id="${p.id}" style="cursor:pointer;">
-        <div class="wcs-plan-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;">
-          <span class="wcs-plan-name" style="font-weight:700;">${escapeHtml(p.plan_label)}</span>
-          <div class="wcs-plan-prices" style="text-align:right;font-size:12px;">
-            <div><b>${money(p.today_amount)}</b> today</div>
-            <div>then <b>${money(p.monthly_amount)}</b>/mo</div>
-          </div>
-        </div>
-      </div>
-    `).join('');
+    // The membership TYPES they can join (Single, Family...), drawn with the
+    // same cards as step 2, not every plan's price breakdown. Select runs the
+    // normal choose-type flow: term step next, contact details kept. Promos
+    // are left out, and so is the type they were just turned away from.
+    const age = ageFromIso(birthdayToIso(state.contact.birthday));
+    const currentTypeId = state.selectedType?.id;
+    const fits = (state.config.types || []).filter(t =>
+      !t.is_promo && t.id !== currentTypeId && (age == null || ageFitsRule(age, t.age_rule)));
+    const suggested = fits.map(renderTypeCard).join('');
     const phone = state.config.location.phone || state.config.copy?.support_phone || '';
     root.innerHTML = `
       <div class="wcs-panel">

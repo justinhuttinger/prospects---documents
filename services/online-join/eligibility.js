@@ -69,16 +69,32 @@ async function evaluateEligibility({ planId, birthday }) {
   const { data: peers } = await sb
     .from('online_join_plans')
     .select(`
-      id, plan_key, plan_label, today_amount, monthly_amount, display_order,
+      id, plan_key, plan_label, today_amount, monthly_amount, display_order, promo_code,
       age_rule:age_rule_id ( min_age, max_age ),
-      membership_type:membership_type_id ( age_rule:age_rule_id ( min_age, max_age ) )
+      membership_type:membership_type_id ( promo_code, age_rule:age_rule_id ( min_age, max_age ) )
     `)
     .eq('wcs_location_id', plan.wcs_location_id)
     .eq('active', true)
     .neq('id', plan.id)
     .order('display_order');
 
-  const suggested = (peers || [])
+  return {
+    eligible: false,
+    ineligible_message: rule.ineligible_message,
+    suggested_plans: suggestedPlans(peers, age),
+  };
+}
+
+/**
+ * Plans that fit this age. Promos never appear here: a promo plan, or a plan
+ * under a promo type, is only for people who came in through its link.
+ *
+ * The widget now suggests membership types from its own config instead; this
+ * list stays for a browser tab still running the older widget.
+ */
+function suggestedPlans(peers, age) {
+  return (peers || [])
+    .filter(p => !p.promo_code && !p.membership_type?.promo_code)
     .filter(p => ageMatchesRule(age, p.membership_type?.age_rule || p.age_rule))
     .map(p => ({
       id: p.id,
@@ -87,12 +103,6 @@ async function evaluateEligibility({ planId, birthday }) {
       today_amount: parseFloat(p.today_amount),
       monthly_amount: parseFloat(p.monthly_amount),
     }));
-
-  return {
-    eligible: false,
-    ineligible_message: rule.ineligible_message,
-    suggested_plans: suggested,
-  };
 }
 
-module.exports = { evaluateEligibility, ageFromBirthday, ageMatchesRule };
+module.exports = { evaluateEligibility, ageFromBirthday, ageMatchesRule, suggestedPlans };
